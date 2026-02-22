@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { maskPhone } from "@/lib/masks";
@@ -24,7 +24,23 @@ export default function NewServiceRequest() {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [tenantId, setTenantId] = useState<string | null>(null);
   const conversationId = searchParams.get("conversation_id");
+
+  // Fetch the user's tenant_id
+  useEffect(() => {
+    if (user?.id) {
+      supabase
+        .from("user_tenants")
+        .select("tenant_id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .single()
+        .then(({ data }) => {
+          if (data) setTenantId(data.tenant_id);
+        });
+    }
+  }, [user?.id]);
 
   const originCoords = searchParams.get("origin_coords");
   const originFromCoords = originCoords ? `Lat: ${originCoords.split(",")[0]}, Lng: ${originCoords.split(",")[1]}` : "";
@@ -91,6 +107,7 @@ export default function NewServiceRequest() {
       destination_address: form.destination_address || null,
       notes: form.notes || null,
       operator_id: user?.id,
+      tenant_id: tenantId,
       protocol: "temp",
       vehicle_category: vehicleCategory,
       verification_answers: getVerificationAnswers() as any,
