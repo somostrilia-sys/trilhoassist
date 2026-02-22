@@ -48,12 +48,12 @@ interface UserItem {
   email: string;
   full_name: string;
   roles: string[];
-  client_ids: string[];
+  tenant_ids: string[];
   created_at: string;
   last_sign_in_at: string | null;
 }
 
-interface ClientItem {
+interface TenantItem {
   id: string;
   name: string;
 }
@@ -69,31 +69,34 @@ export default function UsersManagement() {
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
   const [editRole, setEditRole] = useState("");
   const [search, setSearch] = useState("");
-  const [selectedClientId, setSelectedClientId] = useState<string>("all");
+  const [selectedTenantId, setSelectedTenantId] = useState<string>("all");
   const [newUser, setNewUser] = useState({
     email: "",
     password: "",
     full_name: "",
     role: "",
-    client_id: "",
+    tenant_id: "",
   });
 
-  // Fetch clients for the selector
-  const { data: clients = [] } = useQuery<ClientItem[]>({
-    queryKey: ["clients-list"],
+  const { data: tenants = [] } = useQuery<TenantItem[]>({
+    queryKey: ["tenants-list"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("clients").select("id, name").eq("active", true).order("name");
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("id, name")
+        .eq("active", true)
+        .order("name");
       if (error) throw error;
       return data || [];
     },
   });
 
   const { data: users = [], isLoading } = useQuery<UserItem[]>({
-    queryKey: ["admin-users", selectedClientId],
+    queryKey: ["admin-users", selectedTenantId],
     queryFn: async () => {
       const params: Record<string, string> = {};
-      if (selectedClientId && selectedClientId !== "all") {
-        params.client_id = selectedClientId;
+      if (selectedTenantId && selectedTenantId !== "all") {
+        params.tenant_id = selectedTenantId;
       }
       const queryString = new URLSearchParams(params).toString();
       const res = await supabase.functions.invoke(`admin-users${queryString ? `?${queryString}` : ""}`, {
@@ -117,7 +120,7 @@ export default function UsersManagement() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       setOpen(false);
-      setNewUser({ email: "", password: "", full_name: "", role: "", client_id: "" });
+      setNewUser({ email: "", password: "", full_name: "", role: "", tenant_id: "" });
       toast({ title: "Usuário criado com sucesso!" });
     },
     onError: (err: any) => {
@@ -177,8 +180,8 @@ export default function UsersManagement() {
     setEditOpen(true);
   };
 
-  const getClientName = (clientId: string) => {
-    return clients.find((c) => c.id === clientId)?.name || clientId;
+  const getTenantName = (tenantId: string) => {
+    return tenants.find((t) => t.id === tenantId)?.name || tenantId;
   };
 
   return (
@@ -243,17 +246,17 @@ export default function UsersManagement() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Associação</Label>
+                <Label>Assistência</Label>
                 <Select
-                  value={newUser.client_id}
-                  onValueChange={(v) => setNewUser({ ...newUser, client_id: v })}
+                  value={newUser.tenant_id}
+                  onValueChange={(v) => setNewUser({ ...newUser, tenant_id: v })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione a associação" />
+                    <SelectValue placeholder="Selecione a assistência" />
                   </SelectTrigger>
                   <SelectContent>
-                    {clients.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    {tenants.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -328,18 +331,18 @@ export default function UsersManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Client filter (super_admin sees all) */}
-      {isSuperAdmin && clients.length > 0 && (
+      {/* Tenant filter */}
+      {isSuperAdmin && tenants.length > 0 && (
         <div className="flex items-center gap-3">
-          <Label className="text-sm text-muted-foreground whitespace-nowrap">Filtrar por associação:</Label>
-          <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+          <Label className="text-sm text-muted-foreground whitespace-nowrap">Filtrar por assistência:</Label>
+          <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
             <SelectTrigger className="max-w-xs">
               <SelectValue placeholder="Todas" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todas as associações</SelectItem>
-              {clients.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              <SelectItem value="all">Todas as assistências</SelectItem>
+              {tenants.map((t) => (
+                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -382,7 +385,7 @@ export default function UsersManagement() {
                 <TableHead>Nome</TableHead>
                 <TableHead>E-mail</TableHead>
                 <TableHead>Perfil</TableHead>
-                <TableHead>Associação</TableHead>
+                <TableHead>Assistência</TableHead>
                 <TableHead>Criado em</TableHead>
                 <TableHead>Último acesso</TableHead>
                 <TableHead className="w-24"></TableHead>
@@ -421,10 +424,10 @@ export default function UsersManagement() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1 flex-wrap">
-                        {user.client_ids?.length > 0 ? (
-                          user.client_ids.map((cid) => (
-                            <Badge key={cid} variant="outline" className="text-xs">
-                              {getClientName(cid)}
+                        {user.tenant_ids?.length > 0 ? (
+                          user.tenant_ids.map((tid) => (
+                            <Badge key={tid} variant="outline" className="text-xs">
+                              {getTenantName(tid)}
                             </Badge>
                           ))
                         ) : (

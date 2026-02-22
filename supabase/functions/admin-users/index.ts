@@ -37,7 +37,6 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Check caller roles
     const { data: callerRoles } = await adminClient
       .from("user_roles")
       .select("role")
@@ -53,19 +52,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get caller's client_ids (for scoping)
-    let callerClientIds: string[] = [];
+    // Get caller's tenant_ids
+    let callerTenantIds: string[] = [];
     if (!isSuperAdmin) {
-      const { data: callerClients } = await adminClient
-        .from("user_clients")
-        .select("client_id")
+      const { data: callerTenants } = await adminClient
+        .from("user_tenants")
+        .select("tenant_id")
         .eq("user_id", caller.id);
-      callerClientIds = callerClients?.map((c) => c.client_id) || [];
+      callerTenantIds = callerTenants?.map((t) => t.tenant_id) || [];
     }
 
     const url = new URL(req.url);
     const method = req.method;
-    const filterClientId = url.searchParams.get("client_id");
+    const filterTenantId = url.searchParams.get("tenant_id");
 
     // LIST users
     if (method === "GET") {
@@ -74,29 +73,29 @@ Deno.serve(async (req) => {
 
       const { data: allRoles } = await adminClient.from("user_roles").select("*");
       const { data: allProfiles } = await adminClient.from("profiles").select("*");
-      const { data: allUserClients } = await adminClient.from("user_clients").select("*");
+      const { data: allUserTenants } = await adminClient.from("user_tenants").select("*");
 
       let enrichedUsers = users.map((u) => ({
         id: u.id,
         email: u.email,
         full_name: allProfiles?.find((p) => p.user_id === u.id)?.full_name || u.user_metadata?.full_name || "",
         roles: allRoles?.filter((r) => r.user_id === u.id).map((r) => r.role) || [],
-        client_ids: allUserClients?.filter((uc) => uc.user_id === u.id).map((uc) => uc.client_id) || [],
+        tenant_ids: allUserTenants?.filter((ut) => ut.user_id === u.id).map((ut) => ut.tenant_id) || [],
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at,
       }));
 
-      // Non-super_admin: filter to only users in their clients
+      // Non-super_admin: filter to users in their tenants
       if (!isSuperAdmin) {
         enrichedUsers = enrichedUsers.filter((u) =>
-          u.client_ids.some((cid) => callerClientIds.includes(cid))
+          u.tenant_ids.some((tid) => callerTenantIds.includes(tid))
         );
       }
 
-      // Optional client_id filter
-      if (filterClientId) {
+      // Optional tenant_id filter
+      if (filterTenantId) {
         enrichedUsers = enrichedUsers.filter((u) =>
-          u.client_ids.includes(filterClientId)
+          u.tenant_ids.includes(filterTenantId)
         );
       }
 
@@ -107,7 +106,7 @@ Deno.serve(async (req) => {
 
     // CREATE user
     if (method === "POST") {
-      const { email, password, full_name, role, client_id } = await req.json();
+      const { email, password, full_name, role, tenant_id } = await req.json();
 
       if (!email || !password || !full_name || !role) {
         return new Response(JSON.stringify({ error: "Campos obrigatórios: email, password, full_name, role" }), {
@@ -116,16 +115,15 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Non-super_admin must provide client_id and it must be one of their clients
       if (!isSuperAdmin) {
-        if (!client_id) {
-          return new Response(JSON.stringify({ error: "client_id é obrigatório" }), {
+        if (!tenant_id) {
+          return new Response(JSON.stringify({ error: "tenant_id é obrigatório" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-        if (!callerClientIds.includes(client_id)) {
-          return new Response(JSON.stringify({ error: "Sem permissão para esta associação" }), {
+        if (!callerTenantIds.includes(tenant_id)) {
+          return new Response(JSON.stringify({ error: "Sem permissão para esta assistência" }), {
             status: 403,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -141,14 +139,12 @@ Deno.serve(async (req) => {
 
       if (createError) throw createError;
 
-      // Assign role
       await adminClient.from("user_roles").insert({ user_id: newUser.user.id, role });
 
-      // Assign to client if provided
-      if (client_id) {
-        await adminClient.from("user_clients").insert({
+      if (tenant_id) {
+        await adminClient.from("user_tenants").insert({
           user_id: newUser.user.id,
-          client_id,
+          tenant_id,
         });
       }
 
@@ -168,15 +164,13 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Non-super_admin: verify user belongs to their clients
       if (!isSuperAdmin) {
-        const { data: userClients } = await adminClient
-          .from("user_clients")
-          .select("client_id")
+        const { data: userTenants } = await adminClient
+          .from("user_tenants")
+          .select("tenant_id")
           .eq("user_id", user_id);
-        const userClientIds = userClients?.map((c) => c.client_id) || [];
-        const hasAccess = userClientIds.some((cid) => callerClientIds.includes(cid));
-        if (!hasAccess) {
+        const userTenantIds = userTenants?.map((t) => t.tenant_id) || [];
+        if (!userTenantIds.some((tid) => callerTenantIds.includes(tid))) {
           return new Response(JSON.stringify({ error: "Sem permissão para editar este usuário" }), {
             status: 403,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -210,15 +204,13 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Non-super_admin: verify user belongs to their clients
       if (!isSuperAdmin) {
-        const { data: userClients } = await adminClient
-          .from("user_clients")
-          .select("client_id")
+        const { data: userTenants } = await adminClient
+          .from("user_tenants")
+          .select("tenant_id")
           .eq("user_id", user_id);
-        const userClientIds = userClients?.map((c) => c.client_id) || [];
-        const hasAccess = userClientIds.some((cid) => callerClientIds.includes(cid));
-        if (!hasAccess) {
+        const userTenantIds = userTenants?.map((t) => t.tenant_id) || [];
+        if (!userTenantIds.some((tid) => callerTenantIds.includes(tid))) {
           return new Response(JSON.stringify({ error: "Sem permissão para remover este usuário" }), {
             status: 403,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
