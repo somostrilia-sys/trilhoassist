@@ -3,3 +3,6 @@ project_id = "gqczgatkouxjdcyxnubf"
 [functions.admin-users]
 verify_jwt = false
 
+[functions.register-provider]
+verify_jwt = false
+
