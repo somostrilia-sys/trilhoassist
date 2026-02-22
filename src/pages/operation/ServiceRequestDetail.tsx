@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, User, Car, MapPin, AlertTriangle, ClipboardCheck, FileText } from "lucide-react";
+import RouteMap, { type RoutePoint } from "@/components/RouteMap";
 
 const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   open: { label: "Aberto", variant: "default" },
@@ -112,6 +113,7 @@ export default function ServiceRequestDetail() {
   const navigate = useNavigate();
   const [request, setRequest] = useState<any>(null);
   const [beneficiary, setBeneficiary] = useState<any>(null);
+  const [provider, setProvider] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -132,10 +134,53 @@ export default function ServiceRequestDetail() {
           .maybeSingle();
         setBeneficiary(ben);
       }
+
+      // Fetch dispatch → provider for routing
+      if (data) {
+        const { data: dispatch } = await supabase
+          .from("dispatches")
+          .select("*, providers(name, latitude, longitude, street, address_number, neighborhood, city, state)")
+          .eq("service_request_id", data.id)
+          .in("status", ["accepted", "completed", "sent", "pending"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (dispatch && (dispatch as any).providers) {
+          setProvider((dispatch as any).providers);
+        }
+      }
       setLoading(false);
     };
     load();
   }, [id]);
+
+  // Build route points: Provider → Origin → Destination → Provider (return)
+  const routePoints = useMemo<RoutePoint[]>(() => {
+    if (!request) return [];
+    const pts: RoutePoint[] = [];
+    const hasOrigin = request.origin_lat && request.origin_lng;
+    const hasDest = request.destination_lat && request.destination_lng;
+    const hasProvider = provider?.latitude && provider?.longitude;
+
+    if (!hasOrigin && !hasDest) return [];
+
+    const providerLabel = provider?.name || "Prestador";
+
+    if (hasProvider) {
+      pts.push({ label: `${providerLabel} (saída)`, lat: provider.latitude, lng: provider.longitude, color: "#6366f1" });
+    }
+    if (hasOrigin) {
+      pts.push({ label: "Origem", lat: request.origin_lat, lng: request.origin_lng, color: "#22c55e" });
+    }
+    if (hasDest) {
+      pts.push({ label: "Destino", lat: request.destination_lat, lng: request.destination_lng, color: "#ef4444" });
+    }
+    if (hasProvider) {
+      pts.push({ label: `${providerLabel} (retorno)`, lat: provider.latitude, lng: provider.longitude, color: "#6366f1" });
+    }
+
+    return pts;
+  }, [request, provider]);
 
   if (loading) return <div className="p-8 text-muted-foreground">Carregando...</div>;
   if (!request) return <div className="p-8 text-muted-foreground">Atendimento não encontrado.</div>;
@@ -269,6 +314,9 @@ export default function ServiceRequestDetail() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Route Map */}
+      {routePoints.length >= 2 && <RouteMap points={routePoints} />}
 
       {/* Notes */}
       {request.notes && (
