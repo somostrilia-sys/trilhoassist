@@ -14,6 +14,212 @@ export type Database = {
   }
   public: {
     Tables: {
+      beneficiaries: {
+        Row: {
+          active: boolean
+          client_id: string
+          cpf: string | null
+          created_at: string
+          id: string
+          name: string
+          phone: string | null
+          plan_id: string | null
+          updated_at: string
+          vehicle_chassis: string | null
+          vehicle_model: string | null
+          vehicle_plate: string | null
+          vehicle_year: number | null
+        }
+        Insert: {
+          active?: boolean
+          client_id: string
+          cpf?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          phone?: string | null
+          plan_id?: string | null
+          updated_at?: string
+          vehicle_chassis?: string | null
+          vehicle_model?: string | null
+          vehicle_plate?: string | null
+          vehicle_year?: number | null
+        }
+        Update: {
+          active?: boolean
+          client_id?: string
+          cpf?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          phone?: string | null
+          plan_id?: string | null
+          updated_at?: string
+          vehicle_chassis?: string | null
+          vehicle_model?: string | null
+          vehicle_plate?: string | null
+          vehicle_year?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "beneficiaries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "beneficiaries_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clients: {
+        Row: {
+          active: boolean
+          api_endpoint: string | null
+          api_key: string | null
+          cnpj: string | null
+          contact_email: string | null
+          contact_phone: string | null
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          api_endpoint?: string | null
+          api_key?: string | null
+          cnpj?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          api_endpoint?: string | null
+          api_key?: string | null
+          cnpj?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      dispatches: {
+        Row: {
+          accepted_at: string | null
+          completed_at: string | null
+          created_at: string
+          distance_km: number | null
+          estimated_arrival_min: number | null
+          final_amount: number | null
+          id: string
+          notes: string | null
+          provider_id: string | null
+          quoted_amount: number | null
+          service_request_id: string
+          status: Database["public"]["Enums"]["dispatch_status"]
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          distance_km?: number | null
+          estimated_arrival_min?: number | null
+          final_amount?: number | null
+          id?: string
+          notes?: string | null
+          provider_id?: string | null
+          quoted_amount?: number | null
+          service_request_id: string
+          status?: Database["public"]["Enums"]["dispatch_status"]
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          distance_km?: number | null
+          estimated_arrival_min?: number | null
+          final_amount?: number | null
+          id?: string
+          notes?: string | null
+          provider_id?: string | null
+          quoted_amount?: number | null
+          service_request_id?: string
+          status?: Database["public"]["Enums"]["dispatch_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispatches_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dispatches_service_request_id_fkey"
+            columns: ["service_request_id"]
+            isOneToOne: false
+            referencedRelation: "service_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plans: {
+        Row: {
+          active: boolean
+          client_id: string
+          created_at: string
+          id: string
+          max_dispatches_per_year: number | null
+          max_tow_km: number | null
+          name: string
+          services: Json | null
+        }
+        Insert: {
+          active?: boolean
+          client_id: string
+          created_at?: string
+          id?: string
+          max_dispatches_per_year?: number | null
+          max_tow_km?: number | null
+          name: string
+          services?: Json | null
+        }
+        Update: {
+          active?: boolean
+          client_id?: string
+          created_at?: string
+          id?: string
+          max_dispatches_per_year?: number | null
+          max_tow_km?: number | null
+          name?: string
+          services?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -40,6 +246,178 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      providers: {
+        Row: {
+          active: boolean
+          city: string | null
+          cnpj: string | null
+          created_at: string
+          email: string | null
+          id: string
+          latitude: number | null
+          longitude: number | null
+          name: string
+          phone: string
+          services: string[] | null
+          state: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          city?: string | null
+          cnpj?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          name: string
+          phone: string
+          services?: string[] | null
+          state?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          city?: string | null
+          cnpj?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          name?: string
+          phone?: string
+          services?: string[] | null
+          state?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      service_requests: {
+        Row: {
+          beneficiary_id: string | null
+          charged_amount: number | null
+          client_id: string | null
+          completed_at: string | null
+          created_at: string
+          destination_address: string | null
+          destination_lat: number | null
+          destination_lng: number | null
+          difficult_access: boolean | null
+          estimated_km: number | null
+          event_type: Database["public"]["Enums"]["event_type"]
+          id: string
+          notes: string | null
+          operator_id: string | null
+          origin_address: string | null
+          origin_lat: number | null
+          origin_lng: number | null
+          plan_id: string | null
+          protocol: string
+          provider_cost: number | null
+          requester_email: string | null
+          requester_name: string
+          requester_phone: string
+          requester_phone_secondary: string | null
+          service_type: Database["public"]["Enums"]["service_type"]
+          status: Database["public"]["Enums"]["request_status"]
+          updated_at: string
+          vehicle_lowered: boolean | null
+          vehicle_model: string | null
+          vehicle_plate: string | null
+          vehicle_year: number | null
+        }
+        Insert: {
+          beneficiary_id?: string | null
+          charged_amount?: number | null
+          client_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          destination_address?: string | null
+          destination_lat?: number | null
+          destination_lng?: number | null
+          difficult_access?: boolean | null
+          estimated_km?: number | null
+          event_type?: Database["public"]["Enums"]["event_type"]
+          id?: string
+          notes?: string | null
+          operator_id?: string | null
+          origin_address?: string | null
+          origin_lat?: number | null
+          origin_lng?: number | null
+          plan_id?: string | null
+          protocol: string
+          provider_cost?: number | null
+          requester_email?: string | null
+          requester_name: string
+          requester_phone: string
+          requester_phone_secondary?: string | null
+          service_type?: Database["public"]["Enums"]["service_type"]
+          status?: Database["public"]["Enums"]["request_status"]
+          updated_at?: string
+          vehicle_lowered?: boolean | null
+          vehicle_model?: string | null
+          vehicle_plate?: string | null
+          vehicle_year?: number | null
+        }
+        Update: {
+          beneficiary_id?: string | null
+          charged_amount?: number | null
+          client_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          destination_address?: string | null
+          destination_lat?: number | null
+          destination_lng?: number | null
+          difficult_access?: boolean | null
+          estimated_km?: number | null
+          event_type?: Database["public"]["Enums"]["event_type"]
+          id?: string
+          notes?: string | null
+          operator_id?: string | null
+          origin_address?: string | null
+          origin_lat?: number | null
+          origin_lng?: number | null
+          plan_id?: string | null
+          protocol?: string
+          provider_cost?: number | null
+          requester_email?: string | null
+          requester_name?: string
+          requester_phone?: string
+          requester_phone_secondary?: string | null
+          service_type?: Database["public"]["Enums"]["service_type"]
+          status?: Database["public"]["Enums"]["request_status"]
+          updated_at?: string
+          vehicle_lowered?: boolean | null
+          vehicle_model?: string | null
+          vehicle_plate?: string | null
+          vehicle_year?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_requests_beneficiary_id_fkey"
+            columns: ["beneficiary_id"]
+            isOneToOne: false
+            referencedRelation: "beneficiaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_requests_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_requests_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -74,6 +452,41 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "operator" | "provider" | "client"
+      dispatch_status:
+        | "pending"
+        | "sent"
+        | "accepted"
+        | "rejected"
+        | "expired"
+        | "cancelled"
+        | "completed"
+      event_type:
+        | "mechanical_failure"
+        | "accident"
+        | "theft"
+        | "flat_tire"
+        | "locked_out"
+        | "battery_dead"
+        | "fuel_empty"
+        | "other"
+      request_status:
+        | "open"
+        | "awaiting_dispatch"
+        | "dispatched"
+        | "in_progress"
+        | "completed"
+        | "cancelled"
+        | "refunded"
+      service_type:
+        | "tow_light"
+        | "tow_heavy"
+        | "tow_motorcycle"
+        | "locksmith"
+        | "tire_change"
+        | "battery"
+        | "fuel"
+        | "lodging"
+        | "other"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -202,6 +615,45 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "operator", "provider", "client"],
+      dispatch_status: [
+        "pending",
+        "sent",
+        "accepted",
+        "rejected",
+        "expired",
+        "cancelled",
+        "completed",
+      ],
+      event_type: [
+        "mechanical_failure",
+        "accident",
+        "theft",
+        "flat_tire",
+        "locked_out",
+        "battery_dead",
+        "fuel_empty",
+        "other",
+      ],
+      request_status: [
+        "open",
+        "awaiting_dispatch",
+        "dispatched",
+        "in_progress",
+        "completed",
+        "cancelled",
+        "refunded",
+      ],
+      service_type: [
+        "tow_light",
+        "tow_heavy",
+        "tow_motorcycle",
+        "locksmith",
+        "tire_change",
+        "battery",
+        "fuel",
+        "lodging",
+        "other",
+      ],
     },
   },
 } as const
