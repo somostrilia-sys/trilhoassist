@@ -1,10 +1,11 @@
 import {
   LayoutDashboard, Headphones, Briefcase, Users, DollarSign,
   FileText, Settings, Link2, BarChart3, ChevronDown, Plus, List,
-  Building2, UserCheck, Award, Network, Receipt, FileCheck, LogOut
+  Building2, UserCheck, Award, Network, Receipt, FileCheck, LogOut, Shield
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useNavigate } from "react-router-dom";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -26,7 +27,7 @@ interface MenuSection {
   icon: any;
   collapsible: boolean;
   items: MenuItem[];
-  allowedRoles?: string[]; // if undefined, visible to all
+  module: string; // maps to role_permissions.module
 }
 
 const menuSections: MenuSection[] = [
@@ -34,13 +35,14 @@ const menuSections: MenuSection[] = [
     label: "Dashboard",
     icon: LayoutDashboard,
     collapsible: false,
+    module: "dashboard",
     items: [{ title: "Visão Geral", url: "/dashboard", icon: LayoutDashboard }],
   },
   {
     label: "Operação",
     icon: Headphones,
     collapsible: true,
-    allowedRoles: ["admin", "operator"],
+    module: "operation",
     items: [
       { title: "Novo Atendimento", url: "/operation/new", icon: Plus },
       { title: "Atendimentos", url: "/operation/requests", icon: List },
@@ -50,7 +52,7 @@ const menuSections: MenuSection[] = [
     label: "Negócio",
     icon: Briefcase,
     collapsible: true,
-    allowedRoles: ["admin"],
+    module: "business",
     items: [
       { title: "Clientes", url: "/business/clients", icon: Building2 },
       { title: "Planos", url: "/business/plans", icon: Award },
@@ -61,7 +63,7 @@ const menuSections: MenuSection[] = [
     label: "Rede",
     icon: Network,
     collapsible: true,
-    allowedRoles: ["admin", "operator"],
+    module: "network",
     items: [
       { title: "Prestadores", url: "/network/providers", icon: Users },
     ],
@@ -70,7 +72,7 @@ const menuSections: MenuSection[] = [
     label: "Financeiro",
     icon: DollarSign,
     collapsible: true,
-    allowedRoles: ["admin"],
+    module: "finance",
     items: [
       { title: "Fechamento", url: "/finance/closing", icon: FileCheck },
       { title: "Faturamento", url: "/finance/billing", icon: Receipt },
@@ -80,7 +82,7 @@ const menuSections: MenuSection[] = [
     label: "Relatórios",
     icon: BarChart3,
     collapsible: true,
-    allowedRoles: ["admin"],
+    module: "reports",
     items: [
       { title: "Relatórios", url: "/reports", icon: BarChart3 },
     ],
@@ -89,9 +91,10 @@ const menuSections: MenuSection[] = [
     label: "Configurações",
     icon: Settings,
     collapsible: true,
-    allowedRoles: ["admin"],
+    module: "settings",
     items: [
       { title: "Usuários", url: "/settings/users", icon: Users },
+      { title: "Permissões", url: "/settings/permissions", icon: Shield },
       { title: "Configurações", url: "/settings", icon: Settings },
       { title: "Integrações", url: "/integrations", icon: Link2 },
     ],
@@ -99,7 +102,8 @@ const menuSections: MenuSection[] = [
 ];
 
 export function AppSidebar() {
-  const { signOut, roles } = useAuth();
+  const { signOut } = useAuth();
+  const { canAccessModule } = usePermissions();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -107,10 +111,9 @@ export function AppSidebar() {
     navigate("/login");
   };
 
-  const visibleSections = menuSections.filter((section) => {
-    if (!section.allowedRoles) return true;
-    return section.allowedRoles.some((role) => roles.includes(role));
-  });
+  const visibleSections = menuSections.filter((section) =>
+    canAccessModule(section.module)
+  );
 
   return (
     <Sidebar className="border-r-0">
