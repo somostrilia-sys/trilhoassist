@@ -36,6 +36,7 @@ export default function ServiceRequests() {
   const [requests, setRequests] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [serviceTypeFilter, setServiceTypeFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(25);
@@ -68,6 +69,10 @@ export default function ServiceRequests() {
       query = query.eq("status", statusFilter as any);
     }
 
+    if (serviceTypeFilter !== "all") {
+      query = query.eq("service_type", serviceTypeFilter as any);
+    }
+
     if (search) {
       query = query.or(
         `protocol.ilike.%${search}%,requester_name.ilike.%${search}%,vehicle_plate.ilike.%${search}%`
@@ -85,7 +90,7 @@ export default function ServiceRequests() {
       setTotalCount(count);
     }
     setLoading(false);
-  }, [page, pageSize, statusFilter, search]);
+  }, [page, pageSize, statusFilter, serviceTypeFilter, search]);
 
   useEffect(() => {
     loadCounts();
@@ -106,7 +111,7 @@ export default function ServiceRequests() {
   // Reset page when filters change
   useEffect(() => {
     setPage(0);
-  }, [statusFilter, search]);
+  }, [statusFilter, serviceTypeFilter, search]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const allTotal = Object.values(statusCounts).reduce((a, b) => a + b, 0);
@@ -134,6 +139,17 @@ export default function ServiceRequests() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+        <Select value={serviceTypeFilter} onValueChange={setServiceTypeFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Tipo de serviço" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os tipos</SelectItem>
+            {Object.entries(serviceTypeMap).map(([key, label]) => (
+              <SelectItem key={key} value={key}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="flex flex-wrap gap-2">
