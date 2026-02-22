@@ -4,9 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, Truck, Building2, Wrench, ArrowLeft } from "lucide-react";
+import { Shield, Truck, Building2, Wrench, ArrowLeft, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 type Portal = "assistencia" | "prestador" | "associacao" | null;
@@ -15,26 +15,32 @@ const portals = [
   {
     id: "assistencia" as Portal,
     label: "Assistência 24h",
-    description: "Painel principal de operação e gestão do sistema",
+    description: "Operação e gestão completa do sistema",
     icon: Truck,
     roles: ["admin", "operator"],
-    color: "bg-primary",
+    gradient: "from-primary to-[hsl(200,65%,30%)]",
+    iconBg: "bg-primary/20",
+    iconColor: "text-primary",
   },
   {
     id: "prestador" as Portal,
     label: "Prestador",
-    description: "Acompanhe seus atendimentos e fechamentos",
+    description: "Atendimentos realizados e fechamento financeiro",
     icon: Wrench,
     roles: ["provider"],
-    color: "bg-accent",
+    gradient: "from-accent to-[hsl(28,90%,42%)]",
+    iconBg: "bg-accent/20",
+    iconColor: "text-accent",
   },
   {
     id: "associacao" as Portal,
     label: "Associação",
-    description: "Gerencie seus associados e acompanhe atendimentos",
+    description: "Gestão de associados e acompanhamento de atendimentos",
     icon: Building2,
     roles: ["client"],
-    color: "bg-sidebar-background",
+    gradient: "from-[hsl(210,30%,28%)] to-[hsl(210,30%,18%)]",
+    iconBg: "bg-sidebar-accent/40",
+    iconColor: "text-sidebar-foreground",
   },
 ];
 
@@ -56,7 +62,6 @@ export default function Login() {
     try {
       await signIn(loginData.email, loginData.password);
 
-      // Check if user has the correct role for this portal
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não encontrado");
 
@@ -78,7 +83,6 @@ export default function Login() {
         return;
       }
 
-      // Redirect based on portal
       if (selectedPortal === "assistencia") {
         navigate("/dashboard");
       } else if (selectedPortal === "prestador") {
@@ -97,90 +101,106 @@ export default function Login() {
     }
   };
 
+  const activePortal = portals.find((p) => p.id === selectedPortal);
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-sidebar p-4">
-      <div className="w-full max-w-md space-y-6">
-        {/* Header */}
-        <div className="text-center space-y-2">
-          <div className="mx-auto h-14 w-14 rounded-xl bg-primary flex items-center justify-center">
+    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden" style={{ background: 'linear-gradient(135deg, hsl(210,30%,18%) 0%, hsl(210,30%,14%) 50%, hsl(215,35%,10%) 100%)' }}>
+      {/* Decorative background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-primary/5 blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-accent/5 blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full bg-primary/[0.02] blur-3xl" />
+      </div>
+
+      <div className="relative z-10 w-full max-w-md px-4 space-y-8">
+        {/* Logo & Title */}
+        <div className="text-center space-y-3">
+          <div className="mx-auto h-16 w-16 rounded-2xl bg-gradient-to-br from-primary to-[hsl(200,65%,30%)] flex items-center justify-center shadow-lg shadow-primary/20">
             <Truck className="h-8 w-8 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-sidebar-foreground">
-            Assistência 24h
-          </h1>
-          <p className="text-sm text-sidebar-foreground/60">
-            Sistema de Gestão de Assistência
-          </p>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-white">
+              Assistência 24h
+            </h1>
+            <p className="text-sm text-white/40 mt-1">
+              Sistema de Gestão de Assistência Veicular
+            </p>
+          </div>
         </div>
 
         {!selectedPortal ? (
           /* Portal Selection */
           <div className="space-y-3">
-            <p className="text-center text-sm font-medium text-sidebar-foreground/80">
-              Selecione seu portal de acesso
+            <p className="text-center text-xs font-medium uppercase tracking-widest text-white/30">
+              Selecione seu acesso
             </p>
             {portals.map((portal) => (
-              <Card
+              <button
                 key={portal.id}
-                className="border-0 shadow-lg cursor-pointer transition-all hover:scale-[1.02] hover:shadow-xl"
                 onClick={() => setSelectedPortal(portal.id)}
+                className="w-full group"
               >
-                <CardContent className="flex items-center gap-4 p-4">
-                  <div
-                    className={`h-12 w-12 rounded-xl ${portal.color} flex items-center justify-center shrink-0`}
-                  >
-                    <portal.icon className="h-6 w-6 text-primary-foreground" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="font-semibold text-foreground">
-                      {portal.label}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {portal.description}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+                <Card className="border border-white/[0.06] bg-white/[0.04] backdrop-blur-sm shadow-lg transition-all duration-200 hover:bg-white/[0.08] hover:border-white/[0.12] hover:shadow-xl hover:-translate-y-0.5">
+                  <CardContent className="flex items-center gap-4 p-4">
+                    <div className={`h-12 w-12 rounded-xl bg-gradient-to-br ${portal.gradient} flex items-center justify-center shrink-0 shadow-md`}>
+                      <portal.icon className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="text-left min-w-0 flex-1">
+                      <h3 className="font-semibold text-white text-[15px]">
+                        {portal.label}
+                      </h3>
+                      <p className="text-xs text-white/40 mt-0.5">
+                        {portal.description}
+                      </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-white/20 group-hover:text-white/40 transition-colors shrink-0" />
+                  </CardContent>
+                </Card>
+              </button>
             ))}
           </div>
         ) : (
           /* Login Form */
-          <Card className="border-0 shadow-2xl">
-            <CardHeader className="pb-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedPortal(null);
-                  setLoginData({ email: "", password: "" });
-                }}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Voltar
-              </button>
-              <div className="flex items-center gap-3 pt-2">
-                <div
-                  className={`h-10 w-10 rounded-lg ${portals.find((p) => p.id === selectedPortal)!.color} flex items-center justify-center`}
+          <Card className="border border-white/[0.06] bg-white/[0.04] backdrop-blur-sm shadow-2xl overflow-hidden">
+            {/* Portal indicator bar */}
+            <div className={`h-1 bg-gradient-to-r ${activePortal!.gradient}`} />
+            <CardContent className="p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPortal(null);
+                    setLoginData({ email: "", password: "" });
+                  }}
+                  className="flex items-center gap-1.5 text-sm text-white/40 hover:text-white/70 transition-colors"
                 >
+                  <ArrowLeft className="h-4 w-4" />
+                  Voltar
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className={`h-10 w-10 rounded-lg bg-gradient-to-br ${activePortal!.gradient} flex items-center justify-center shadow-md`}>
                   {(() => {
-                    const Icon = portals.find((p) => p.id === selectedPortal)!.icon;
-                    return <Icon className="h-5 w-5 text-primary-foreground" />;
+                    const Icon = activePortal!.icon;
+                    return <Icon className="h-5 w-5 text-white" />;
                   })()}
                 </div>
                 <div>
-                  <h2 className="font-semibold text-foreground">
-                    {portals.find((p) => p.id === selectedPortal)!.label}
+                  <h2 className="font-semibold text-white text-[15px]">
+                    {activePortal!.label}
                   </h2>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-white/40">
                     Entre com suas credenciais
                   </p>
                 </div>
               </div>
-            </CardHeader>
-            <CardContent>
+
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="login-email">E-mail</Label>
+                  <Label htmlFor="login-email" className="text-white/60 text-xs font-medium">
+                    E-mail
+                  </Label>
                   <Input
                     id="login-email"
                     type="email"
@@ -190,10 +210,13 @@ export default function Login() {
                       setLoginData({ ...loginData, email: e.target.value })
                     }
                     required
+                    className="bg-white/[0.06] border-white/[0.08] text-white placeholder:text-white/20 focus:border-primary/50 focus:ring-primary/20"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="login-password">Senha</Label>
+                  <Label htmlFor="login-password" className="text-white/60 text-xs font-medium">
+                    Senha
+                  </Label>
                   <Input
                     id="login-password"
                     type="password"
@@ -203,9 +226,14 @@ export default function Login() {
                       setLoginData({ ...loginData, password: e.target.value })
                     }
                     required
+                    className="bg-white/[0.06] border-white/[0.08] text-white placeholder:text-white/20 focus:border-primary/50 focus:ring-primary/20"
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
+                <Button
+                  type="submit"
+                  className={`w-full bg-gradient-to-r ${activePortal!.gradient} hover:opacity-90 transition-opacity shadow-lg text-white font-medium`}
+                  disabled={loading}
+                >
                   {loading ? "Entrando..." : "Entrar"}
                 </Button>
               </form>
@@ -213,7 +241,8 @@ export default function Login() {
           </Card>
         )}
 
-        <div className="flex items-center justify-center gap-2 text-xs text-sidebar-foreground/40">
+        {/* Footer */}
+        <div className="flex items-center justify-center gap-2 text-[11px] text-white/20">
           <Shield className="h-3 w-3" />
           <span>Conexão segura e criptografada</span>
         </div>
