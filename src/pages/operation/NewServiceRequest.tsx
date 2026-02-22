@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { maskPhone } from "@/lib/masks";
@@ -11,7 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { User, Car, MapPin, Wrench, AlertTriangle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { User, Car, MapPin, AlertTriangle, Search, CheckCircle2, Loader2 } from "lucide-react";
 import CarVerification, { defaultCarVerification } from "@/components/service-request/CarVerification";
 import MotorcycleVerification, { defaultMotorcycleVerification } from "@/components/service-request/MotorcycleVerification";
 import TruckVerification, { defaultTruckVerification } from "@/components/service-request/TruckVerification";
@@ -71,6 +72,77 @@ export default function NewServiceRequest() {
   const [motoVerification, setMotoVerification] = useState(defaultMotorcycleVerification);
   const [truckVerification, setTruckVerification] = useState(defaultTruckVerification);
 
+  // Beneficiary lookup
+  const [beneficiaryFound, setBeneficiaryFound] = useState<{
+    id: string;
+    name: string;
+    phone: string | null;
+    cpf: string | null;
+    vehicle_model: string | null;
+    vehicle_year: number | null;
+    client_name?: string;
+    plan_name?: string;
+  } | null>(null);
+  const [plateSearching, setPlateSearching] = useState(false);
+  const plateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const searchBeneficiaryByPlate = useCallback(async (plate: string) => {
+    const cleanPlate = plate.replace(/[^A-Z0-9]/g, "");
+    if (cleanPlate.length < 7) {
+      setBeneficiaryFound(null);
+      return;
+    }
+    setPlateSearching(true);
+    const { data } = await supabase
+      .from("beneficiaries")
+      .select("id, name, phone, cpf, vehicle_model, vehicle_year, vehicle_plate, client_id, plan_id, clients(name), plans(name)")
+      .eq("vehicle_plate", cleanPlate)
+      .eq("active", true)
+      .limit(1)
+      .maybeSingle();
+
+    setPlateSearching(false);
+
+    if (data) {
+      const clientName = (data as any).clients?.name;
+      const planName = (data as any).plans?.name;
+      setBeneficiaryFound({
+        id: data.id,
+        name: data.name,
+        phone: data.phone,
+        cpf: data.cpf,
+        vehicle_model: data.vehicle_model,
+        vehicle_year: data.vehicle_year,
+        client_name: clientName,
+        plan_name: planName,
+      });
+      // Auto-fill form fields from beneficiary
+      setForm((f) => ({
+        ...f,
+        requester_name: f.requester_name || data.name,
+        requester_phone: f.requester_phone || (data.phone ? maskPhone(data.phone) : ""),
+        vehicle_model: f.vehicle_model || data.vehicle_model || "",
+        vehicle_year: f.vehicle_year || (data.vehicle_year ? String(data.vehicle_year) : ""),
+      }));
+    } else {
+      setBeneficiaryFound(null);
+    }
+  }, []);
+
+  const handlePlateChange = (value: string) => {
+    const upper = value.toUpperCase();
+    update("vehicle_plate", upper);
+    if (plateDebounceRef.current) clearTimeout(plateDebounceRef.current);
+    plateDebounceRef.current = setTimeout(() => searchBeneficiaryByPlate(upper), 500);
+  };
+
+  // Trigger plate search on mount if plate is pre-filled
+  useEffect(() => {
+    if (form.vehicle_plate && form.vehicle_plate.length >= 7) {
+      searchBeneficiaryByPlate(form.vehicle_plate);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const update = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
   // Auto-set service_type based on vehicle category
@@ -108,6 +180,7 @@ export default function NewServiceRequest() {
       notes: form.notes || null,
       operator_id: user?.id,
       tenant_id: tenantId,
+      beneficiary_id: beneficiaryFound?.id || null,
       protocol: "temp",
       vehicle_category: vehicleCategory,
       verification_answers: getVerificationAnswers() as any,
@@ -217,7 +290,34 @@ export default function NewServiceRequest() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Placa</Label>
-                <Input value={form.vehicle_plate} onChange={(e) => update("vehicle_plate", e.target.value.toUpperCase())} />
+                <div className="relative">
+                  <Input
+                    value={form.vehicle_plate}
+                    onChange={(e) => handlePlateChange(e.target.value)}
+                    maxLength={7}
+                    className="pr-9"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {plateSearching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                    {!plateSearching && beneficiaryFound && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+                    {!plateSearching && !beneficiaryFound && form.vehicle_plate.length >= 7 && <Search className="h-4 w-4 text-muted-foreground opacity-50" />}
+                  </div>
+                </div>
+                {beneficiaryFound && (
+                  <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm space-y-1">
+                    <div className="flex items-center gap-2 font-medium text-green-800">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Beneficiário encontrado
+                    </div>
+                    <p className="text-green-700">{beneficiaryFound.name}{beneficiaryFound.cpf ? ` — CPF: ${beneficiaryFound.cpf}` : ""}</p>
+                    {beneficiaryFound.client_name && (
+                      <div className="flex gap-2 flex-wrap">
+                        <Badge variant="secondary" className="text-xs">{beneficiaryFound.client_name}</Badge>
+                        {beneficiaryFound.plan_name && <Badge variant="outline" className="text-xs">{beneficiaryFound.plan_name}</Badge>}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Modelo</Label>
