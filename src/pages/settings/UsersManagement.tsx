@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +36,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const roleLabels: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
+  super_admin: { label: "Super Admin", variant: "destructive" },
   admin: { label: "Administrador", variant: "destructive" },
   operator: { label: "Operador", variant: "default" },
   provider: { label: "Prestador", variant: "secondary" },
@@ -46,29 +48,55 @@ interface UserItem {
   email: string;
   full_name: string;
   roles: string[];
+  client_ids: string[];
   created_at: string;
   last_sign_in_at: string | null;
+}
+
+interface ClientItem {
+  id: string;
+  name: string;
 }
 
 export default function UsersManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { roles } = useAuth();
+  const isSuperAdmin = roles.includes("super_admin");
+
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
   const [editRole, setEditRole] = useState("");
   const [search, setSearch] = useState("");
+  const [selectedClientId, setSelectedClientId] = useState<string>("all");
   const [newUser, setNewUser] = useState({
     email: "",
     password: "",
     full_name: "",
     role: "",
+    client_id: "",
+  });
+
+  // Fetch clients for the selector
+  const { data: clients = [] } = useQuery<ClientItem[]>({
+    queryKey: ["clients-list"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("clients").select("id, name").eq("active", true).order("name");
+      if (error) throw error;
+      return data || [];
+    },
   });
 
   const { data: users = [], isLoading } = useQuery<UserItem[]>({
-    queryKey: ["admin-users"],
+    queryKey: ["admin-users", selectedClientId],
     queryFn: async () => {
-      const res = await supabase.functions.invoke("admin-users", {
+      const params: Record<string, string> = {};
+      if (selectedClientId && selectedClientId !== "all") {
+        params.client_id = selectedClientId;
+      }
+      const queryString = new URLSearchParams(params).toString();
+      const res = await supabase.functions.invoke(`admin-users${queryString ? `?${queryString}` : ""}`, {
         method: "GET",
       });
       if (res.error) throw res.error;
@@ -89,7 +117,7 @@ export default function UsersManagement() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       setOpen(false);
-      setNewUser({ email: "", password: "", full_name: "", role: "" });
+      setNewUser({ email: "", password: "", full_name: "", role: "", client_id: "" });
       toast({ title: "Usuário criado com sucesso!" });
     },
     onError: (err: any) => {
@@ -147,6 +175,10 @@ export default function UsersManagement() {
     setEditingUser(user);
     setEditRole(user.roles[0] || "");
     setEditOpen(true);
+  };
+
+  const getClientName = (clientId: string) => {
+    return clients.find((c) => c.id === clientId)?.name || clientId;
   };
 
   return (
@@ -211,6 +243,22 @@ export default function UsersManagement() {
                 />
               </div>
               <div className="space-y-2">
+                <Label>Associação</Label>
+                <Select
+                  value={newUser.client_id}
+                  onValueChange={(v) => setNewUser({ ...newUser, client_id: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a associação" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label>Perfil de acesso</Label>
                 <Select
                   value={newUser.role}
@@ -220,6 +268,7 @@ export default function UsersManagement() {
                     <SelectValue placeholder="Selecione o perfil" />
                   </SelectTrigger>
                   <SelectContent>
+                    {isSuperAdmin && <SelectItem value="super_admin">Super Admin</SelectItem>}
                     <SelectItem value="admin">Administrador</SelectItem>
                     <SelectItem value="operator">Operador</SelectItem>
                     <SelectItem value="provider">Prestador</SelectItem>
@@ -256,6 +305,7 @@ export default function UsersManagement() {
                   <SelectValue placeholder="Selecione o perfil" />
                 </SelectTrigger>
                 <SelectContent>
+                  {isSuperAdmin && <SelectItem value="super_admin">Super Admin</SelectItem>}
                   <SelectItem value="admin">Administrador</SelectItem>
                   <SelectItem value="operator">Operador</SelectItem>
                   <SelectItem value="provider">Prestador</SelectItem>
@@ -278,10 +328,29 @@ export default function UsersManagement() {
         </DialogContent>
       </Dialog>
 
+      {/* Client filter (super_admin sees all) */}
+      {isSuperAdmin && clients.length > 0 && (
+        <div className="flex items-center gap-3">
+          <Label className="text-sm text-muted-foreground whitespace-nowrap">Filtrar por associação:</Label>
+          <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+            <SelectTrigger className="max-w-xs">
+              <SelectValue placeholder="Todas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as associações</SelectItem>
+              {clients.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {Object.entries(roleLabels).map(([key, { label }]) => {
           const count = users.filter((u) => u.roles.includes(key)).length;
+          if (!isSuperAdmin && key === "super_admin") return null;
           return (
             <Card key={key}>
               <CardContent className="p-4">
@@ -313,6 +382,7 @@ export default function UsersManagement() {
                 <TableHead>Nome</TableHead>
                 <TableHead>E-mail</TableHead>
                 <TableHead>Perfil</TableHead>
+                <TableHead>Associação</TableHead>
                 <TableHead>Criado em</TableHead>
                 <TableHead>Último acesso</TableHead>
                 <TableHead className="w-24"></TableHead>
@@ -321,13 +391,13 @@ export default function UsersManagement() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     Carregando...
                   </TableCell>
                 </TableRow>
               ) : filteredUsers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     Nenhum usuário encontrado
                   </TableCell>
                 </TableRow>
@@ -346,6 +416,19 @@ export default function UsersManagement() {
                           ))
                         ) : (
                           <Badge variant="outline">Sem perfil</Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1 flex-wrap">
+                        {user.client_ids?.length > 0 ? (
+                          user.client_ids.map((cid) => (
+                            <Badge key={cid} variant="outline" className="text-xs">
+                              {getClientName(cid)}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </div>
                     </TableCell>
