@@ -258,6 +258,60 @@ export type Database = {
         }
         Relationships: []
       }
+      provider_blacklist: {
+        Row: {
+          active: boolean
+          blocked_at: string
+          blocked_by: string | null
+          created_at: string
+          id: string
+          provider_id: string
+          reason: string
+          tenant_id: string
+          unblocked_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          blocked_at?: string
+          blocked_by?: string | null
+          created_at?: string
+          id?: string
+          provider_id: string
+          reason: string
+          tenant_id: string
+          unblocked_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          blocked_at?: string
+          blocked_by?: string | null
+          created_at?: string
+          id?: string
+          provider_id?: string
+          reason?: string
+          tenant_id?: string
+          unblocked_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_blacklist_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_blacklist_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       providers: {
         Row: {
           active: boolean
