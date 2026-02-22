@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-import { User, Car, MapPin, AlertTriangle, Search, CheckCircle2, Loader2 } from "lucide-react";
+import { User, Car, MapPin, AlertTriangle, Search, CheckCircle2, Loader2, XCircle, MapPinned } from "lucide-react";
 import CarVerification, { defaultCarVerification } from "@/components/service-request/CarVerification";
 import MotorcycleVerification, { defaultMotorcycleVerification } from "@/components/service-request/MotorcycleVerification";
 import TruckVerification, { defaultTruckVerification } from "@/components/service-request/TruckVerification";
@@ -109,8 +109,11 @@ export default function NewServiceRequest() {
   } | null>(null);
   const [plateSearching, setPlateSearching] = useState(false);
   const [cepLoading, setCepLoading] = useState<{ origin: boolean; destination: boolean }>({ origin: false, destination: false });
+  const [geoStatus, setGeoStatus] = useState<{ origin: "idle" | "loading" | "success" | "error"; destination: "idle" | "loading" | "success" | "error" }>({ origin: "idle", destination: "idle" });
+  const [geoCoords, setGeoCoords] = useState<{ origin: { lat: number; lng: number } | null; destination: { lat: number; lng: number } | null }>({ origin: null, destination: null });
   const plateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cepDebounceRef = useRef<{ origin: ReturnType<typeof setTimeout> | null; destination: ReturnType<typeof setTimeout> | null }>({ origin: null, destination: null });
+  const geoDebounceRef = useRef<{ origin: ReturnType<typeof setTimeout> | null; destination: ReturnType<typeof setTimeout> | null }>({ origin: null, destination: null });
 
   const searchBeneficiaryByPlate = useCallback(async (plate: string) => {
     const cleanPlate = plate.replace(/[^A-Z0-9]/g, "");
@@ -171,6 +174,33 @@ export default function NewServiceRequest() {
 
   const update = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
+  const triggerGeocode = useCallback(async (address: string, number: string, target: "origin" | "destination") => {
+    const fullAddr = [address, number].filter(Boolean).join(", ");
+    if (!fullAddr.trim() || fullAddr.trim().length < 5) {
+      setGeoStatus((prev) => ({ ...prev, [target]: "idle" }));
+      setGeoCoords((prev) => ({ ...prev, [target]: null }));
+      return;
+    }
+    setGeoStatus((prev) => ({ ...prev, [target]: "loading" }));
+    const result = await geocodeAddress(fullAddr);
+    if (result) {
+      setGeoStatus((prev) => ({ ...prev, [target]: "success" }));
+      setGeoCoords((prev) => ({ ...prev, [target]: result }));
+    } else {
+      setGeoStatus((prev) => ({ ...prev, [target]: "error" }));
+      setGeoCoords((prev) => ({ ...prev, [target]: null }));
+    }
+  }, []);
+
+  const scheduleGeocode = useCallback((target: "origin" | "destination") => {
+    if (geoDebounceRef.current[target]) clearTimeout(geoDebounceRef.current[target]!);
+    geoDebounceRef.current[target] = setTimeout(() => {
+      const addr = target === "origin" ? form.origin_address : form.destination_address;
+      const num = target === "origin" ? form.origin_number : form.destination_number;
+      triggerGeocode(addr, num, target);
+    }, 800);
+  }, [form.origin_address, form.origin_number, form.destination_address, form.destination_number, triggerGeocode]);
+
   const fetchCep = useCallback(async (cep: string, target: "origin" | "destination") => {
     const digits = unmask(cep);
     if (digits.length !== 8) return;
@@ -183,6 +213,9 @@ export default function NewServiceRequest() {
         const field = target === "origin" ? "origin_address" : "destination_address";
         setForm((f) => ({ ...f, [field]: addr }));
         setErrors((prev) => ({ ...prev, [field]: "" }));
+        // Auto-geocode after CEP fills address
+        const num = target === "origin" ? form.origin_number : form.destination_number;
+        triggerGeocode(addr, num, target);
       } else {
         toast({ title: "CEP não encontrado", description: "Verifique o CEP digitado.", variant: "destructive" });
       }
@@ -191,7 +224,7 @@ export default function NewServiceRequest() {
     } finally {
       setCepLoading((prev) => ({ ...prev, [target]: false }));
     }
-  }, [toast]);
+  }, [toast, form.origin_number, form.destination_number, triggerGeocode]);
 
   const handleCepChange = (value: string, target: "origin" | "destination") => {
     const masked = maskCEP(value);
@@ -236,9 +269,10 @@ export default function NewServiceRequest() {
     // Geocode addresses in parallel
     const fullOrigin = [form.origin_address, form.origin_number].filter(Boolean).join(", ");
     const fullDest = [form.destination_address, form.destination_number].filter(Boolean).join(", ");
+    // Use cached geocoded coords if available, otherwise geocode now
     const [originGeo, destGeo] = await Promise.all([
-      geocodeAddress(fullOrigin),
-      geocodeAddress(fullDest),
+      geoCoords.origin ? Promise.resolve(geoCoords.origin) : geocodeAddress(fullOrigin),
+      geoCoords.destination ? Promise.resolve(geoCoords.destination) : geocodeAddress(fullDest),
     ]);
 
     const { data: inserted, error } = await supabase.from("service_requests").insert({
@@ -500,19 +534,45 @@ export default function NewServiceRequest() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Endereço de Origem *</Label>
-                <Input value={form.origin_address} onChange={(e) => { update("origin_address", e.target.value); setErrors(prev => ({ ...prev, origin_address: "" })); }} placeholder="Rua, Bairro, Cidade - UF" className={errors.origin_address ? "border-destructive" : ""} />
+                <div className="relative">
+                  <Input value={form.origin_address} onChange={(e) => { update("origin_address", e.target.value); setErrors(prev => ({ ...prev, origin_address: "" })); }} onBlur={() => scheduleGeocode("origin")} placeholder="Rua, Bairro, Cidade - UF" className={`pr-9 ${errors.origin_address ? "border-destructive" : ""}`} />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {geoStatus.origin === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                    {geoStatus.origin === "success" && <MapPinned className="h-4 w-4 text-success" />}
+                    {geoStatus.origin === "error" && <XCircle className="h-4 w-4 text-destructive" />}
+                  </div>
+                </div>
                 {errors.origin_address && <p className="text-xs text-destructive">{errors.origin_address}</p>}
+                {geoStatus.origin === "success" && geoCoords.origin && (
+                  <p className="text-xs text-success flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Geocodificado: {geoCoords.origin.lat.toFixed(4)}, {geoCoords.origin.lng.toFixed(4)}</p>
+                )}
+                {geoStatus.origin === "error" && (
+                  <p className="text-xs text-destructive flex items-center gap-1"><XCircle className="h-3 w-3" /> Endereço não encontrado no mapa</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Endereço de Destino *</Label>
-                <Input value={form.destination_address} onChange={(e) => { update("destination_address", e.target.value); setErrors(prev => ({ ...prev, destination_address: "" })); }} placeholder="Rua, Bairro, Cidade - UF" className={errors.destination_address ? "border-destructive" : ""} />
+                <div className="relative">
+                  <Input value={form.destination_address} onChange={(e) => { update("destination_address", e.target.value); setErrors(prev => ({ ...prev, destination_address: "" })); }} onBlur={() => scheduleGeocode("destination")} placeholder="Rua, Bairro, Cidade - UF" className={`pr-9 ${errors.destination_address ? "border-destructive" : ""}`} />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {geoStatus.destination === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                    {geoStatus.destination === "success" && <MapPinned className="h-4 w-4 text-success" />}
+                    {geoStatus.destination === "error" && <XCircle className="h-4 w-4 text-destructive" />}
+                  </div>
+                </div>
                 {errors.destination_address && <p className="text-xs text-destructive">{errors.destination_address}</p>}
+                {geoStatus.destination === "success" && geoCoords.destination && (
+                  <p className="text-xs text-success flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Geocodificado: {geoCoords.destination.lat.toFixed(4)}, {geoCoords.destination.lng.toFixed(4)}</p>
+                )}
+                {geoStatus.destination === "error" && (
+                  <p className="text-xs text-destructive flex items-center gap-1"><XCircle className="h-3 w-3" /> Endereço não encontrado no mapa</p>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label>Nº Origem</Label>
-                <Input value={form.origin_number} onChange={(e) => update("origin_number", e.target.value)} placeholder="Nº" />
+                <Input value={form.origin_number} onChange={(e) => update("origin_number", e.target.value)} onBlur={() => scheduleGeocode("origin")} placeholder="Nº" />
               </div>
               <div className="space-y-2">
                 <Label>Complemento Origem</Label>
@@ -520,7 +580,7 @@ export default function NewServiceRequest() {
               </div>
               <div className="space-y-2">
                 <Label>Nº Destino</Label>
-                <Input value={form.destination_number} onChange={(e) => update("destination_number", e.target.value)} placeholder="Nº" />
+                <Input value={form.destination_number} onChange={(e) => update("destination_number", e.target.value)} onBlur={() => scheduleGeocode("destination")} placeholder="Nº" />
               </div>
               <div className="space-y-2">
                 <Label>Complemento Destino</Label>
