@@ -66,8 +66,12 @@ export default function NewServiceRequest() {
     event_type: "mechanical_failure" as string,
     origin_cep: "",
     origin_address: originFromCoords,
+    origin_number: "",
+    origin_complement: "",
     destination_cep: "",
     destination_address: "",
+    destination_number: "",
+    destination_complement: "",
     notes: searchParams.get("notes") || "",
   });
 
@@ -474,6 +478,24 @@ export default function NewServiceRequest() {
                 <Label>Endereço de Destino *</Label>
                 <Input value={form.destination_address} onChange={(e) => { update("destination_address", e.target.value); setErrors(prev => ({ ...prev, destination_address: "" })); }} placeholder="Rua, Bairro, Cidade - UF" className={errors.destination_address ? "border-destructive" : ""} />
                 {errors.destination_address && <p className="text-xs text-destructive">{errors.destination_address}</p>}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <Label>Nº Origem</Label>
+                <Input value={form.origin_number} onChange={(e) => update("origin_number", e.target.value)} placeholder="Nº" />
+              </div>
+              <div className="space-y-2">
+                <Label>Complemento Origem</Label>
+                <Input value={form.origin_complement} onChange={(e) => update("origin_complement", e.target.value)} placeholder="Apto, Bloco..." />
+              </div>
+              <div className="space-y-2">
+                <Label>Nº Destino</Label>
+                <Input value={form.destination_number} onChange={(e) => update("destination_number", e.target.value)} placeholder="Nº" />
+              </div>
+              <div className="space-y-2">
+                <Label>Complemento Destino</Label>
+                <Input value={form.destination_complement} onChange={(e) => update("destination_complement", e.target.value)} placeholder="Apto, Bloco..." />
               </div>
             </div>
           </CardContent>
