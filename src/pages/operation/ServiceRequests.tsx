@@ -32,6 +32,7 @@ const serviceTypeMap: Record<string, string> = {
 export default function ServiceRequests() {
   const [requests, setRequests] = useState<any[]>([]);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -55,12 +56,19 @@ export default function ServiceRequests() {
     setLoading(false);
   };
 
-  const filtered = requests.filter((r) =>
-    !search ||
-    r.protocol?.toLowerCase().includes(search.toLowerCase()) ||
-    r.requester_name?.toLowerCase().includes(search.toLowerCase()) ||
-    r.vehicle_plate?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = requests.filter((r) => {
+    const matchesSearch = !search ||
+      r.protocol?.toLowerCase().includes(search.toLowerCase()) ||
+      r.requester_name?.toLowerCase().includes(search.toLowerCase()) ||
+      r.vehicle_plate?.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === "all" || r.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const statusCounts = requests.reduce<Record<string, number>>((acc, r) => {
+    acc[r.status] = (acc[r.status] || 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <div className="space-y-6">
@@ -75,14 +83,40 @@ export default function ServiceRequests() {
         </Button>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por protocolo, nome ou placa..."
-          className="pl-9"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por protocolo, nome ou placa..."
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant={statusFilter === "all" ? "default" : "outline"}
+          onClick={() => setStatusFilter("all")}
+        >
+          Todos ({requests.length})
+        </Button>
+        {Object.entries(statusMap).map(([key, val]) => {
+          const count = statusCounts[key] || 0;
+          if (count === 0) return null;
+          return (
+            <Button
+              key={key}
+              size="sm"
+              variant={statusFilter === key ? "default" : "outline"}
+              onClick={() => setStatusFilter(key)}
+            >
+              {val.label} ({count})
+            </Button>
+          );
+        })}
       </div>
 
       <div className="space-y-3">
