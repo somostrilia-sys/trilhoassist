@@ -17,6 +17,23 @@ import CarVerification, { defaultCarVerification } from "@/components/service-re
 import MotorcycleVerification, { defaultMotorcycleVerification } from "@/components/service-request/MotorcycleVerification";
 import TruckVerification, { defaultTruckVerification } from "@/components/service-request/TruckVerification";
 
+async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+  if (!address.trim()) return null;
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1&countrycodes=br`,
+      { headers: { "Accept-Language": "pt-BR" } }
+    );
+    const data = await res.json();
+    if (data?.[0]) {
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    }
+  } catch (err) {
+    console.error("Geocoding failed:", err);
+  }
+  return null;
+}
+
 type VehicleCategory = "car" | "motorcycle" | "truck";
 
 export default function NewServiceRequest() {
@@ -216,6 +233,14 @@ export default function NewServiceRequest() {
     }
     setLoading(true);
 
+    // Geocode addresses in parallel
+    const fullOrigin = [form.origin_address, form.origin_number].filter(Boolean).join(", ");
+    const fullDest = [form.destination_address, form.destination_number].filter(Boolean).join(", ");
+    const [originGeo, destGeo] = await Promise.all([
+      geocodeAddress(fullOrigin),
+      geocodeAddress(fullDest),
+    ]);
+
     const { data: inserted, error } = await supabase.from("service_requests").insert({
       requester_name: form.requester_name,
       requester_phone: form.requester_phone,
@@ -229,7 +254,11 @@ export default function NewServiceRequest() {
       service_type: form.service_type as any,
       event_type: form.event_type as any,
       origin_address: form.origin_address || null,
+      origin_lat: originGeo?.lat || null,
+      origin_lng: originGeo?.lng || null,
       destination_address: form.destination_address || null,
+      destination_lat: destGeo?.lat || null,
+      destination_lng: destGeo?.lng || null,
       notes: form.notes || null,
       operator_id: user?.id,
       tenant_id: tenantId,
