@@ -15,17 +15,32 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Button } from "@/components/ui/button";
 import { Truck } from "lucide-react";
 
-const menuSections = [
+interface MenuItem {
+  title: string;
+  url: string;
+  icon: any;
+}
+
+interface MenuSection {
+  label: string;
+  icon: any;
+  collapsible: boolean;
+  items: MenuItem[];
+  allowedRoles?: string[]; // if undefined, visible to all
+}
+
+const menuSections: MenuSection[] = [
   {
     label: "Dashboard",
     icon: LayoutDashboard,
-    items: [{ title: "Visão Geral", url: "/dashboard", icon: LayoutDashboard }],
     collapsible: false,
+    items: [{ title: "Visão Geral", url: "/dashboard", icon: LayoutDashboard }],
   },
   {
     label: "Operação",
     icon: Headphones,
     collapsible: true,
+    allowedRoles: ["admin", "operator"],
     items: [
       { title: "Novo Atendimento", url: "/operation/new", icon: Plus },
       { title: "Atendimentos", url: "/operation/requests", icon: List },
@@ -35,6 +50,7 @@ const menuSections = [
     label: "Negócio",
     icon: Briefcase,
     collapsible: true,
+    allowedRoles: ["admin"],
     items: [
       { title: "Clientes", url: "/business/clients", icon: Building2 },
       { title: "Planos", url: "/business/plans", icon: Award },
@@ -45,6 +61,7 @@ const menuSections = [
     label: "Rede",
     icon: Network,
     collapsible: true,
+    allowedRoles: ["admin", "operator"],
     items: [
       { title: "Prestadores", url: "/network/providers", icon: Users },
     ],
@@ -53,6 +70,7 @@ const menuSections = [
     label: "Financeiro",
     icon: DollarSign,
     collapsible: true,
+    allowedRoles: ["admin"],
     items: [
       { title: "Fechamento", url: "/finance/closing", icon: FileCheck },
       { title: "Faturamento", url: "/finance/billing", icon: Receipt },
@@ -62,6 +80,7 @@ const menuSections = [
     label: "Relatórios",
     icon: BarChart3,
     collapsible: true,
+    allowedRoles: ["admin"],
     items: [
       { title: "Relatórios", url: "/reports", icon: BarChart3 },
     ],
@@ -70,6 +89,7 @@ const menuSections = [
     label: "Configurações",
     icon: Settings,
     collapsible: true,
+    allowedRoles: ["admin"],
     items: [
       { title: "Usuários", url: "/settings/users", icon: Users },
       { title: "Configurações", url: "/settings", icon: Settings },
@@ -79,13 +99,18 @@ const menuSections = [
 ];
 
 export function AppSidebar() {
-  const { signOut } = useAuth();
+  const { signOut, roles } = useAuth();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/login");
   };
+
+  const visibleSections = menuSections.filter((section) => {
+    if (!section.allowedRoles) return true;
+    return section.allowedRoles.some((role) => roles.includes(role));
+  });
 
   return (
     <Sidebar className="border-r-0">
@@ -102,7 +127,7 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="px-2 py-2">
-        {menuSections.map((section) =>
+        {visibleSections.map((section) =>
           section.collapsible ? (
             <Collapsible key={section.label} className="group/collapsible">
               <SidebarGroup>

@@ -112,6 +112,29 @@ Deno.serve(async (req) => {
       });
     }
 
+    // UPDATE user role
+    if (method === "PUT") {
+      const { user_id, role } = await req.json();
+      if (!user_id || !role) {
+        return new Response(JSON.stringify({ error: "user_id e role são obrigatórios" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Delete existing roles and insert new one
+      await adminClient.from("user_roles").delete().eq("user_id", user_id);
+      const { error: roleError } = await adminClient.from("user_roles").insert({
+        user_id,
+        role,
+      });
+      if (roleError) throw roleError;
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // DELETE user
     if (method === "DELETE") {
       const { user_id } = await req.json();
