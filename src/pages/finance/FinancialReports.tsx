@@ -1,7 +1,10 @@
 import { useState, useMemo } from "react";
-import { format, subMonths, startOfMonth, endOfMonth, parseISO, isBefore, isAfter } from "date-fns";
+import { format, subMonths, startOfMonth, endOfMonth, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { BarChart3, TrendingUp, DollarSign, FileText, Calendar } from "lucide-react";
+import {
+  BarChart3, TrendingUp, DollarSign, FileText, Calendar, Car, Phone,
+  User, Search, Download, Filter, Users, Building2,
+} from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -9,20 +12,48 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
 import { useTenantId, formatCurrency, SERVICE_TYPE_LABELS } from "@/hooks/useFinancialData";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { maskCPF, maskPhone } from "@/lib/masks";
 
 const CHART_COLORS = [
-  "hsl(218, 58%, 26%)",   // primary
-  "hsl(48, 92%, 52%)",    // accent
-  "hsl(354, 82%, 42%)",   // destructive
-  "hsl(142, 60%, 45%)",   // success
-  "hsl(218, 58%, 40%)",   // info
-  "hsl(215, 10%, 52%)",   // muted
+  "hsl(218, 58%, 26%)",
+  "hsl(48, 92%, 52%)",
+  "hsl(354, 82%, 42%)",
+  "hsl(142, 60%, 45%)",
+  "hsl(218, 58%, 40%)",
+  "hsl(215, 10%, 52%)",
   "hsl(280, 60%, 50%)",
   "hsl(30, 80%, 55%)",
 ];
+
+const STATUS_LABELS: Record<string, string> = {
+  open: "Aberto",
+  awaiting_dispatch: "Aguardando Despacho",
+  dispatched: "Despachado",
+  in_progress: "Em Andamento",
+  completed: "Concluído",
+  cancelled: "Cancelado",
+  refunded: "Reembolsado",
+};
+
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  mechanical_failure: "Pane Mecânica",
+  accident: "Acidente",
+  theft: "Roubo/Furto",
+  flat_tire: "Pneu Furado",
+  locked_out: "Chave Trancada",
+  battery_dead: "Bateria",
+  fuel_empty: "Sem Combustível",
+  other: "Outro",
+};
 
 function usePeriodRange(months: number) {
   return useMemo(() => {
@@ -32,21 +63,28 @@ function usePeriodRange(months: number) {
   }, [months]);
 }
 
-function useReportData(tenantId: string | null | undefined, period: { startStr: string; endStr: string }) {
+// Full service request data with beneficiary + client relations
+function useDetailedRequests(tenantId: string | null | undefined, period: { startStr: string; endStr: string }) {
   return useQuery({
-    queryKey: ["report-requests", tenantId, period.startStr, period.endStr],
+    queryKey: ["report-detailed-requests", tenantId, period.startStr, period.endStr],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("service_requests")
         .select(`
-          id, service_type, status, provider_cost, charged_amount,
-          created_at, completed_at, client_id,
-          clients (id, name)
+          id, protocol, service_type, event_type, status,
+          provider_cost, charged_amount, financial_status,
+          created_at, completed_at,
+          requester_name, requester_phone, requester_phone_secondary, requester_email,
+          vehicle_plate, vehicle_model, vehicle_year,
+          origin_address, destination_address, estimated_km,
+          difficult_access, vehicle_lowered, notes,
+          client_id, clients (id, name),
+          beneficiary_id, beneficiaries (id, name, cpf, phone, vehicle_plate, vehicle_model, vehicle_year, cooperativa, active)
         `)
         .eq("tenant_id", tenantId!)
         .gte("created_at", period.startStr)
         .lte("created_at", period.endStr + "T23:59:59")
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
@@ -54,37 +92,33 @@ function useReportData(tenantId: string | null | undefined, period: { startStr: 
   });
 }
 
-function useInvoiceReport(tenantId: string | null | undefined, period: { startStr: string; endStr: string }) {
+// Beneficiaries with client + plan info
+function useBeneficiaryReport(tenantId: string | null | undefined) {
   return useQuery({
-    queryKey: ["report-invoices", tenantId, period.startStr, period.endStr],
+    queryKey: ["report-beneficiaries", tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("invoices")
-        .select(`*, clients (id, name)`)
+      // First get client IDs for this tenant
+      const { data: clients } = await supabase
+        .from("clients")
+        .select("id, name, billing_model, api_endpoint")
         .eq("tenant_id", tenantId!)
-        .gte("created_at", period.startStr)
-        .lte("created_at", period.endStr + "T23:59:59")
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: !!tenantId,
-  });
-}
+        .eq("active", true);
 
-function useClosingReport(tenantId: string | null | undefined, period: { startStr: string; endStr: string }) {
-  return useQuery({
-    queryKey: ["report-closings", tenantId, period.startStr, period.endStr],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("financial_closings")
-        .select(`*, providers (id, name)`)
-        .eq("tenant_id", tenantId!)
-        .gte("created_at", period.startStr)
-        .lte("created_at", period.endStr + "T23:59:59")
-        .order("created_at", { ascending: true });
+      if (!clients?.length) return { beneficiaries: [], clients: [] };
+
+      const clientIds = clients.map((c) => c.id);
+      const { data: bens, error } = await supabase
+        .from("beneficiaries")
+        .select(`
+          id, name, cpf, phone, vehicle_plate, vehicle_model, vehicle_year,
+          vehicle_chassis, cooperativa, active, created_at,
+          client_id,
+          plan_id, plans (id, name, plate_fee)
+        `)
+        .in("client_id", clientIds)
+        .order("name");
       if (error) throw error;
-      return data ?? [];
+      return { beneficiaries: bens ?? [], clients };
     },
     enabled: !!tenantId,
   });
@@ -111,15 +145,21 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export default function FinancialReports() {
   const [periodMonths, setPeriodMonths] = useState(6);
+  const [searchRequests, setSearchRequests] = useState("");
+  const [searchBeneficiaries, setSearchBeneficiaries] = useState("");
+  const [clientFilter, setClientFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
   const { data: tenantId } = useTenantId();
   const period = usePeriodRange(periodMonths);
-  const { data: requests = [], isLoading: loadingReq } = useReportData(tenantId, period);
-  const { data: invoices = [], isLoading: loadingInv } = useInvoiceReport(tenantId, period);
-  const { data: closings = [], isLoading: loadingCl } = useClosingReport(tenantId, period);
+  const { data: requests = [], isLoading: loadingReq } = useDetailedRequests(tenantId, period);
+  const { data: benData, isLoading: loadingBen } = useBeneficiaryReport(tenantId);
 
-  const isLoading = loadingReq || loadingInv || loadingCl;
+  const beneficiaries = benData?.beneficiaries ?? [];
+  const clients = benData?.clients ?? [];
+  const clientMap = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
 
-  // Monthly aggregation for bar/line charts
+  // === Charts data ===
   const monthlyData = useMemo(() => {
     const map = new Map<string, { month: string; atendimentos: number; custo: number; faturado: number; markup: number }>();
     requests.forEach((r) => {
@@ -134,7 +174,6 @@ export default function FinancialReports() {
     return Array.from(map.values());
   }, [requests]);
 
-  // Service type breakdown
   const serviceTypeData = useMemo(() => {
     const map = new Map<string, number>();
     requests.forEach((r) => {
@@ -146,8 +185,7 @@ export default function FinancialReports() {
       .sort((a, b) => b.value - a.value);
   }, [requests]);
 
-  // Client breakdown
-  const clientData = useMemo(() => {
+  const clientChartData = useMemo(() => {
     const map = new Map<string, { name: string; atendimentos: number; custo: number; faturado: number }>();
     requests.forEach((r) => {
       const name = (r.clients as any)?.name || "Sem cliente";
@@ -160,15 +198,59 @@ export default function FinancialReports() {
     return Array.from(map.values()).sort((a, b) => b.faturado - a.faturado);
   }, [requests]);
 
-  // KPIs
+  // === KPIs ===
   const kpis = useMemo(() => {
     const totalAtendimentos = requests.length;
     const totalCusto = requests.reduce((s, r) => s + (Number(r.provider_cost) || 0), 0);
     const totalFaturado = requests.reduce((s, r) => s + (Number(r.charged_amount) || 0), 0);
     const totalMarkup = totalFaturado - totalCusto;
-    const totalInvoiced = invoices.reduce((s, i) => s + (Number(i.total_charged) || 0), 0);
-    return { totalAtendimentos, totalCusto, totalFaturado, totalMarkup, totalInvoiced };
-  }, [requests, invoices]);
+    const totalPlacasAtivas = beneficiaries.filter((b) => b.active).length;
+    return { totalAtendimentos, totalCusto, totalFaturado, totalMarkup, totalPlacasAtivas };
+  }, [requests, beneficiaries]);
+
+  // === Filtered requests ===
+  const filteredRequests = useMemo(() => {
+    return requests.filter((r) => {
+      if (clientFilter !== "all" && r.client_id !== clientFilter) return false;
+      if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      if (searchRequests) {
+        const q = searchRequests.toLowerCase();
+        const matches =
+          r.protocol?.toLowerCase().includes(q) ||
+          r.requester_name?.toLowerCase().includes(q) ||
+          r.vehicle_plate?.toLowerCase().includes(q) ||
+          r.requester_phone?.includes(q) ||
+          (r.beneficiaries as any)?.name?.toLowerCase().includes(q);
+        if (!matches) return false;
+      }
+      return true;
+    });
+  }, [requests, clientFilter, statusFilter, searchRequests]);
+
+  // === Filtered beneficiaries ===
+  const filteredBeneficiaries = useMemo(() => {
+    return beneficiaries.filter((b) => {
+      if (clientFilter !== "all" && b.client_id !== clientFilter) return false;
+      if (searchBeneficiaries) {
+        const q = searchBeneficiaries.toLowerCase();
+        return (
+          b.name?.toLowerCase().includes(q) ||
+          b.cpf?.toLowerCase().includes(q) ||
+          b.vehicle_plate?.toLowerCase().includes(q) ||
+          b.phone?.includes(q) ||
+          b.cooperativa?.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [beneficiaries, clientFilter, searchBeneficiaries]);
+
+  // Determine data origin per client
+  const getDataOrigin = (clientId: string) => {
+    const client = clientMap[clientId];
+    if (!client) return "manual";
+    return client.api_endpoint ? "erp" : "manual";
+  };
 
   return (
     <div className="space-y-6">
@@ -177,10 +259,10 @@ export default function FinancialReports() {
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <BarChart3 className="h-6 w-6 text-primary" />
-            Relatórios Financeiros
+            Relatórios
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Análise de atendimentos, custos e faturamento
+            Atendimentos, beneficiários, placas e dados financeiros
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -199,38 +281,39 @@ export default function FinancialReports() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Atendimentos</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Atendimentos</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{kpis.totalAtendimentos}</div>
-          </CardContent>
+          <CardContent><div className="text-2xl font-bold">{kpis.totalAtendimentos}</div></CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Custo Total</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Placas Ativas</CardTitle>
+            <Car className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent><div className="text-2xl font-bold">{kpis.totalPlacasAtivas}</div></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Custo Total</CardTitle>
             <DollarSign className="h-4 w-4 text-destructive" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-destructive">{formatCurrency(kpis.totalCusto)}</div>
-          </CardContent>
+          <CardContent><div className="text-2xl font-bold text-destructive">{formatCurrency(kpis.totalCusto)}</div></CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Faturado</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Faturado</CardTitle>
             <TrendingUp className="h-4 w-4 text-primary" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-primary">{formatCurrency(kpis.totalFaturado)}</div>
-          </CardContent>
+          <CardContent><div className="text-2xl font-bold text-primary">{formatCurrency(kpis.totalFaturado)}</div></CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Margem</CardTitle>
-            <TrendingUp className="h-4 w-4 text-success" />
+            <CardTitle className="text-xs font-medium text-muted-foreground">Margem</CardTitle>
+            <TrendingUp className="h-4 w-4" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" style={{ color: "hsl(142, 60%, 45%)" }}>
@@ -240,15 +323,16 @@ export default function FinancialReports() {
         </Card>
       </div>
 
-      {/* Charts */}
+      {/* Tabs */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-          <TabsTrigger value="services">Tipos de Serviço</TabsTrigger>
+          <TabsTrigger value="requests">Atendimentos</TabsTrigger>
+          <TabsTrigger value="beneficiaries">Beneficiários / Placas</TabsTrigger>
           <TabsTrigger value="clients">Por Cliente</TabsTrigger>
         </TabsList>
 
-        {/* Overview Tab */}
+        {/* ===== OVERVIEW TAB ===== */}
         <TabsContent value="overview" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
@@ -262,17 +346,13 @@ export default function FinancialReports() {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={monthlyData}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                        <XAxis dataKey="month" className="text-xs" tick={{ fill: "hsl(215, 10%, 52%)" }} />
-                        <YAxis className="text-xs" tick={{ fill: "hsl(215, 10%, 52%)" }} />
+                        <XAxis dataKey="month" tick={{ fill: "hsl(215, 10%, 52%)", fontSize: 12 }} />
+                        <YAxis tick={{ fill: "hsl(215, 10%, 52%)", fontSize: 12 }} />
                         <Tooltip content={<CustomTooltip />} />
                         <Bar dataKey="atendimentos" name="Atendimentos" fill="hsl(218, 58%, 26%)" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-                      Sem dados no período
-                    </div>
-                  )}
+                  ) : <EmptyChart />}
                 </div>
               </CardContent>
             </Card>
@@ -280,7 +360,7 @@ export default function FinancialReports() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Custo vs Faturamento</CardTitle>
-                <CardDescription>Comparativo mensal de custos e receita</CardDescription>
+                <CardDescription>Comparativo mensal</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="h-[300px]">
@@ -288,8 +368,8 @@ export default function FinancialReports() {
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={monthlyData}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                        <XAxis dataKey="month" className="text-xs" tick={{ fill: "hsl(215, 10%, 52%)" }} />
-                        <YAxis className="text-xs" tick={{ fill: "hsl(215, 10%, 52%)" }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                        <XAxis dataKey="month" tick={{ fill: "hsl(215, 10%, 52%)", fontSize: 12 }} />
+                        <YAxis tick={{ fill: "hsl(215, 10%, 52%)", fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
                         <Tooltip content={<CustomTooltip />} />
                         <Legend />
                         <Line type="monotone" dataKey="custo" name="Custo" stroke="hsl(354, 82%, 42%)" strokeWidth={2} dot={{ r: 4 }} />
@@ -297,52 +377,28 @@ export default function FinancialReports() {
                         <Line type="monotone" dataKey="markup" name="Margem" stroke="hsl(142, 60%, 45%)" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} />
                       </LineChart>
                     </ResponsiveContainer>
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-                      Sem dados no período
-                    </div>
-                  )}
+                  ) : <EmptyChart />}
                 </div>
               </CardContent>
             </Card>
-          </div>
-        </TabsContent>
 
-        {/* Service Types Tab */}
-        <TabsContent value="services" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Distribuição por Tipo de Serviço</CardTitle>
-                <CardDescription>Quantidade de atendimentos por tipo</CardDescription>
+                <CardTitle className="text-base">Tipos de Serviço</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-[350px]">
+                <div className="h-[300px]">
                   {serviceTypeData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie
-                          data={serviceTypeData}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={120}
-                          label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                          labelLine
-                        >
-                          {serviceTypeData.map((_, i) => (
-                            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                          ))}
+                        <Pie data={serviceTypeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100}
+                          label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`} labelLine>
+                          {serviceTypeData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                         </Pie>
                         <Tooltip />
                       </PieChart>
                     </ResponsiveContainer>
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-                      Sem dados no período
-                    </div>
-                  )}
+                  ) : <EmptyChart />}
                 </div>
               </CardContent>
             </Card>
@@ -350,7 +406,6 @@ export default function FinancialReports() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Ranking de Serviços</CardTitle>
-                <CardDescription>Tipos de serviço mais solicitados</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -363,39 +418,296 @@ export default function FinancialReports() {
                           <span className="text-muted-foreground">{item.value}</span>
                         </div>
                         <div className="h-2 rounded-full bg-secondary">
-                          <div
-                            className="h-2 rounded-full transition-all"
-                            style={{
-                              width: `${(item.value / max) * 100}%`,
-                              backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
-                            }}
-                          />
+                          <div className="h-2 rounded-full transition-all"
+                            style={{ width: `${(item.value / max) * 100}%`, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
                         </div>
                       </div>
                     );
-                  }) : (
-                    <div className="text-center text-muted-foreground text-sm py-8">
-                      Sem dados no período
-                    </div>
-                  )}
+                  }) : <EmptyChart />}
                 </div>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
-        {/* Clients Tab */}
+        {/* ===== REQUESTS (DETAILED) TAB ===== */}
+        <TabsContent value="requests" className="space-y-4">
+          <div className="flex flex-wrap gap-3 items-center">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Protocolo, nome, placa, telefone..." value={searchRequests}
+                onChange={(e) => setSearchRequests(e.target.value)} className="pl-9" />
+            </div>
+            <Select value={clientFilter} onValueChange={setClientFilter}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Todos os clientes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os clientes</SelectItem>
+                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Todos os status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os status</SelectItem>
+                {Object.entries(STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Badge variant="outline" className="text-xs">{filteredRequests.length} registros</Badge>
+          </div>
+
+          <Card>
+            <CardContent className="p-0">
+              {loadingReq ? (
+                <div className="p-8 text-center text-muted-foreground">Carregando...</div>
+              ) : filteredRequests.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">Nenhum atendimento encontrado no período.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Protocolo</TableHead>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Solicitante</TableHead>
+                        <TableHead>Telefone</TableHead>
+                        <TableHead>Beneficiário</TableHead>
+                        <TableHead>Placa</TableHead>
+                        <TableHead>Veículo</TableHead>
+                        <TableHead>Serviço</TableHead>
+                        <TableHead>Evento</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Origem</TableHead>
+                        <TableHead className="text-right">Custo</TableHead>
+                        <TableHead className="text-right">Cobrado</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Dados</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredRequests.map((r) => {
+                        const ben = r.beneficiaries as any;
+                        const client = r.clients as any;
+                        const origin = getDataOrigin(r.client_id || "");
+                        return (
+                          <TableRow key={r.id}>
+                            <TableCell className="font-mono text-xs font-medium whitespace-nowrap">{r.protocol}</TableCell>
+                            <TableCell className="text-xs whitespace-nowrap">
+                              {format(parseISO(r.created_at), "dd/MM/yy HH:mm")}
+                            </TableCell>
+                            <TableCell className="text-sm font-medium whitespace-nowrap">{r.requester_name}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              {r.requester_phone ? maskPhone(r.requester_phone) : "—"}
+                            </TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">
+                              {ben?.name || "—"}
+                              {ben?.cpf && <span className="block text-xs text-muted-foreground">{maskCPF(ben.cpf)}</span>}
+                            </TableCell>
+                            <TableCell>
+                              {r.vehicle_plate ? (
+                                <Badge variant="outline" className="font-mono text-xs gap-1">
+                                  <Car className="h-3 w-3" />{r.vehicle_plate}
+                                </Badge>
+                              ) : "—"}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              {r.vehicle_model || "—"}{r.vehicle_year ? ` ${r.vehicle_year}` : ""}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                                {SERVICE_TYPE_LABELS[r.service_type] || r.service_type}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              {EVENT_TYPE_LABELS[r.event_type] || r.event_type}
+                            </TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{client?.name || "—"}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate" title={r.origin_address || ""}>
+                              {r.origin_address || "—"}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs text-destructive whitespace-nowrap">
+                              {formatCurrency(Number(r.provider_cost) || 0)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs text-primary whitespace-nowrap">
+                              {formatCurrency(Number(r.charged_amount) || 0)}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={r.status === "completed" ? "default" : r.status === "cancelled" ? "destructive" : "secondary"} className="text-xs whitespace-nowrap">
+                                {STATUS_LABELS[r.status] || r.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-xs whitespace-nowrap">
+                                {origin === "erp" ? "ERP" : "Manual"}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ===== BENEFICIARIES / PLATES TAB ===== */}
+        <TabsContent value="beneficiaries" className="space-y-4">
+          <div className="flex flex-wrap gap-3 items-center">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Nome, CPF, placa, telefone, cooperativa..." value={searchBeneficiaries}
+                onChange={(e) => setSearchBeneficiaries(e.target.value)} className="pl-9" />
+            </div>
+            <Select value={clientFilter} onValueChange={setClientFilter}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Todos os clientes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os clientes</SelectItem>
+                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Badge variant="outline" className="text-xs">{filteredBeneficiaries.length} beneficiários</Badge>
+          </div>
+
+          {/* Plates summary per client */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {clients.map((client) => {
+              const cBens = beneficiaries.filter((b) => b.client_id === client.id);
+              const active = cBens.filter((b) => b.active).length;
+              const inactive = cBens.filter((b) => !b.active).length;
+              const origin = client.api_endpoint ? "ERP" : "Manual";
+              return (
+                <Card key={client.id}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-primary" />
+                        {client.name}
+                      </CardTitle>
+                      <Badge variant="outline" className="text-xs">{origin}</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Total: </span>
+                        <span className="font-bold">{cBens.length}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Ativas: </span>
+                        <span className="font-bold" style={{ color: "hsl(142, 60%, 45%)" }}>{active}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Inativas: </span>
+                        <span className="font-bold text-destructive">{inactive}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+
+          <Card>
+            <CardContent className="p-0">
+              {loadingBen ? (
+                <div className="p-8 text-center text-muted-foreground">Carregando...</div>
+              ) : filteredBeneficiaries.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">Nenhum beneficiário encontrado.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>CPF</TableHead>
+                        <TableHead>Telefone</TableHead>
+                        <TableHead>Placa</TableHead>
+                        <TableHead>Veículo</TableHead>
+                        <TableHead>Chassi</TableHead>
+                        <TableHead>Cooperativa</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Plano</TableHead>
+                        <TableHead className="text-right">Valor/Placa</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Origem</TableHead>
+                        <TableHead>Cadastro</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredBeneficiaries.map((b) => {
+                        const client = clientMap[b.client_id];
+                        const plan = b.plans as any;
+                        const origin = getDataOrigin(b.client_id);
+                        return (
+                          <TableRow key={b.id}>
+                            <TableCell className="font-medium whitespace-nowrap">{b.name}</TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground">
+                              {b.cpf ? maskCPF(b.cpf) : "—"}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              {b.phone ? maskPhone(b.phone) : "—"}
+                            </TableCell>
+                            <TableCell>
+                              {b.vehicle_plate ? (
+                                <Badge variant="outline" className="font-mono text-xs gap-1">
+                                  <Car className="h-3 w-3" />{b.vehicle_plate}
+                                </Badge>
+                              ) : "—"}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              {b.vehicle_model || "—"}{b.vehicle_year ? ` ${b.vehicle_year}` : ""}
+                            </TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground">
+                              {b.vehicle_chassis || "—"}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{b.cooperativa || "—"}</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{client?.name || "—"}</TableCell>
+                            <TableCell className="text-xs whitespace-nowrap">{plan?.name || "—"}</TableCell>
+                            <TableCell className="text-right font-mono text-xs whitespace-nowrap">
+                              {plan?.plate_fee ? formatCurrency(Number(plan.plate_fee)) : "—"}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={b.active ? "default" : "destructive"} className="text-xs">
+                                {b.active ? "Ativo" : "Inativo"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-xs">
+                                {origin === "erp" ? "ERP" : "Manual"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              {format(parseISO(b.created_at), "dd/MM/yy")}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ===== CLIENTS TAB ===== */}
         <TabsContent value="clients" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Faturamento por Cliente</CardTitle>
-              <CardDescription>Comparativo de custo e faturamento por cliente</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[400px]">
-                {clientData.length > 0 ? (
+                {clientChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={clientData} layout="vertical">
+                    <BarChart data={clientChartData} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                       <XAxis type="number" tick={{ fill: "hsl(215, 10%, 52%)", fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
                       <YAxis type="category" dataKey="name" width={150} tick={{ fill: "hsl(215, 10%, 52%)", fontSize: 12 }} />
@@ -405,54 +717,67 @@ export default function FinancialReports() {
                       <Bar dataKey="faturado" name="Faturado" fill="hsl(218, 58%, 26%)" radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-                    Sem dados no período
-                  </div>
-                )}
+                ) : <EmptyChart />}
               </div>
             </CardContent>
           </Card>
 
-          {/* Client table summary */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Resumo por Cliente</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-base">Resumo por Cliente</CardTitle></CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 font-medium text-muted-foreground">Cliente</th>
-                      <th className="text-right py-2 font-medium text-muted-foreground">Atendimentos</th>
-                      <th className="text-right py-2 font-medium text-muted-foreground">Custo</th>
-                      <th className="text-right py-2 font-medium text-muted-foreground">Faturado</th>
-                      <th className="text-right py-2 font-medium text-muted-foreground">Margem</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clientData.map((c) => (
-                      <tr key={c.name} className="border-b last:border-0">
-                        <td className="py-2 font-medium">{c.name}</td>
-                        <td className="py-2 text-right">{c.atendimentos}</td>
-                        <td className="py-2 text-right text-destructive">{formatCurrency(c.custo)}</td>
-                        <td className="py-2 text-right text-primary">{formatCurrency(c.faturado)}</td>
-                        <td className="py-2 text-right" style={{ color: c.faturado - c.custo >= 0 ? "hsl(142, 60%, 45%)" : "hsl(354, 82%, 42%)" }}>
-                          {formatCurrency(c.faturado - c.custo)}
-                        </td>
-                      </tr>
-                    ))}
-                    {clientData.length === 0 && (
-                      <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">Sem dados no período</td></tr>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Modelo Cobrança</TableHead>
+                      <TableHead className="text-right">Placas</TableHead>
+                      <TableHead className="text-right">Atendimentos</TableHead>
+                      <TableHead className="text-right">Custo</TableHead>
+                      <TableHead className="text-right">Faturado</TableHead>
+                      <TableHead className="text-right">Margem</TableHead>
+                      <TableHead>Dados</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {clientChartData.map((c) => {
+                      const clientObj = clients.find((cl) => cl.name === c.name);
+                      const cBens = beneficiaries.filter((b) => b.client_id === clientObj?.id);
+                      const billingLabel = clientObj?.billing_model === "plate_only" ? "Somente Placa" : "Placa + Serviço";
+                      const origin = clientObj?.api_endpoint ? "ERP" : "Manual";
+                      return (
+                        <TableRow key={c.name}>
+                          <TableCell className="font-medium">{c.name}</TableCell>
+                          <TableCell className="text-xs"><Badge variant="secondary">{billingLabel}</Badge></TableCell>
+                          <TableCell className="text-right">{cBens.filter((b) => b.active).length}</TableCell>
+                          <TableCell className="text-right">{c.atendimentos}</TableCell>
+                          <TableCell className="text-right text-destructive font-mono text-sm">{formatCurrency(c.custo)}</TableCell>
+                          <TableCell className="text-right text-primary font-mono text-sm">{formatCurrency(c.faturado)}</TableCell>
+                          <TableCell className="text-right font-mono text-sm" style={{ color: c.faturado - c.custo >= 0 ? "hsl(142, 60%, 45%)" : "hsl(354, 82%, 42%)" }}>
+                            {formatCurrency(c.faturado - c.custo)}
+                          </TableCell>
+                          <TableCell><Badge variant="outline" className="text-xs">{origin}</Badge></TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {clientChartData.length === 0 && (
+                      <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">Sem dados</TableCell></TableRow>
                     )}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function EmptyChart() {
+  return (
+    <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+      Sem dados no período
     </div>
   );
 }
