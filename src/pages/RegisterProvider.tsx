@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle, Truck, Wrench, Battery, Fuel, Key, HelpCircle } from "lucide-react";
+import { maskPhone, maskCNPJ, maskCEP } from "@/lib/masks";
 
 const SERVICE_OPTIONS = [
   { value: "tow_light", label: "Guincho Leve", icon: Truck },
@@ -200,11 +201,11 @@ export default function RegisterProvider() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="cnpj">CNPJ *</Label>
-                  <Input id="cnpj" required value={form.cnpj} onChange={(e) => updateField("cnpj", e.target.value)} />
+                  <Input id="cnpj" required value={form.cnpj} onChange={(e) => updateField("cnpj", maskCNPJ(e.target.value))} placeholder="00.000.000/0000-00" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">Telefone *</Label>
-                  <Input id="phone" required value={form.phone} onChange={(e) => updateField("phone", e.target.value)} />
+                  <Input id="phone" required value={form.phone} onChange={(e) => updateField("phone", maskPhone(e.target.value))} placeholder="(00) 00000-0000" />
                 </div>
               </div>
             </CardContent>
@@ -249,7 +250,7 @@ export default function RegisterProvider() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="zip_code">CEP</Label>
-                  <Input id="zip_code" value={form.zip_code} onChange={(e) => updateField("zip_code", e.target.value)} />
+                  <Input id="zip_code" value={form.zip_code} onChange={(e) => updateField("zip_code", maskCEP(e.target.value))} placeholder="00000-000" />
                 </div>
               </div>
             </CardContent>

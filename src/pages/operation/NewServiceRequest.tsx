@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { maskPhone } from "@/lib/masks";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -92,7 +93,7 @@ export default function NewServiceRequest() {
             </div>
             <div className="space-y-2">
               <Label>Telefone do Solicitante *</Label>
-              <Input value={form.requester_phone} onChange={(e) => update("requester_phone", e.target.value)} required />
+              <Input value={form.requester_phone} onChange={(e) => update("requester_phone", maskPhone(e.target.value))} required placeholder="(00) 00000-0000" />
             </div>
             <div className="space-y-2">
               <Label>Email do Solicitante</Label>
@@ -100,7 +101,7 @@ export default function NewServiceRequest() {
             </div>
             <div className="space-y-2">
               <Label>Telefone Secundário</Label>
-              <Input value={form.requester_phone_secondary} onChange={(e) => update("requester_phone_secondary", e.target.value)} />
+              <Input value={form.requester_phone_secondary} onChange={(e) => update("requester_phone_secondary", maskPhone(e.target.value))} placeholder="(00) 00000-0000" />
             </div>
           </CardContent>
         </Card>
