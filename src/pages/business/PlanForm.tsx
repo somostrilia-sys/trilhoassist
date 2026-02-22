@@ -64,6 +64,7 @@ export default function PlanForm() {
   const [active, setActive] = useState(true);
   const [maxTowKm, setMaxTowKm] = useState<number | "">(100);
   const [maxDispatches, setMaxDispatches] = useState<number | "">(4);
+  const [plateFee, setPlateFee] = useState<number | "">(0);
   const [coverages, setCoverages] = useState<CoverageRow[]>([]);
 
   const { data: client } = useQuery({
@@ -105,6 +106,7 @@ export default function PlanForm() {
       setActive(plan.active);
       setMaxTowKm(plan.max_tow_km ?? "");
       setMaxDispatches(plan.max_dispatches_per_year ?? "");
+      setPlateFee((plan as any).plate_fee ?? 0);
     }
   }, [plan]);
 
@@ -145,8 +147,9 @@ export default function PlanForm() {
         active,
         max_tow_km: maxTowKm === "" ? null : Number(maxTowKm),
         max_dispatches_per_year: maxDispatches === "" ? null : Number(maxDispatches),
+        plate_fee: plateFee === "" ? 0 : Number(plateFee),
         client_id: clientId!,
-      };
+      } as any;
 
       let savedPlanId = planId;
 
@@ -245,10 +248,14 @@ export default function PlanForm() {
             <CardTitle className="text-lg">Dados Gerais</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Nome do Plano *</Label>
                 <Input id="name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Plano Gold" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plateFee">Valor por Placa (R$)</Label>
+                <Input id="plateFee" type="number" step="0.01" min="0" value={plateFee} onChange={(e) => setPlateFee(e.target.value === "" ? "" : Number(e.target.value))} placeholder="Ex: 29.90" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="maxTowKm">KM Máx. Guincho (padrão)</Label>

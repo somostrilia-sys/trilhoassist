@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { maskPhone, maskCNPJ } from "@/lib/masks";
 import { Loader2, ArrowLeft, Save } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 interface ClientFormData {
   name: string;
@@ -19,12 +20,13 @@ interface ClientFormData {
   contact_phone: string;
   api_endpoint: string;
   api_key: string;
+  billing_model: string;
   active: boolean;
 }
 
 const emptyForm: ClientFormData = {
   name: "", cnpj: "", contact_email: "", contact_phone: "",
-  api_endpoint: "", api_key: "", active: true,
+  api_endpoint: "", api_key: "", billing_model: "plate_plus_service", active: true,
 };
 
 export default function ClientForm() {
@@ -73,6 +75,7 @@ export default function ClientForm() {
         contact_phone: client.contact_phone || "",
         api_endpoint: client.api_endpoint || "",
         api_key: client.api_key || "",
+        billing_model: (client as any).billing_model || "plate_plus_service",
         active: client.active,
       });
     }
@@ -91,6 +94,7 @@ export default function ClientForm() {
         contact_phone: form.contact_phone || null,
         api_endpoint: form.api_endpoint || null,
         api_key: form.api_key || null,
+        billing_model: form.billing_model,
         active: form.active,
         tenant_id: tenantId,
       };
@@ -183,6 +187,39 @@ export default function ClientForm() {
                 <Input id="contact_phone" value={form.contact_phone} onChange={(e) => updateField("contact_phone", maskPhone(e.target.value))} placeholder="(00) 00000-0000" />
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Modelo de Cobrança</CardTitle>
+            <CardDescription>Como o cliente será faturado mensalmente</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RadioGroup
+              value={form.billing_model}
+              onValueChange={(v) => updateField("billing_model", v)}
+              className="space-y-3"
+            >
+              <div className="flex items-start space-x-3 p-3 rounded-lg border">
+                <RadioGroupItem value="plate_plus_service" id="plate_plus_service" className="mt-0.5" />
+                <div>
+                  <Label htmlFor="plate_plus_service" className="font-medium cursor-pointer">Placa + Serviço</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Cobra um valor menor por placa e cobra separadamente cada acionamento de serviço
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start space-x-3 p-3 rounded-lg border">
+                <RadioGroupItem value="plate_only" id="plate_only" className="mt-0.5" />
+                <div>
+                  <Label htmlFor="plate_only" className="font-medium cursor-pointer">Somente Placa</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Cobra um valor maior por placa, com os serviços inclusos (não cobra acionamento separado)
+                  </p>
+                </div>
+              </div>
+            </RadioGroup>
           </CardContent>
         </Card>
 
