@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, Receipt, DollarSign, Clock, CheckCircle, AlertTriangle } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { Search, Plus, Receipt, DollarSign, Clock, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   useTenantId, useInvoices, useClients,
@@ -37,6 +38,10 @@ export default function Billing() {
   const { data: invoices = [], isLoading } = useInvoices(tenantId);
   const { data: clients = [] } = useClients(tenantId);
 
+  // Get selected client's billing model
+  const selectedClient = clients.find((c) => c.id === newInvoice.client_id);
+  const billingModel = (selectedClient as any)?.billing_model || "plate_plus_service";
+
   // Get completed service requests for selected client in period
   const { data: clientRequests = [] } = useQuery({
     queryKey: ["client-billing-requests", tenantId, newInvoice.client_id, newInvoice.period_start, newInvoice.period_end],
@@ -53,18 +58,61 @@ export default function Billing() {
         .lte("completed_at", newInvoice.period_end + "T23:59:59");
 
       if (error) throw error;
-      // Only include requests not yet invoiced
       return (data ?? []).filter((sr: any) => sr.financial_status === "pending" || sr.financial_status === "closing_included");
     },
     enabled: !!tenantId && !!newInvoice.client_id && !!newInvoice.period_start && !!newInvoice.period_end,
   });
 
+  // Count active plates (beneficiaries) for selected client
+  const { data: activePlates = [] } = useQuery({
+    queryKey: ["client-active-plates", newInvoice.client_id, newInvoice.period_start, newInvoice.period_end],
+    queryFn: async () => {
+      // Fetch all beneficiaries that are currently active OR were created before period end
+      const { data, error } = await supabase
+        .from("beneficiaries")
+        .select("id, name, vehicle_plate, plan_id")
+        .eq("client_id", newInvoice.client_id)
+        .lte("created_at", newInvoice.period_end + "T23:59:59");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!newInvoice.client_id && !!newInvoice.period_start && !!newInvoice.period_end,
+  });
+
+  // Get plans with plate_fee for selected client
+  const { data: clientPlans = [] } = useQuery({
+    queryKey: ["client-plans-fees", newInvoice.client_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("plans")
+        .select("id, name, plate_fee")
+        .eq("client_id", newInvoice.client_id);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!newInvoice.client_id,
+  });
+
+  // Calculate plate totals
+  const plateFeeByPlan = Object.fromEntries(clientPlans.map((p: any) => [p.id, Number(p.plate_fee || 0)]));
+  const totalPlateValue = activePlates.reduce((sum, b: any) => {
+    const fee = b.plan_id ? (plateFeeByPlan[b.plan_id] || 0) : 0;
+    return sum + fee;
+  }, 0);
+  const totalPlates = activePlates.length;
+
   const createInvoiceMutation = useMutation({
     mutationFn: async () => {
-      if (clientRequests.length === 0) throw new Error("Nenhum atendimento encontrado no período.");
+      const hasPlates = totalPlates > 0;
+      const hasRequests = clientRequests.length > 0;
 
-      const totalCharged = clientRequests.reduce((sum: number, sr: any) => sum + Number(sr.charged_amount || 0), 0);
+      if (!hasPlates && !hasRequests) throw new Error("Nenhuma placa ou atendimento encontrado no período.");
+
+      const serviceCharged = billingModel === "plate_only"
+        ? 0
+        : clientRequests.reduce((sum: number, sr: any) => sum + Number(sr.charged_amount || 0), 0);
       const totalProviderCost = clientRequests.reduce((sum: number, sr: any) => sum + Number(sr.provider_cost || 0), 0);
+      const totalCharged = totalPlateValue + serviceCharged;
       const markup = totalCharged - totalProviderCost;
 
       const { data: invoice, error: invoiceError } = await supabase
@@ -80,30 +128,35 @@ export default function Billing() {
           markup_amount: markup,
           due_date: newInvoice.due_date || null,
           status: "draft",
+          notes: `Placas: ${totalPlates} (${formatCurrency(totalPlateValue)})${billingModel === "plate_only" ? " | Modelo: Somente Placa" : ""}`,
         })
         .select()
         .single();
 
       if (invoiceError) throw invoiceError;
 
-      // Insert invoice items
-      const items = clientRequests.map((sr: any) => ({
-        invoice_id: invoice.id,
-        service_request_id: sr.id,
-        charged_amount: Number(sr.charged_amount || 0),
-        provider_cost: Number(sr.provider_cost || 0),
-      }));
+      // Insert invoice items for service requests
+      if (clientRequests.length > 0 && billingModel === "plate_plus_service") {
+        const items = clientRequests.map((sr: any) => ({
+          invoice_id: invoice.id,
+          service_request_id: sr.id,
+          charged_amount: Number(sr.charged_amount || 0),
+          provider_cost: Number(sr.provider_cost || 0),
+        }));
 
-      const { error: itemsError } = await supabase.from("invoice_items").insert(items);
-      if (itemsError) throw itemsError;
+        const { error: itemsError } = await supabase.from("invoice_items").insert(items);
+        if (itemsError) throw itemsError;
+      }
 
       // Update financial_status
-      const srIds = clientRequests.map((sr: any) => sr.id);
-      const { error: updateError } = await supabase
-        .from("service_requests")
-        .update({ financial_status: "invoice_included" })
-        .in("id", srIds);
-      if (updateError) throw updateError;
+      if (clientRequests.length > 0) {
+        const srIds = clientRequests.map((sr: any) => sr.id);
+        const { error: updateError } = await supabase
+          .from("service_requests")
+          .update({ financial_status: "invoice_included" })
+          .in("id", srIds);
+        if (updateError) throw updateError;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
@@ -289,6 +342,11 @@ export default function Billing() {
                   ))}
                 </SelectContent>
               </Select>
+              {selectedClient && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Modelo: <strong>{billingModel === "plate_only" ? "Somente Placa" : "Placa + Serviço"}</strong>
+                </p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -305,30 +363,64 @@ export default function Billing() {
               <Input type="date" value={newInvoice.due_date} onChange={(e) => setNewInvoice(prev => ({ ...prev, due_date: e.target.value }))} />
             </div>
 
-            {clientRequests.length > 0 && (
+            {newInvoice.client_id && newInvoice.period_start && newInvoice.period_end && (totalPlates > 0 || clientRequests.length > 0) && (
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Resumo</CardTitle>
+                  <CardTitle className="text-sm">Resumo da Fatura</CardTitle>
                 </CardHeader>
-                <CardContent className="text-sm space-y-1">
-                  <p>Atendimentos: <strong>{clientRequests.length}</strong></p>
-                  <p>Custo prestadores: <strong>{formatCurrency(clientRequests.reduce((s: number, r: any) => s + Number(r.provider_cost || 0), 0))}</strong></p>
-                  <p>Valor faturado: <strong>{formatCurrency(clientRequests.reduce((s: number, r: any) => s + Number(r.charged_amount || 0), 0))}</strong></p>
-                  <p className="text-green-600">Markup: <strong>{formatCurrency(
-                    clientRequests.reduce((s: number, r: any) => s + Number(r.charged_amount || 0), 0) -
-                    clientRequests.reduce((s: number, r: any) => s + Number(r.provider_cost || 0), 0)
-                  )}</strong></p>
+                <CardContent className="text-sm space-y-2">
+                  {/* Plate section */}
+                  <div className="space-y-1">
+                    <p className="font-medium text-muted-foreground">Placas</p>
+                    <p>Placas no período: <strong>{totalPlates}</strong></p>
+                    <p>Valor total placas: <strong>{formatCurrency(totalPlateValue)}</strong></p>
+                  </div>
+
+                  <Separator />
+
+                  {/* Service section */}
+                  <div className="space-y-1">
+                    <p className="font-medium text-muted-foreground">Serviços</p>
+                    <p>Atendimentos: <strong>{clientRequests.length}</strong></p>
+                    <p>Custo prestadores: <strong>{formatCurrency(clientRequests.reduce((s: number, r: any) => s + Number(r.provider_cost || 0), 0))}</strong></p>
+                    {billingModel === "plate_plus_service" ? (
+                      <p>Valor serviços cobrado: <strong>{formatCurrency(clientRequests.reduce((s: number, r: any) => s + Number(r.charged_amount || 0), 0))}</strong></p>
+                    ) : (
+                      <p className="text-muted-foreground italic">Serviços inclusos no valor da placa</p>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  {/* Total */}
+                  <div className="space-y-1 pt-1">
+                    {(() => {
+                      const serviceCharged = billingModel === "plate_only" ? 0 : clientRequests.reduce((s: number, r: any) => s + Number(r.charged_amount || 0), 0);
+                      const totalProviderCost = clientRequests.reduce((s: number, r: any) => s + Number(r.provider_cost || 0), 0);
+                      const total = totalPlateValue + serviceCharged;
+                      const markup = total - totalProviderCost;
+                      return (
+                        <>
+                          <p className="font-semibold">Total faturado: <strong>{formatCurrency(total)}</strong></p>
+                          <p className="text-green-600">Markup: <strong>{formatCurrency(markup)}</strong></p>
+                        </>
+                      );
+                    })()}
+                  </div>
                 </CardContent>
               </Card>
             )}
 
-            {newInvoice.client_id && newInvoice.period_start && newInvoice.period_end && clientRequests.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center">Nenhum atendimento pendente encontrado para este período.</p>
+            {newInvoice.client_id && newInvoice.period_start && newInvoice.period_end && totalPlates === 0 && clientRequests.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center">Nenhuma placa ou atendimento encontrado para este período.</p>
             )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
-            <Button onClick={() => createInvoiceMutation.mutate()} disabled={clientRequests.length === 0 || createInvoiceMutation.isPending}>
+            <Button
+              onClick={() => createInvoiceMutation.mutate()}
+              disabled={(totalPlates === 0 && clientRequests.length === 0) || createInvoiceMutation.isPending}
+            >
               {createInvoiceMutation.isPending ? "Criando..." : "Criar Fatura"}
             </Button>
           </DialogFooter>

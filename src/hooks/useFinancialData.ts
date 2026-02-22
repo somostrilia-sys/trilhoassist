@@ -66,7 +66,7 @@ export function useClients(tenantId: string | null | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("id, name")
+        .select("id, name, billing_model")
         .eq("tenant_id", tenantId!)
         .eq("active", true)
         .order("name");

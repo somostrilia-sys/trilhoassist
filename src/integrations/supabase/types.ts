@@ -85,6 +85,7 @@ export type Database = {
           active: boolean
           api_endpoint: string | null
           api_key: string | null
+          billing_model: string
           cnpj: string | null
           contact_email: string | null
           contact_phone: string | null
@@ -98,6 +99,7 @@ export type Database = {
           active?: boolean
           api_endpoint?: string | null
           api_key?: string | null
+          billing_model?: string
           cnpj?: string | null
           contact_email?: string | null
           contact_phone?: string | null
@@ -111,6 +113,7 @@ export type Database = {
           active?: boolean
           api_endpoint?: string | null
           api_key?: string | null
+          billing_model?: string
           cnpj?: string | null
           contact_email?: string | null
           contact_phone?: string | null
@@ -471,6 +474,7 @@ export type Database = {
           max_dispatches_per_year: number | null
           max_tow_km: number | null
           name: string
+          plate_fee: number | null
           services: Json | null
         }
         Insert: {
@@ -481,6 +485,7 @@ export type Database = {
           max_dispatches_per_year?: number | null
           max_tow_km?: number | null
           name: string
+          plate_fee?: number | null
           services?: Json | null
         }
         Update: {
@@ -491,6 +496,7 @@ export type Database = {
           max_dispatches_per_year?: number | null
           max_tow_km?: number | null
           name?: string
+          plate_fee?: number | null
           services?: Json | null
         }
         Relationships: [
