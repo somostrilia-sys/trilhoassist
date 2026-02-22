@@ -88,6 +88,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          tenant_id: string | null
           updated_at: string
         }
         Insert: {
@@ -100,6 +101,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          tenant_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -112,9 +114,18 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          tenant_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "clients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       dispatches: {
         Row: {
@@ -347,6 +358,7 @@ export type Database = {
           requester_phone_secondary: string | null
           service_type: Database["public"]["Enums"]["service_type"]
           status: Database["public"]["Enums"]["request_status"]
+          tenant_id: string | null
           updated_at: string
           vehicle_lowered: boolean | null
           vehicle_model: string | null
@@ -380,6 +392,7 @@ export type Database = {
           requester_phone_secondary?: string | null
           service_type?: Database["public"]["Enums"]["service_type"]
           status?: Database["public"]["Enums"]["request_status"]
+          tenant_id?: string | null
           updated_at?: string
           vehicle_lowered?: boolean | null
           vehicle_model?: string | null
@@ -413,6 +426,7 @@ export type Database = {
           requester_phone_secondary?: string | null
           service_type?: Database["public"]["Enums"]["service_type"]
           status?: Database["public"]["Enums"]["request_status"]
+          tenant_id?: string | null
           updated_at?: string
           vehicle_lowered?: boolean | null
           vehicle_model?: string | null
@@ -441,36 +455,56 @@ export type Database = {
             referencedRelation: "plans"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      user_clients: {
-        Row: {
-          client_id: string
-          created_at: string
-          id: string
-          user_id: string
-        }
-        Insert: {
-          client_id: string
-          created_at?: string
-          id?: string
-          user_id: string
-        }
-        Update: {
-          client_id?: string
-          created_at?: string
-          id?: string
-          user_id?: string
-        }
-        Relationships: [
           {
-            foreignKeyName: "user_clients_client_id_fkey"
-            columns: ["client_id"]
+            foreignKeyName: "service_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: "clients"
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
+      }
+      tenants: {
+        Row: {
+          accent_color: string | null
+          active: boolean
+          created_at: string
+          favicon_url: string | null
+          id: string
+          logo_url: string | null
+          name: string
+          primary_color: string | null
+          secondary_color: string | null
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          accent_color?: string | null
+          active?: boolean
+          created_at?: string
+          favicon_url?: string | null
+          id?: string
+          logo_url?: string | null
+          name: string
+          primary_color?: string | null
+          secondary_color?: string | null
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          accent_color?: string | null
+          active?: boolean
+          created_at?: string
+          favicon_url?: string | null
+          id?: string
+          logo_url?: string | null
+          name?: string
+          primary_color?: string | null
+          secondary_color?: string | null
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
@@ -490,11 +524,41 @@ export type Database = {
         }
         Relationships: []
       }
+      user_tenants: {
+        Row: {
+          created_at: string
+          id: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_tenants_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      get_user_tenant_ids: { Args: { _user_id: string }; Returns: string[] }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -503,8 +567,8 @@ export type Database = {
         Returns: boolean
       }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
-      user_belongs_to_client: {
-        Args: { _client_id: string; _user_id: string }
+      user_belongs_to_tenant: {
+        Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
       }
     }
