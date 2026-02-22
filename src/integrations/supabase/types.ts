@@ -261,6 +261,10 @@ export type Database = {
       providers: {
         Row: {
           active: boolean
+          address_number: string | null
+          bank_account: string | null
+          bank_agency: string | null
+          bank_name: string | null
           city: string | null
           cnpj: string | null
           created_at: string
@@ -269,13 +273,23 @@ export type Database = {
           latitude: number | null
           longitude: number | null
           name: string
+          neighborhood: string | null
           phone: string
+          pix_key: string | null
           services: string[] | null
           state: string | null
+          street: string | null
+          tenant_id: string | null
           updated_at: string
+          user_id: string | null
+          zip_code: string | null
         }
         Insert: {
           active?: boolean
+          address_number?: string | null
+          bank_account?: string | null
+          bank_agency?: string | null
+          bank_name?: string | null
           city?: string | null
           cnpj?: string | null
           created_at?: string
@@ -284,13 +298,23 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           name: string
+          neighborhood?: string | null
           phone: string
+          pix_key?: string | null
           services?: string[] | null
           state?: string | null
+          street?: string | null
+          tenant_id?: string | null
           updated_at?: string
+          user_id?: string | null
+          zip_code?: string | null
         }
         Update: {
           active?: boolean
+          address_number?: string | null
+          bank_account?: string | null
+          bank_agency?: string | null
+          bank_name?: string | null
           city?: string | null
           cnpj?: string | null
           created_at?: string
@@ -299,12 +323,26 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           name?: string
+          neighborhood?: string | null
           phone?: string
+          pix_key?: string | null
           services?: string[] | null
           state?: string | null
+          street?: string | null
+          tenant_id?: string | null
           updated_at?: string
+          user_id?: string | null
+          zip_code?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "providers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       role_permissions: {
         Row: {

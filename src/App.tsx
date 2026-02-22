@@ -13,6 +13,7 @@ import UsersManagement from "./pages/settings/UsersManagement";
 import PermissionsManagement from "./pages/settings/PermissionsManagement";
 import Placeholder from "./pages/Placeholder";
 import NotFound from "./pages/NotFound";
+import RegisterProvider from "./pages/RegisterProvider";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +26,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/cadastro/prestador/:tenantSlug" element={<RegisterProvider />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             
             <Route element={<AppLayout />}>
