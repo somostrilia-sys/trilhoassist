@@ -12,8 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft, User, Car, MapPin, AlertTriangle, ClipboardCheck, FileText,
-  Share2, Truck, XCircle, PlayCircle, CheckCircle2, Loader2,
+  Share2, Truck, XCircle, PlayCircle, CheckCircle2, Loader2, Clock, History,
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import RouteMap, { type RoutePoint } from "@/components/RouteMap";
 import { toast } from "sonner";
 
@@ -128,11 +129,13 @@ const statusTransitions: Record<string, string[]> = {
 export default function ServiceRequestDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [request, setRequest] = useState<any>(null);
   const [beneficiary, setBeneficiary] = useState<any>(null);
   const [provider, setProvider] = useState<any>(null);
   const [dispatchId, setDispatchId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<any[]>([]);
 
   // Action modals
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
@@ -145,6 +148,28 @@ export default function ServiceRequestDetail() {
   const [quotedAmount, setQuotedAmount] = useState("");
   const [dispatchNotes, setDispatchNotes] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+
+  const logEvent = useCallback(async (eventType: string, description: string, oldValue?: string, newValue?: string) => {
+    if (!id) return;
+    await supabase.from("service_request_events").insert({
+      service_request_id: id,
+      event_type: eventType,
+      description,
+      old_value: oldValue || null,
+      new_value: newValue || null,
+      user_id: user?.id || null,
+    });
+  }, [id, user?.id]);
+
+  const loadEvents = useCallback(async () => {
+    if (!id) return;
+    const { data } = await supabase
+      .from("service_request_events")
+      .select("*")
+      .eq("service_request_id", id)
+      .order("created_at", { ascending: false });
+    setEvents(data || []);
+  }, [id]);
 
   const loadData = useCallback(async () => {
     if (!id) return;
@@ -186,7 +211,7 @@ export default function ServiceRequestDetail() {
     setLoading(false);
   }, [id]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { loadData(); loadEvents(); }, [loadData, loadEvents]);
 
   // Load providers list for dispatch dialog
   const loadProviders = useCallback(async () => {
@@ -202,6 +227,7 @@ export default function ServiceRequestDetail() {
   const handleStatusChange = async () => {
     if (!newStatus || !id) return;
     setActionLoading(true);
+    const oldStatus = request.status;
     const updates: any = { status: newStatus };
     if (newStatus === "completed") updates.completed_at = new Date().toISOString();
     const { error } = await supabase.from("service_requests").update(updates).eq("id", id);
@@ -209,9 +235,11 @@ export default function ServiceRequestDetail() {
     if (error) {
       toast.error("Erro ao alterar status", { description: error.message });
     } else {
+      await logEvent("status_change", `Status alterado de ${statusMap[oldStatus]?.label || oldStatus} para ${statusMap[newStatus]?.label || newStatus}`, oldStatus, newStatus);
       toast.success("Status alterado!", { description: `Novo status: ${statusMap[newStatus]?.label || newStatus}` });
       setStatusDialogOpen(false);
       loadData();
+      loadEvents();
     }
   };
 
@@ -226,10 +254,12 @@ export default function ServiceRequestDetail() {
     if (error) {
       toast.error("Erro ao cancelar", { description: error.message });
     } else {
+      await logEvent("cancel", `Atendimento cancelado. Motivo: ${cancelReason}`, request.status, "cancelled");
       toast.success("Atendimento cancelado");
       setCancelDialogOpen(false);
       setCancelReason("");
       loadData();
+      loadEvents();
     }
   };
 
@@ -252,6 +282,8 @@ export default function ServiceRequestDetail() {
 
     // Update request status to dispatched
     await supabase.from("service_requests").update({ status: "dispatched" }).eq("id", id);
+    const providerName = providers.find(p => p.id === selectedProviderId)?.name || "Prestador";
+    await logEvent("dispatch", `Prestador acionado: ${providerName}${quotedAmount ? ` — Valor: R$ ${parseFloat(quotedAmount).toFixed(2)}` : ""}`, request.status, "dispatched");
     setActionLoading(false);
     toast.success("Prestador acionado!", { description: "O acionamento foi registrado." });
     setDispatchDialogOpen(false);
@@ -259,6 +291,7 @@ export default function ServiceRequestDetail() {
     setQuotedAmount("");
     setDispatchNotes("");
     loadData();
+    loadEvents();
   };
 
   // Build route points
@@ -529,6 +562,48 @@ export default function ServiceRequestDetail() {
           </CardContent>
         </Card>
       )}
+
+      {/* Timeline / History */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <History className="h-5 w-5" /> HISTÓRICO DE EVENTOS
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {events.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum evento registrado ainda.</p>
+          ) : (
+            <div className="relative">
+              {/* Timeline line */}
+              <div className="absolute left-[15px] top-2 bottom-2 w-px bg-border" />
+              <div className="space-y-4">
+                {events.map((evt, idx) => {
+                  const iconMap: Record<string, React.ReactNode> = {
+                    status_change: <PlayCircle className="h-4 w-4 text-primary" />,
+                    dispatch: <Truck className="h-4 w-4 text-info" />,
+                    cancel: <XCircle className="h-4 w-4 text-destructive" />,
+                    note: <FileText className="h-4 w-4 text-muted-foreground" />,
+                  };
+                  return (
+                    <div key={evt.id} className="flex gap-3 relative">
+                      <div className="flex items-center justify-center w-[30px] h-[30px] rounded-full bg-card border border-border z-10 shrink-0">
+                        {iconMap[evt.event_type] || <Clock className="h-4 w-4 text-muted-foreground" />}
+                      </div>
+                      <div className="flex-1 pt-1">
+                        <p className="text-sm font-medium">{evt.description}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {new Date(evt.created_at).toLocaleDateString("pt-BR")} às {new Date(evt.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ---- DIALOGS ---- */}
 

@@ -700,6 +700,47 @@ export type Database = {
         }
         Relationships: []
       }
+      service_request_events: {
+        Row: {
+          created_at: string
+          description: string
+          event_type: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+          service_request_id: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          event_type: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          service_request_id: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          event_type?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          service_request_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_request_events_service_request_id_fkey"
+            columns: ["service_request_id"]
+            isOneToOne: false
+            referencedRelation: "service_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_requests: {
         Row: {
           beneficiary_id: string | null
