@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, Truck, Building2, Wrench, ArrowLeft, ChevronRight } from "lucide-react";
+import { Shield, Building2, Wrench, ArrowLeft, ChevronRight, Truck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import logoTrilho from "@/assets/logo-trilho.png";
 
 type Portal = "assistencia" | "prestador" | "associacao" | null;
 
@@ -18,7 +19,7 @@ const portals = [
     description: "Operação e gestão completa do sistema",
     icon: Truck,
     roles: ["admin", "operator"],
-    gradient: "from-primary to-[hsl(200,65%,30%)]",
+    gradient: "from-primary to-[hsl(218,58%,34%)]",
     iconBg: "bg-primary/20",
     iconColor: "text-primary",
   },
@@ -28,7 +29,7 @@ const portals = [
     description: "Atendimentos realizados e fechamento financeiro",
     icon: Wrench,
     roles: ["provider"],
-    gradient: "from-accent to-[hsl(28,90%,42%)]",
+    gradient: "from-[hsl(48,92%,52%)] to-[hsl(40,90%,45%)]",
     iconBg: "bg-accent/20",
     iconColor: "text-accent",
   },
@@ -38,9 +39,9 @@ const portals = [
     description: "Gestão de associados e acompanhamento de atendimentos",
     icon: Building2,
     roles: ["client"],
-    gradient: "from-[hsl(210,30%,28%)] to-[hsl(210,30%,18%)]",
-    iconBg: "bg-sidebar-accent/40",
-    iconColor: "text-sidebar-foreground",
+    gradient: "from-[hsl(354,82%,42%)] to-[hsl(354,70%,35%)]",
+    iconBg: "bg-destructive/20",
+    iconColor: "text-destructive",
   },
 ];
 
@@ -104,23 +105,21 @@ export default function Login() {
   const activePortal = portals.find((p) => p.id === selectedPortal);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden" style={{ background: 'linear-gradient(135deg, hsl(210,30%,18%) 0%, hsl(210,30%,14%) 50%, hsl(215,35%,10%) 100%)' }}>
+    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden" style={{ background: 'linear-gradient(135deg, hsl(218,58%,18%) 0%, hsl(218,58%,14%) 50%, hsl(218,45%,10%) 100%)' }}>
       {/* Decorative background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-accent/5 blur-3xl" />
+        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-[hsl(48,92%,52%)]/5 blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-[hsl(354,82%,42%)]/5 blur-3xl" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full bg-primary/[0.02] blur-3xl" />
       </div>
 
       <div className="relative z-10 w-full max-w-md px-4 space-y-8">
         {/* Logo & Title */}
         <div className="text-center space-y-3">
-          <div className="mx-auto h-16 w-16 rounded-2xl bg-gradient-to-br from-primary to-[hsl(200,65%,30%)] flex items-center justify-center shadow-lg shadow-primary/20">
-            <Truck className="h-8 w-8 text-primary-foreground" />
-          </div>
+          <img src={logoTrilho} alt="Trilho Soluções" className="mx-auto h-20 w-20 rounded-2xl bg-white/10 p-2 shadow-lg shadow-primary/20 object-contain" />
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-white">
-              Assistência 24h
+              Trilho Soluções
             </h1>
             <p className="text-sm text-white/40 mt-1">
               Sistema de Gestão de Assistência Veicular

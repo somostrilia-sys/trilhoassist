@@ -6,82 +6,82 @@
 
 @layer base {
   :root {
-    /* Veniti-inspired design system */
+    /* Trilho Soluções – azul marinho, amarelo, vermelho */
     --background: 210 20% 96%;
-    --foreground: 215 25% 20%;
+    --foreground: 218 55% 22%;
 
     --card: 0 0% 100%;
-    --card-foreground: 215 25% 20%;
+    --card-foreground: 218 55% 22%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 215 25% 20%;
+    --popover-foreground: 218 55% 22%;
 
-    --primary: 200 65% 38%;
+    --primary: 218 58% 26%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 210 15% 92%;
-    --secondary-foreground: 215 25% 20%;
+    --secondary-foreground: 218 55% 22%;
 
     --muted: 210 15% 92%;
     --muted-foreground: 215 10% 52%;
 
-    --accent: 28 90% 55%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 48 92% 52%;
+    --accent-foreground: 218 55% 22%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 354 82% 42%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 214 20% 88%;
     --input: 214 20% 88%;
-    --ring: 200 65% 38%;
+    --ring: 218 58% 26%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 210 30% 18%;
+    --sidebar-background: 218 58% 18%;
     --sidebar-foreground: 210 15% 80%;
     --sidebar-primary: 0 0% 100%;
-    --sidebar-primary-foreground: 210 30% 18%;
-    --sidebar-accent: 210 25% 24%;
+    --sidebar-primary-foreground: 218 58% 18%;
+    --sidebar-accent: 218 50% 24%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 210 20% 25%;
-    --sidebar-ring: 200 65% 50%;
+    --sidebar-border: 218 45% 25%;
+    --sidebar-ring: 48 92% 52%;
 
     --success: 142 60% 45%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
-    --info: 200 65% 50%;
+    --warning: 48 92% 52%;
+    --warning-foreground: 218 55% 22%;
+    --info: 218 58% 40%;
     --info-foreground: 0 0% 100%;
   }
 
   .dark {
-    --background: 215 30% 10%;
+    --background: 218 40% 10%;
     --foreground: 210 15% 90%;
-    --card: 215 28% 14%;
+    --card: 218 35% 14%;
     --card-foreground: 210 15% 90%;
-    --popover: 215 28% 14%;
+    --popover: 218 35% 14%;
     --popover-foreground: 210 15% 90%;
-    --primary: 200 65% 50%;
+    --primary: 218 58% 40%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 215 20% 20%;
+    --secondary: 218 20% 20%;
     --secondary-foreground: 210 15% 90%;
-    --muted: 215 20% 20%;
+    --muted: 218 20% 20%;
     --muted-foreground: 215 10% 55%;
-    --accent: 28 90% 55%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 62.8% 30.6%;
+    --accent: 48 92% 52%;
+    --accent-foreground: 218 55% 22%;
+    --destructive: 354 82% 35%;
     --destructive-foreground: 210 40% 98%;
-    --border: 215 20% 22%;
-    --input: 215 20% 22%;
-    --ring: 200 65% 50%;
-    --sidebar-background: 215 35% 8%;
+    --border: 218 20% 22%;
+    --input: 218 20% 22%;
+    --ring: 218 58% 40%;
+    --sidebar-background: 218 45% 8%;
     --sidebar-foreground: 210 15% 80%;
-    --sidebar-primary: 200 65% 50%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 215 25% 15%;
+    --sidebar-primary: 48 92% 52%;
+    --sidebar-primary-foreground: 218 55% 22%;
+    --sidebar-accent: 218 30% 15%;
     --sidebar-accent-foreground: 210 15% 90%;
-    --sidebar-border: 215 20% 15%;
-    --sidebar-ring: 200 65% 50%;
+    --sidebar-border: 218 20% 15%;
+    --sidebar-ring: 48 92% 52%;
   }
 }
 
