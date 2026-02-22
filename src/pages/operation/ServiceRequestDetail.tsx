@@ -1,11 +1,19 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, User, Car, MapPin, AlertTriangle, ClipboardCheck, FileText, Share2, Check } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  ArrowLeft, User, Car, MapPin, AlertTriangle, ClipboardCheck, FileText,
+  Share2, Truck, XCircle, PlayCircle, CheckCircle2, Loader2,
+} from "lucide-react";
 import RouteMap, { type RoutePoint } from "@/components/RouteMap";
 import { toast } from "sonner";
 
@@ -48,7 +56,6 @@ const categoryMap: Record<string, string> = {
   truck: "Caminhão",
 };
 
-// Readable labels for verification questions
 const verificationLabels: Record<string, string> = {
   wheel_locked: "Alguma roda travada ou veículo não se movimenta?",
   steering_locked: "Direção travada?",
@@ -68,11 +75,9 @@ const verificationLabels: Record<string, string> = {
   had_collision: "Sofreu colisão?",
   risk_area: "Área de risco ou emergencial?",
   vehicle_starts: "Veículo liga?",
-  // Motorcycle
   on_kickstand: "Na cavalete/descanso?",
   fallen_over: "Caída no chão?",
   has_sidecar: "Possui sidecar/baú?",
-  // Truck
   truck_type: "Tipo de caminhão",
   truck_type_other: "Descrição do tipo",
   has_trailer: "Possui carreta/reboque?",
@@ -109,6 +114,17 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+// Status flow: which statuses can transition to which
+const statusTransitions: Record<string, string[]> = {
+  open: ["awaiting_dispatch", "in_progress", "cancelled"],
+  awaiting_dispatch: ["dispatched", "in_progress", "cancelled"],
+  dispatched: ["in_progress", "cancelled"],
+  in_progress: ["completed", "cancelled"],
+  completed: ["refunded"],
+  cancelled: [],
+  refunded: [],
+};
+
 export default function ServiceRequestDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -118,50 +134,134 @@ export default function ServiceRequestDetail() {
   const [dispatchId, setDispatchId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  // Action modals
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [newStatus, setNewStatus] = useState("");
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
+  const [providers, setProviders] = useState<any[]>([]);
+  const [selectedProviderId, setSelectedProviderId] = useState("");
+  const [quotedAmount, setQuotedAmount] = useState("");
+  const [dispatchNotes, setDispatchNotes] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const loadData = useCallback(async () => {
     if (!id) return;
-    const load = async () => {
-      const { data } = await supabase
-        .from("service_requests")
+    const { data } = await supabase
+      .from("service_requests")
+      .select("*, clients(name), plans(name)")
+      .eq("id", id)
+      .maybeSingle();
+    setRequest(data);
+
+    if (data?.beneficiary_id) {
+      const { data: ben } = await supabase
+        .from("beneficiaries")
         .select("*, clients(name), plans(name)")
-        .eq("id", id)
+        .eq("id", data.beneficiary_id)
         .maybeSingle();
-      setRequest(data);
+      setBeneficiary(ben);
+    }
 
-      if (data?.beneficiary_id) {
-        const { data: ben } = await supabase
-          .from("beneficiaries")
-          .select("*, clients(name), plans(name)")
-          .eq("id", data.beneficiary_id)
-          .maybeSingle();
-        setBeneficiary(ben);
-      }
-
-      // Fetch dispatch → provider for routing
-      let dispatchData: any = null;
-      if (data) {
-        const { data: dispatch } = await supabase
-          .from("dispatches")
-          .select("*, providers(name, latitude, longitude, street, address_number, neighborhood, city, state)")
-          .eq("service_request_id", data.id)
-          .in("status", ["accepted", "completed", "sent", "pending"])
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        dispatchData = dispatch;
-        if (dispatch) {
-          setDispatchId(dispatch.id);
-          if ((dispatch as any).providers) {
-            setProvider((dispatch as any).providers);
-          }
+    if (data) {
+      const { data: dispatch } = await supabase
+        .from("dispatches")
+        .select("*, providers(name, latitude, longitude, street, address_number, neighborhood, city, state)")
+        .eq("service_request_id", data.id)
+        .in("status", ["accepted", "completed", "sent", "pending"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (dispatch) {
+        setDispatchId(dispatch.id);
+        if ((dispatch as any).providers) {
+          setProvider((dispatch as any).providers);
         }
+      } else {
+        setDispatchId(null);
+        setProvider(null);
       }
-      setLoading(false);
-    };
-    load();
+    }
+    setLoading(false);
   }, [id]);
 
-  // Build route points: Provider → Origin → Destination → Provider (return)
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Load providers list for dispatch dialog
+  const loadProviders = useCallback(async () => {
+    const { data } = await supabase
+      .from("providers")
+      .select("id, name, phone, city, state, services")
+      .eq("active", true)
+      .order("name");
+    setProviders(data || []);
+  }, []);
+
+  // --- Actions ---
+  const handleStatusChange = async () => {
+    if (!newStatus || !id) return;
+    setActionLoading(true);
+    const updates: any = { status: newStatus };
+    if (newStatus === "completed") updates.completed_at = new Date().toISOString();
+    const { error } = await supabase.from("service_requests").update(updates).eq("id", id);
+    setActionLoading(false);
+    if (error) {
+      toast.error("Erro ao alterar status", { description: error.message });
+    } else {
+      toast.success("Status alterado!", { description: `Novo status: ${statusMap[newStatus]?.label || newStatus}` });
+      setStatusDialogOpen(false);
+      loadData();
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!id) return;
+    setActionLoading(true);
+    const { error } = await supabase
+      .from("service_requests")
+      .update({ status: "cancelled", notes: request.notes ? `${request.notes}\n\n[CANCELAMENTO] ${cancelReason}` : `[CANCELAMENTO] ${cancelReason}` })
+      .eq("id", id);
+    setActionLoading(false);
+    if (error) {
+      toast.error("Erro ao cancelar", { description: error.message });
+    } else {
+      toast.success("Atendimento cancelado");
+      setCancelDialogOpen(false);
+      setCancelReason("");
+      loadData();
+    }
+  };
+
+  const handleDispatch = async () => {
+    if (!selectedProviderId || !id) return;
+    setActionLoading(true);
+    const { data: newDispatch, error: dErr } = await supabase.from("dispatches").insert({
+      service_request_id: id,
+      provider_id: selectedProviderId,
+      quoted_amount: quotedAmount ? parseFloat(quotedAmount) : null,
+      notes: dispatchNotes || null,
+      status: "sent",
+    }).select("id").single();
+
+    if (dErr) {
+      setActionLoading(false);
+      toast.error("Erro ao acionar prestador", { description: dErr.message });
+      return;
+    }
+
+    // Update request status to dispatched
+    await supabase.from("service_requests").update({ status: "dispatched" }).eq("id", id);
+    setActionLoading(false);
+    toast.success("Prestador acionado!", { description: "O acionamento foi registrado." });
+    setDispatchDialogOpen(false);
+    setSelectedProviderId("");
+    setQuotedAmount("");
+    setDispatchNotes("");
+    loadData();
+  };
+
+  // Build route points
   const routePoints = useMemo<RoutePoint[]>(() => {
     if (!request) return [];
     const pts: RoutePoint[] = [];
@@ -195,14 +295,17 @@ export default function ServiceRequestDetail() {
   const st = statusMap[request.status] || statusMap.open;
   const verification = request.verification_answers as Record<string, any> | null;
   const verificationCategory = verification?.category || request.vehicle_category || "car";
-
-  // Filter out 'category' key and empty values for display
   const verificationEntries = verification
     ? Object.entries(verification).filter(([k, v]) => k !== "category" && v !== "" && v !== null && v !== undefined)
     : [];
 
+  const canChangeStatus = (statusTransitions[request.status] || []).length > 0;
+  const canCancel = request.status !== "cancelled" && request.status !== "completed" && request.status !== "refunded";
+  const canDispatch = ["open", "awaiting_dispatch"].includes(request.status);
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => navigate("/operation/requests")}>
           <ArrowLeft className="h-5 w-5" />
@@ -233,6 +336,64 @@ export default function ServiceRequestDetail() {
           </Button>
         )}
       </div>
+
+      {/* Action Buttons */}
+      <Card>
+        <CardContent className="pt-4">
+          <div className="flex flex-wrap gap-2">
+            {canDispatch && (
+              <Button
+                className="gap-2"
+                onClick={() => {
+                  loadProviders();
+                  setDispatchDialogOpen(true);
+                }}
+              >
+                <Truck className="h-4 w-4" />
+                Acionar Prestador
+              </Button>
+            )}
+            {canChangeStatus && (
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => {
+                  setNewStatus("");
+                  setStatusDialogOpen(true);
+                }}
+              >
+                <PlayCircle className="h-4 w-4" />
+                Alterar Status
+              </Button>
+            )}
+            {canCancel && (
+              <Button
+                variant="destructive"
+                className="gap-2"
+                onClick={() => setCancelDialogOpen(true)}
+              >
+                <XCircle className="h-4 w-4" />
+                Cancelar Atendimento
+              </Button>
+            )}
+          </div>
+
+          {/* Dispatch info */}
+          {provider && (
+            <div className="mt-3 p-3 rounded-md border bg-muted/50">
+              <p className="text-sm font-medium flex items-center gap-2">
+                <Truck className="h-4 w-4" />
+                Prestador acionado: <span className="text-primary">{provider.name}</span>
+              </p>
+              {provider.city && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {provider.city}{provider.state ? ` - ${provider.state}` : ""}
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Requester */}
       <Card>
@@ -368,6 +529,117 @@ export default function ServiceRequestDetail() {
           </CardContent>
         </Card>
       )}
+
+      {/* ---- DIALOGS ---- */}
+
+      {/* Status Change Dialog */}
+      <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Alterar Status</DialogTitle>
+            <DialogDescription>
+              Status atual: <strong>{st.label}</strong>. Selecione o novo status:
+            </DialogDescription>
+          </DialogHeader>
+          <Select value={newStatus} onValueChange={setNewStatus}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione o novo status" />
+            </SelectTrigger>
+            <SelectContent>
+              {(statusTransitions[request.status] || []).map((s) => (
+                <SelectItem key={s} value={s}>{statusMap[s]?.label || s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStatusDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleStatusChange} disabled={!newStatus || actionLoading}>
+              {actionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Dialog */}
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelar Atendimento</DialogTitle>
+            <DialogDescription>
+              Esta ação irá cancelar o atendimento <strong>{request.protocol}</strong>. Informe o motivo:
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Motivo do cancelamento..."
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            rows={3}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>Voltar</Button>
+            <Button variant="destructive" onClick={handleCancel} disabled={!cancelReason.trim() || actionLoading}>
+              {actionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Confirmar Cancelamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dispatch Dialog */}
+      <Dialog open={dispatchDialogOpen} onOpenChange={setDispatchDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Acionar Prestador</DialogTitle>
+            <DialogDescription>
+              Selecione o prestador e informe os detalhes do acionamento.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Prestador *</Label>
+              <Select value={selectedProviderId} onValueChange={setSelectedProviderId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o prestador" />
+                </SelectTrigger>
+                <SelectContent>
+                  {providers.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} {p.city ? `— ${p.city}/${p.state}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Valor Orçado (R$)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={quotedAmount}
+                onChange={(e) => setQuotedAmount(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Observações</Label>
+              <Textarea
+                placeholder="Instruções para o prestador..."
+                value={dispatchNotes}
+                onChange={(e) => setDispatchNotes(e.target.value)}
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDispatchDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleDispatch} disabled={!selectedProviderId || actionLoading}>
+              {actionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Acionar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
