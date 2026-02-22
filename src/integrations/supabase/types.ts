@@ -193,6 +193,222 @@ export type Database = {
           },
         ]
       }
+      financial_closing_items: {
+        Row: {
+          closing_id: string
+          created_at: string
+          id: string
+          provider_cost: number
+          service_request_id: string
+        }
+        Insert: {
+          closing_id: string
+          created_at?: string
+          id?: string
+          provider_cost?: number
+          service_request_id: string
+        }
+        Update: {
+          closing_id?: string
+          created_at?: string
+          id?: string
+          provider_cost?: number
+          service_request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_closing_items_closing_id_fkey"
+            columns: ["closing_id"]
+            isOneToOne: false
+            referencedRelation: "financial_closings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_closing_items_service_request_id_fkey"
+            columns: ["service_request_id"]
+            isOneToOne: false
+            referencedRelation: "service_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_closings: {
+        Row: {
+          closed_at: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          paid_at: string | null
+          period_end: string
+          period_start: string
+          provider_id: string
+          status: string
+          tenant_id: string
+          total_provider_cost: number
+          total_services: number
+          updated_at: string
+        }
+        Insert: {
+          closed_at?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          period_end: string
+          period_start: string
+          provider_id: string
+          status?: string
+          tenant_id: string
+          total_provider_cost?: number
+          total_services?: number
+          updated_at?: string
+        }
+        Update: {
+          closed_at?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          period_end?: string
+          period_start?: string
+          provider_id?: string
+          status?: string
+          tenant_id?: string
+          total_provider_cost?: number
+          total_services?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_closings_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_closings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_items: {
+        Row: {
+          charged_amount: number
+          created_at: string
+          id: string
+          invoice_id: string
+          provider_cost: number
+          service_request_id: string
+        }
+        Insert: {
+          charged_amount?: number
+          created_at?: string
+          id?: string
+          invoice_id: string
+          provider_cost?: number
+          service_request_id: string
+        }
+        Update: {
+          charged_amount?: number
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          provider_cost?: number
+          service_request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_items_service_request_id_fkey"
+            columns: ["service_request_id"]
+            isOneToOne: false
+            referencedRelation: "service_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          client_id: string
+          created_at: string
+          due_date: string | null
+          id: string
+          markup_amount: number
+          notes: string | null
+          paid_at: string | null
+          period_end: string
+          period_start: string
+          sent_at: string | null
+          status: string
+          tenant_id: string
+          total_charged: number
+          total_provider_cost: number
+          total_services: number
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          markup_amount?: number
+          notes?: string | null
+          paid_at?: string | null
+          period_end: string
+          period_start: string
+          sent_at?: string | null
+          status?: string
+          tenant_id: string
+          total_charged?: number
+          total_provider_cost?: number
+          total_services?: number
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          markup_amount?: number
+          notes?: string | null
+          paid_at?: string | null
+          period_end?: string
+          period_start?: string
+          sent_at?: string | null
+          status?: string
+          tenant_id?: string
+          total_charged?: number
+          total_provider_cost?: number
+          total_services?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plan_coverages: {
         Row: {
           active: boolean
@@ -491,6 +707,7 @@ export type Database = {
           difficult_access: boolean | null
           estimated_km: number | null
           event_type: Database["public"]["Enums"]["event_type"]
+          financial_status: string | null
           id: string
           notes: string | null
           operator_id: string | null
@@ -525,6 +742,7 @@ export type Database = {
           difficult_access?: boolean | null
           estimated_km?: number | null
           event_type?: Database["public"]["Enums"]["event_type"]
+          financial_status?: string | null
           id?: string
           notes?: string | null
           operator_id?: string | null
@@ -559,6 +777,7 @@ export type Database = {
           difficult_access?: boolean | null
           estimated_km?: number | null
           event_type?: Database["public"]["Enums"]["event_type"]
+          financial_status?: string | null
           id?: string
           notes?: string | null
           operator_id?: string | null

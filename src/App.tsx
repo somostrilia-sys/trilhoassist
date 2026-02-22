@@ -14,6 +14,8 @@ import NewServiceRequest from "./pages/operation/NewServiceRequest";
 import UsersManagement from "./pages/settings/UsersManagement";
 import PermissionsManagement from "./pages/settings/PermissionsManagement";
 import Placeholder from "./pages/Placeholder";
+import FinancialClosing from "./pages/finance/FinancialClosing";
+import Billing from "./pages/finance/Billing";
 import NotFound from "./pages/NotFound";
 import RegisterProvider from "./pages/RegisterProvider";
 import ProviderDashboard from "./pages/provider/ProviderDashboard";
@@ -79,8 +81,8 @@ const App = () => (
               <Route path="/network/providers/new" element={<ProviderForm />} />
               <Route path="/network/providers/:id" element={<ProviderForm />} />
               <Route path="/network/blacklist" element={<ProviderBlacklist />} />
-              <Route path="/finance/closing" element={<Placeholder />} />
-              <Route path="/finance/billing" element={<Placeholder />} />
+              <Route path="/finance/closing" element={<FinancialClosing />} />
+              <Route path="/finance/billing" element={<Billing />} />
               <Route path="/reports" element={<Placeholder />} />
               <Route path="/settings/users" element={<UsersManagement />} />
               <Route path="/settings/permissions" element={<PermissionsManagement />} />
