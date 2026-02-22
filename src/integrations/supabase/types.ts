@@ -931,8 +931,14 @@ export type Database = {
           beneficiary_id: string | null
           contact_name: string | null
           created_at: string
+          detected_beneficiary_name: string | null
+          detected_plate: string | null
+          detected_vehicle_model: string | null
+          detected_vehicle_year: number | null
           id: string
           last_message_at: string | null
+          origin_lat: number | null
+          origin_lng: number | null
           phone: string
           service_request_id: string | null
           status: string
@@ -943,8 +949,14 @@ export type Database = {
           beneficiary_id?: string | null
           contact_name?: string | null
           created_at?: string
+          detected_beneficiary_name?: string | null
+          detected_plate?: string | null
+          detected_vehicle_model?: string | null
+          detected_vehicle_year?: number | null
           id?: string
           last_message_at?: string | null
+          origin_lat?: number | null
+          origin_lng?: number | null
           phone: string
           service_request_id?: string | null
           status?: string
@@ -955,8 +967,14 @@ export type Database = {
           beneficiary_id?: string | null
           contact_name?: string | null
           created_at?: string
+          detected_beneficiary_name?: string | null
+          detected_plate?: string | null
+          detected_vehicle_model?: string | null
+          detected_vehicle_year?: number | null
           id?: string
           last_message_at?: string | null
+          origin_lat?: number | null
+          origin_lng?: number | null
           phone?: string
           service_request_id?: string | null
           status?: string
