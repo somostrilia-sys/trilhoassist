@@ -1,0 +1,303 @@
+import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { ArrowLeft, User, Car, MapPin, AlertTriangle, ClipboardCheck, FileText } from "lucide-react";
+
+const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+  open: { label: "Aberto", variant: "default" },
+  awaiting_dispatch: { label: "Aguardando Acionamento", variant: "outline" },
+  dispatched: { label: "Acionado", variant: "secondary" },
+  in_progress: { label: "Em Andamento", variant: "default" },
+  completed: { label: "Finalizado", variant: "secondary" },
+  cancelled: { label: "Cancelado", variant: "destructive" },
+  refunded: { label: "Reembolso", variant: "destructive" },
+};
+
+const serviceTypeMap: Record<string, string> = {
+  tow_light: "Reboque Leve",
+  tow_heavy: "Reboque Pesado",
+  tow_motorcycle: "Reboque Moto",
+  locksmith: "Chaveiro",
+  tire_change: "Troca de Pneu",
+  battery: "Bateria",
+  fuel: "Combustível",
+  lodging: "Hospedagem",
+  other: "Outro",
+};
+
+const eventTypeMap: Record<string, string> = {
+  mechanical_failure: "Pane Mecânica",
+  accident: "Acidente",
+  theft: "Roubo/Furto",
+  flat_tire: "Pneu Furado",
+  locked_out: "Chave Trancada",
+  battery_dead: "Bateria Descarregada",
+  fuel_empty: "Sem Combustível",
+  other: "Outro",
+};
+
+const categoryMap: Record<string, string> = {
+  car: "Carro",
+  motorcycle: "Moto",
+  truck: "Caminhão",
+};
+
+// Readable labels for verification questions
+const verificationLabels: Record<string, string> = {
+  wheel_locked: "Alguma roda travada ou veículo não se movimenta?",
+  steering_locked: "Direção travada?",
+  armored: "Veículo blindado?",
+  vehicle_lowered: "Veículo rebaixado?",
+  carrying_cargo: "Transportando carga ou excesso de peso?",
+  cargo_description: "Tipo de carga",
+  easy_access: "Nível de rua e local de fácil acesso?",
+  vehicle_location: "Local do veículo",
+  vehicle_location_other: "Descrição do local",
+  height_restriction: "Restrição de altura?",
+  height_restriction_value: "Altura da restrição",
+  key_available: "Chave disponível?",
+  documents_available: "Documentos no local?",
+  has_passengers: "Passageiros no veículo?",
+  passenger_count: "Quantidade de passageiros",
+  had_collision: "Sofreu colisão?",
+  risk_area: "Área de risco ou emergencial?",
+  vehicle_starts: "Veículo liga?",
+  // Motorcycle
+  on_kickstand: "Na cavalete/descanso?",
+  fallen_over: "Caída no chão?",
+  has_sidecar: "Possui sidecar/baú?",
+  // Truck
+  truck_type: "Tipo de caminhão",
+  truck_type_other: "Descrição do tipo",
+  has_trailer: "Possui carreta/reboque?",
+  trailer_type: "Tipo de carreta",
+  total_weight: "Peso total estimado",
+  axle_count: "Quantidade de eixos",
+  special_cargo: "Carga especial?",
+  special_cargo_description: "Descrição da carga especial",
+  needs_crane: "Necessita guincho/munck?",
+};
+
+const vehicleLocationLabels: Record<string, string> = {
+  underground_garage: "Garagem subterrânea",
+  parking: "Estacionamento",
+  highway: "Rodovia",
+  difficult_access: "Local de difícil acesso",
+  other: "Outro",
+};
+
+function formatValue(key: string, value: string): string {
+  if (!value) return "—";
+  if (value === "yes") return "Sim";
+  if (value === "no") return "Não";
+  if (key === "vehicle_location") return vehicleLocationLabels[value] || value;
+  return value;
+}
+
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-start gap-1 py-2">
+      <span className="text-sm text-muted-foreground sm:w-48 shrink-0">{label}</span>
+      <span className="text-sm font-medium">{value || "—"}</span>
+    </div>
+  );
+}
+
+export default function ServiceRequestDetail() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [request, setRequest] = useState<any>(null);
+  const [beneficiary, setBeneficiary] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!id) return;
+    const load = async () => {
+      const { data } = await supabase
+        .from("service_requests")
+        .select("*, clients(name), plans(name)")
+        .eq("id", id)
+        .maybeSingle();
+      setRequest(data);
+
+      if (data?.beneficiary_id) {
+        const { data: ben } = await supabase
+          .from("beneficiaries")
+          .select("*, clients(name), plans(name)")
+          .eq("id", data.beneficiary_id)
+          .maybeSingle();
+        setBeneficiary(ben);
+      }
+      setLoading(false);
+    };
+    load();
+  }, [id]);
+
+  if (loading) return <div className="p-8 text-muted-foreground">Carregando...</div>;
+  if (!request) return <div className="p-8 text-muted-foreground">Atendimento não encontrado.</div>;
+
+  const st = statusMap[request.status] || statusMap.open;
+  const verification = request.verification_answers as Record<string, any> | null;
+  const verificationCategory = verification?.category || request.vehicle_category || "car";
+
+  // Filter out 'category' key and empty values for display
+  const verificationEntries = verification
+    ? Object.entries(verification).filter(([k, v]) => k !== "category" && v !== "" && v !== null && v !== undefined)
+    : [];
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/operation/requests")}>
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div className="flex-1">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold">{request.protocol}</h1>
+            <Badge variant={st.variant}>{st.label}</Badge>
+            <Badge variant="outline">{categoryMap[request.vehicle_category] || "Carro"}</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Criado em {new Date(request.created_at).toLocaleDateString("pt-BR")} às {new Date(request.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+          </p>
+        </div>
+      </div>
+
+      {/* Requester */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <User className="h-5 w-5" /> DADOS DO SOLICITANTE
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+            <InfoRow label="Nome" value={request.requester_name} />
+            <InfoRow label="Telefone" value={request.requester_phone} />
+            <InfoRow label="Email" value={request.requester_email} />
+            <InfoRow label="Telefone Secundário" value={request.requester_phone_secondary} />
+          </div>
+          {beneficiary && (
+            <>
+              <Separator className="my-4" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Beneficiário vinculado</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+                  <InfoRow label="Nome" value={beneficiary.name} />
+                  <InfoRow label="CPF" value={beneficiary.cpf} />
+                  <InfoRow label="Cliente" value={(beneficiary as any).clients?.name} />
+                  <InfoRow label="Plano" value={(beneficiary as any).plans?.name} />
+                </div>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Vehicle */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Car className="h-5 w-5" /> VEÍCULO
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8">
+            <InfoRow label="Placa" value={request.vehicle_plate} />
+            <InfoRow label="Modelo" value={request.vehicle_model} />
+            <InfoRow label="Ano" value={request.vehicle_year} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Event & Service */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <AlertTriangle className="h-5 w-5" /> MOTIVO DA PANE / SERVIÇO
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+            <InfoRow label="Motivo da Pane" value={eventTypeMap[request.event_type] || request.event_type} />
+            <InfoRow label="Tipo de Serviço" value={serviceTypeMap[request.service_type] || request.service_type} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Verification Checklist */}
+      {verificationEntries.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ClipboardCheck className="h-5 w-5" /> VERIFICAÇÃO DO VEÍCULO ({categoryMap[verificationCategory] || verificationCategory})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+              {verificationEntries.map(([key, value]) => (
+                <InfoRow
+                  key={key}
+                  label={verificationLabels[key] || key}
+                  value={
+                    <span className={value === "yes" ? "text-destructive font-semibold" : ""}>
+                      {formatValue(key, String(value))}
+                    </span>
+                  }
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Addresses */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <MapPin className="h-5 w-5" /> ENDEREÇOS
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+            <InfoRow label="Endereço de Origem" value={request.origin_address} />
+            <InfoRow label="Endereço de Destino" value={request.destination_address} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Notes */}
+      {request.notes && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FileText className="h-5 w-5" /> OBSERVAÇÕES
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm whitespace-pre-wrap">{request.notes}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Financial */}
+      {(request.provider_cost > 0 || request.charged_amount > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">FINANCEIRO</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+              <InfoRow label="Custo Prestador" value={`R$ ${Number(request.provider_cost || 0).toFixed(2)}`} />
+              <InfoRow label="Valor Cobrado" value={`R$ ${Number(request.charged_amount || 0).toFixed(2)}`} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
