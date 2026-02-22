@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ServiceRequests from "./pages/operation/ServiceRequests";
 import NewServiceRequest from "./pages/operation/NewServiceRequest";
+import UsersManagement from "./pages/settings/UsersManagement";
 import Placeholder from "./pages/Placeholder";
 import NotFound from "./pages/NotFound";
 
@@ -37,6 +38,7 @@ const App = () => (
               <Route path="/finance/closing" element={<Placeholder />} />
               <Route path="/finance/billing" element={<Placeholder />} />
               <Route path="/reports" element={<Placeholder />} />
+              <Route path="/settings/users" element={<UsersManagement />} />
               <Route path="/settings" element={<Placeholder />} />
               <Route path="/integrations" element={<Placeholder />} />
             </Route>
