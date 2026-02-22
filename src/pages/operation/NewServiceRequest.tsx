@@ -113,20 +113,17 @@ export default function NewServiceRequest() {
     }
   };
 
-  const serviceTypeOptions = vehicleCategory === "motorcycle"
-    ? [{ value: "tow_motorcycle", label: "Reboque Moto" }]
-    : vehicleCategory === "truck"
-    ? [{ value: "tow_heavy", label: "Reboque Pesado" }]
-    : [
-        { value: "tow_light", label: "Reboque Leve" },
-        { value: "tow_heavy", label: "Reboque Pesado" },
-        { value: "locksmith", label: "Chaveiro" },
-        { value: "tire_change", label: "Troca de Pneu" },
-        { value: "battery", label: "Bateria" },
-        { value: "fuel", label: "Combustível" },
-        { value: "lodging", label: "Hospedagem" },
-        { value: "other", label: "Outro" },
-      ];
+  const allServiceTypeOptions = [
+    { value: "tow_light", label: "Reboque Leve" },
+    { value: "tow_heavy", label: "Reboque Pesado" },
+    { value: "tow_motorcycle", label: "Reboque Moto" },
+    { value: "locksmith", label: "Chaveiro" },
+    { value: "tire_change", label: "Troca de Pneu" },
+    { value: "battery", label: "Bateria" },
+    { value: "fuel", label: "Combustível" },
+    { value: "lodging", label: "Hospedagem" },
+    { value: "other", label: "Outro" },
+  ];
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -243,10 +240,10 @@ export default function NewServiceRequest() {
             </div>
             <div className="space-y-2">
               <Label>Tipo de Serviço *</Label>
-              <Select key={vehicleCategory} value={form.service_type} onValueChange={(v) => update("service_type", v)}>
+              <Select value={form.service_type} onValueChange={(v) => update("service_type", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {serviceTypeOptions.map((opt) => (
+                  {allServiceTypeOptions.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
@@ -256,25 +253,23 @@ export default function NewServiceRequest() {
         </Card>
 
         {/* Conditional Verification */}
-        <div key={vehicleCategory}>
-          {vehicleCategory === "car" && (
-            <CarVerification
-              data={carVerification}
-              onChange={(field, value) => setCarVerification((prev) => ({ ...prev, [field]: value }))}
-            />
-          )}
-          {vehicleCategory === "motorcycle" && (
-            <MotorcycleVerification
-              data={motoVerification}
-              onChange={(field, value) => setMotoVerification((prev) => ({ ...prev, [field]: value }))}
-            />
-          )}
-          {vehicleCategory === "truck" && (
-            <TruckVerification
-              data={truckVerification}
-              onChange={(field, value) => setTruckVerification((prev) => ({ ...prev, [field]: value }))}
-            />
-          )}
+        <div className={vehicleCategory !== "car" ? "hidden" : ""}>
+          <CarVerification
+            data={carVerification}
+            onChange={(field, value) => setCarVerification((prev) => ({ ...prev, [field]: value }))}
+          />
+        </div>
+        <div className={vehicleCategory !== "motorcycle" ? "hidden" : ""}>
+          <MotorcycleVerification
+            data={motoVerification}
+            onChange={(field, value) => setMotoVerification((prev) => ({ ...prev, [field]: value }))}
+          />
+        </div>
+        <div className={vehicleCategory !== "truck" ? "hidden" : ""}>
+          <TruckVerification
+            data={truckVerification}
+            onChange={(field, value) => setTruckVerification((prev) => ({ ...prev, [field]: value }))}
+          />
         </div>
 
         {/* Addresses */}
