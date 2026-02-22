@@ -25,6 +25,7 @@ export default function NewServiceRequest() {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [tenantId, setTenantId] = useState<string | null>(null);
   const conversationId = searchParams.get("conversation_id");
 
@@ -159,8 +160,23 @@ export default function NewServiceRequest() {
     return { category: "truck", ...truckVerification };
   };
 
+  const validate = (): Record<string, string> => {
+    const errs: Record<string, string> = {};
+    if (!form.requester_name.trim()) errs.requester_name = "Nome do solicitante é obrigatório";
+    if (!form.requester_phone.trim()) errs.requester_phone = "Telefone do solicitante é obrigatório";
+    if (!form.origin_address.trim()) errs.origin_address = "Endereço de origem é obrigatório";
+    if (!form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório";
+    return errs;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const validationErrors = validate();
+    setErrors(validationErrors);
+    if (Object.keys(validationErrors).length > 0) {
+      toast({ title: "Preencha os campos obrigatórios", description: "Verifique os campos destacados em vermelho.", variant: "destructive" });
+      return;
+    }
     setLoading(true);
 
     const { data: inserted, error } = await supabase.from("service_requests").insert({
@@ -233,11 +249,13 @@ export default function NewServiceRequest() {
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Nome do Solicitante *</Label>
-              <Input value={form.requester_name} onChange={(e) => update("requester_name", e.target.value)} required />
+              <Input value={form.requester_name} onChange={(e) => { update("requester_name", e.target.value); setErrors(prev => ({ ...prev, requester_name: "" })); }} className={errors.requester_name ? "border-destructive" : ""} />
+              {errors.requester_name && <p className="text-xs text-destructive">{errors.requester_name}</p>}
             </div>
             <div className="space-y-2">
               <Label>Telefone do Solicitante *</Label>
-              <Input value={form.requester_phone} onChange={(e) => update("requester_phone", maskPhone(e.target.value))} required placeholder="(00) 00000-0000" />
+              <Input value={form.requester_phone} onChange={(e) => { update("requester_phone", maskPhone(e.target.value)); setErrors(prev => ({ ...prev, requester_phone: "" })); }} placeholder="(00) 00000-0000" className={errors.requester_phone ? "border-destructive" : ""} />
+              {errors.requester_phone && <p className="text-xs text-destructive">{errors.requester_phone}</p>}
             </div>
             <div className="space-y-2">
               <Label>Email do Solicitante</Label>
@@ -399,11 +417,13 @@ export default function NewServiceRequest() {
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Endereço de Origem *</Label>
-              <Input value={form.origin_address} onChange={(e) => update("origin_address", e.target.value)} placeholder="Rua, Bairro, Cidade - UF" />
+              <Input value={form.origin_address} onChange={(e) => { update("origin_address", e.target.value); setErrors(prev => ({ ...prev, origin_address: "" })); }} placeholder="Rua, Bairro, Cidade - UF" className={errors.origin_address ? "border-destructive" : ""} />
+              {errors.origin_address && <p className="text-xs text-destructive">{errors.origin_address}</p>}
             </div>
             <div className="space-y-2">
               <Label>Endereço de Destino *</Label>
-              <Input value={form.destination_address} onChange={(e) => update("destination_address", e.target.value)} placeholder="Rua, Bairro, Cidade - UF" />
+              <Input value={form.destination_address} onChange={(e) => { update("destination_address", e.target.value); setErrors(prev => ({ ...prev, destination_address: "" })); }} placeholder="Rua, Bairro, Cidade - UF" className={errors.destination_address ? "border-destructive" : ""} />
+              {errors.destination_address && <p className="text-xs text-destructive">{errors.destination_address}</p>}
             </div>
           </CardContent>
         </Card>
