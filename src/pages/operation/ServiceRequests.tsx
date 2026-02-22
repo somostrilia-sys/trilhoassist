@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Clock, CheckCircle, AlertCircle, XCircle } from "lucide-react";
+import { Plus, Search, Clock, CheckCircle, AlertCircle, XCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50];
 
 const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: any }> = {
   open: { label: "Aberto", variant: "default", icon: AlertCircle },
@@ -34,41 +37,79 @@ export default function ServiceRequests() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const navigate = useNavigate();
 
-  useEffect(() => {
-    loadRequests();
+  const loadCounts = useCallback(async () => {
+    const { data } = await supabase
+      .from("service_requests")
+      .select("status");
+    if (data) {
+      const counts = data.reduce<Record<string, number>>((acc, r) => {
+        acc[r.status] = (acc[r.status] || 0) + 1;
+        return acc;
+      }, {});
+      setStatusCounts(counts);
+      setTotalCount(data.length);
+    }
+  }, []);
 
+  const loadRequests = useCallback(async () => {
+    setLoading(true);
+    let query = supabase
+      .from("service_requests")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false });
+
+    if (statusFilter !== "all") {
+      query = query.eq("status", statusFilter as any);
+    }
+
+    if (search) {
+      query = query.or(
+        `protocol.ilike.%${search}%,requester_name.ilike.%${search}%,vehicle_plate.ilike.%${search}%`
+      );
+    }
+
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    query = query.range(from, to);
+
+    const { data, count } = await query;
+    setRequests(data || []);
+    if (count !== null && count !== undefined) {
+      // Use filtered count for pagination
+      setTotalCount(count);
+    }
+    setLoading(false);
+  }, [page, pageSize, statusFilter, search]);
+
+  useEffect(() => {
+    loadCounts();
     const channel = supabase
       .channel("requests-list")
-      .on("postgres_changes", { event: "*", schema: "public", table: "service_requests" }, () => loadRequests())
+      .on("postgres_changes", { event: "*", schema: "public", table: "service_requests" }, () => {
+        loadRequests();
+        loadCounts();
+      })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const loadRequests = async () => {
-    const { data } = await supabase
-      .from("service_requests")
-      .select("*")
-      .order("created_at", { ascending: false });
-    setRequests(data || []);
-    setLoading(false);
-  };
+  useEffect(() => {
+    loadRequests();
+  }, [loadRequests]);
 
-  const filtered = requests.filter((r) => {
-    const matchesSearch = !search ||
-      r.protocol?.toLowerCase().includes(search.toLowerCase()) ||
-      r.requester_name?.toLowerCase().includes(search.toLowerCase()) ||
-      r.vehicle_plate?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === "all" || r.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(0);
+  }, [statusFilter, search]);
 
-  const statusCounts = requests.reduce<Record<string, number>>((acc, r) => {
-    acc[r.status] = (acc[r.status] || 0) + 1;
-    return acc;
-  }, {});
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const allTotal = Object.values(statusCounts).reduce((a, b) => a + b, 0);
 
   return (
     <div className="space-y-6">
@@ -101,7 +142,7 @@ export default function ServiceRequests() {
           variant={statusFilter === "all" ? "default" : "outline"}
           onClick={() => setStatusFilter("all")}
         >
-          Todos ({requests.length})
+          Todos ({allTotal})
         </Button>
         {Object.entries(statusMap).map(([key, val]) => {
           const count = statusCounts[key] || 0;
@@ -122,14 +163,14 @@ export default function ServiceRequests() {
       <div className="space-y-3">
         {loading ? (
           <p className="text-muted-foreground">Carregando...</p>
-        ) : filtered.length === 0 ? (
+        ) : requests.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center text-muted-foreground">
               Nenhum atendimento encontrado.
             </CardContent>
           </Card>
         ) : (
-          filtered.map((req) => {
+          requests.map((req) => {
             const st = statusMap[req.status] || statusMap.open;
             const StatusIcon = st.icon;
             return (
@@ -166,6 +207,47 @@ export default function ServiceRequests() {
           })
         )}
       </div>
+
+      {/* Pagination */}
+      {!loading && requests.length > 0 && (
+        <div className="flex items-center justify-between border-t pt-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>Exibindo</span>
+            <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+              <SelectTrigger className="w-[70px] h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZE_OPTIONS.map((s) => (
+                  <SelectItem key={s} value={String(s)}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span>de {totalCount} registros</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === 0}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              {page + 1} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page + 1 >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
