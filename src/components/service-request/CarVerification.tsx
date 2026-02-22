@@ -23,6 +23,7 @@ interface CarVerificationData {
   had_collision: string;
   risk_area: string;
   vehicle_starts: string;
+  vehicle_lowered: string;
 }
 
 interface Props {
@@ -61,6 +62,7 @@ export const defaultCarVerification: CarVerificationData = {
   had_collision: "",
   risk_area: "",
   vehicle_starts: "",
+  vehicle_lowered: "",
 };
 
 export default function CarVerification({ data, onChange }: Props) {
@@ -88,6 +90,11 @@ export default function CarVerification({ data, onChange }: Props) {
           <div className="space-y-2">
             <Label>O veículo é blindado?</Label>
             <YesNoToggle value={data.armored} onChange={(v) => onChange("armored", v)} />
+          </div>
+
+          <div className="space-y-2">
+            <Label>O veículo é rebaixado?</Label>
+            <YesNoToggle value={data.vehicle_lowered} onChange={(v) => onChange("vehicle_lowered", v)} />
           </div>
 
           <div className="space-y-2">
