@@ -76,15 +76,7 @@ const menuSections: MenuSection[] = [
     items: [
       { title: "Fechamento", url: "/finance/closing", icon: FileCheck },
       { title: "Faturamento", url: "/finance/billing", icon: Receipt },
-    ],
-  },
-  {
-    label: "Relatórios",
-    icon: BarChart3,
-    collapsible: true,
-    module: "reports",
-    items: [
-      { title: "Relatórios", url: "/reports", icon: BarChart3 },
+      { title: "Relatórios", url: "/finance/reports", icon: BarChart3 },
     ],
   },
   {
