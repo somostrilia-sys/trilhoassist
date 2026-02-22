@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
-import { Truck } from "lucide-react";
+import logoTrilho from "@/assets/logo-trilho.png";
 
 interface MenuItem {
   title: string;
@@ -119,11 +119,9 @@ export function AppSidebar() {
     <Sidebar className="border-r-0">
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
-            <Truck className="h-6 w-6 text-primary-foreground" />
-          </div>
+          <img src={logoTrilho} alt="Trilho Soluções" className="h-10 w-10 rounded-lg object-contain bg-white/10 p-1" />
           <div className="flex flex-col">
-            <span className="text-sm font-semibold text-sidebar-primary">Assistência 24h</span>
+            <span className="text-sm font-semibold text-sidebar-primary">Trilho Soluções</span>
             <span className="text-xs text-sidebar-foreground/60">Gestão de Operações</span>
           </div>
         </div>
