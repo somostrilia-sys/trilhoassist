@@ -609,6 +609,9 @@ export default function ServiceRequestDetail() {
                         <p className="text-sm font-medium">{evt.description}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {new Date(evt.created_at).toLocaleDateString("pt-BR")} às {new Date(evt.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                          {(evt as any)._operator_name && (
+                            <span className="ml-2">— por <span className="font-medium text-foreground">{(evt as any)._operator_name}</span></span>
+                          )}
                         </p>
                       </div>
                     </div>
