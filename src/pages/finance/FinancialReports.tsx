@@ -63,6 +63,21 @@ function usePeriodRange(months: number) {
   }, [months]);
 }
 
+function exportToCsv(filename: string, headers: string[], rows: string[][]) {
+  const BOM = "\uFEFF";
+  const csvContent = BOM + [
+    headers.join(";"),
+    ...rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(";")),
+  ].join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${filename}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // Full service request data with beneficiary + client relations
 function useDetailedRequests(tenantId: string | null | undefined, period: { startStr: string; endStr: string }) {
   return useQuery({
@@ -457,6 +472,26 @@ export default function FinancialReports() {
               </SelectContent>
             </Select>
             <Badge variant="outline" className="text-xs">{filteredRequests.length} registros</Badge>
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => {
+              const headers = ["Protocolo","Data","Solicitante","Telefone","Beneficiário","CPF","Placa","Veículo","Serviço","Evento","Cliente","Origem","Custo","Cobrado","Status","Dados"];
+              const rows = filteredRequests.map((r) => {
+                const ben = r.beneficiaries as any;
+                const client = r.clients as any;
+                return [
+                  r.protocol, format(parseISO(r.created_at), "dd/MM/yyyy HH:mm"),
+                  r.requester_name, r.requester_phone || "", ben?.name || "", ben?.cpf || "",
+                  r.vehicle_plate || "", `${r.vehicle_model || ""}${r.vehicle_year ? ` ${r.vehicle_year}` : ""}`,
+                  SERVICE_TYPE_LABELS[r.service_type] || r.service_type,
+                  EVENT_TYPE_LABELS[r.event_type] || r.event_type,
+                  client?.name || "", r.origin_address || "",
+                  String(Number(r.provider_cost) || 0), String(Number(r.charged_amount) || 0),
+                  STATUS_LABELS[r.status] || r.status, getDataOrigin(r.client_id || "") === "erp" ? "ERP" : "Manual",
+                ];
+              });
+              exportToCsv("atendimentos", headers, rows);
+            }}>
+              <Download className="h-4 w-4" /> Exportar CSV
+            </Button>
           </div>
 
           <Card>
@@ -573,6 +608,25 @@ export default function FinancialReports() {
               </SelectContent>
             </Select>
             <Badge variant="outline" className="text-xs">{filteredBeneficiaries.length} beneficiários</Badge>
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => {
+              const headers = ["Nome","CPF","Telefone","Placa","Veículo","Ano","Chassi","Cooperativa","Cliente","Plano","Valor/Placa","Status","Origem","Cadastro"];
+              const rows = filteredBeneficiaries.map((b) => {
+                const client = clientMap[b.client_id];
+                const plan = b.plans as any;
+                const origin = getDataOrigin(b.client_id);
+                return [
+                  b.name, b.cpf || "", b.phone || "", b.vehicle_plate || "",
+                  b.vehicle_model || "", String(b.vehicle_year || ""), b.vehicle_chassis || "",
+                  b.cooperativa || "", client?.name || "", plan?.name || "",
+                  plan?.plate_fee ? String(Number(plan.plate_fee)) : "",
+                  b.active ? "Ativo" : "Inativo", origin === "erp" ? "ERP" : "Manual",
+                  format(parseISO(b.created_at), "dd/MM/yyyy"),
+                ];
+              });
+              exportToCsv("beneficiarios", headers, rows);
+            }}>
+              <Download className="h-4 w-4" /> Exportar CSV
+            </Button>
           </div>
 
           {/* Plates summary per client */}
