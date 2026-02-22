@@ -21,6 +21,7 @@ import Billing from "./pages/finance/Billing";
 import FinancialReports from "./pages/finance/FinancialReports";
 import NotFound from "./pages/NotFound";
 import RegisterProvider from "./pages/RegisterProvider";
+import ProviderNavigation from "./pages/provider/ProviderNavigation";
 import ProviderDashboard from "./pages/provider/ProviderDashboard";
 import ProviderServices from "./pages/provider/ProviderServices";
 import ProviderFinancial from "./pages/provider/ProviderFinancial";
@@ -49,6 +50,7 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/cadastro/prestador/:tenantSlug" element={<RegisterProvider />} />
+            <Route path="/nav/:dispatchId" element={<ProviderNavigation />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             
             {/* Provider Portal */}
