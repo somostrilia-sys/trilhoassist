@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft, User, Car, MapPin, AlertTriangle, ClipboardCheck, FileText,
   Share2, Truck, XCircle, PlayCircle, CheckCircle2, Loader2, Clock, History,
-  FilePlus2,
+  FilePlus2, RotateCcw,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import RouteMap, { type RoutePoint } from "@/components/RouteMap";
@@ -123,7 +123,7 @@ const statusTransitions: Record<string, string[]> = {
   dispatched: ["in_progress", "cancelled"],
   in_progress: ["completed", "cancelled"],
   completed: ["refunded"],
-  cancelled: [],
+  cancelled: ["open"],
   refunded: [],
 };
 
@@ -143,6 +143,8 @@ export default function ServiceRequestDetail() {
   const [newStatus, setNewStatus] = useState("");
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
   const [providers, setProviders] = useState<any[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState("");
@@ -308,6 +310,26 @@ export default function ServiceRequestDetail() {
     loadEvents();
   };
 
+  const handleReopen = async () => {
+    if (!id || !reopenReason.trim()) return;
+    setActionLoading(true);
+    const { error } = await supabase
+      .from("service_requests")
+      .update({ status: "open", notes: request.notes ? `${request.notes}\n\n[REABERTURA] ${reopenReason}` : `[REABERTURA] ${reopenReason}` })
+      .eq("id", id);
+    setActionLoading(false);
+    if (error) {
+      toast.error("Erro ao reabrir", { description: error.message });
+    } else {
+      await logEvent("reopen", `Atendimento reaberto. Motivo: ${reopenReason}`, "cancelled", "open");
+      toast.success("Atendimento reaberto!");
+      setReopenDialogOpen(false);
+      setReopenReason("");
+      loadData();
+      loadEvents();
+    }
+  };
+
   // Build route points
   const routePoints = useMemo<RoutePoint[]>(() => {
     if (!request) return [];
@@ -349,6 +371,7 @@ export default function ServiceRequestDetail() {
   const canChangeStatus = (statusTransitions[request.status] || []).length > 0;
   const canCancel = request.status !== "cancelled" && request.status !== "completed" && request.status !== "refunded";
   const canDispatch = ["open", "awaiting_dispatch"].includes(request.status);
+  const canReopen = request.status === "cancelled";
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -421,6 +444,16 @@ export default function ServiceRequestDetail() {
               >
                 <XCircle className="h-4 w-4" />
                 Cancelar Atendimento
+              </Button>
+            )}
+            {canReopen && (
+              <Button
+                variant="outline"
+                className="gap-2 border-primary text-primary hover:bg-primary/10"
+                onClick={() => setReopenDialogOpen(true)}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reabrir Atendimento
               </Button>
             )}
           </div>
@@ -598,6 +631,7 @@ export default function ServiceRequestDetail() {
                     status_change: <PlayCircle className="h-4 w-4 text-primary" />,
                     dispatch: <Truck className="h-4 w-4 text-info" />,
                     cancel: <XCircle className="h-4 w-4 text-destructive" />,
+                    reopen: <RotateCcw className="h-4 w-4 text-primary" />,
                     note: <FileText className="h-4 w-4 text-muted-foreground" />,
                   };
                   return (
@@ -729,6 +763,31 @@ export default function ServiceRequestDetail() {
             <Button onClick={handleDispatch} disabled={!selectedProviderId || actionLoading}>
               {actionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Acionar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reopen Dialog */}
+      <Dialog open={reopenDialogOpen} onOpenChange={setReopenDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reabrir Atendimento</DialogTitle>
+            <DialogDescription>
+              O atendimento <strong>{request.protocol}</strong> será reaberto. Informe a justificativa:
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Justificativa para reabertura..."
+            value={reopenReason}
+            onChange={(e) => setReopenReason(e.target.value)}
+            rows={3}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReopenDialogOpen(false)}>Voltar</Button>
+            <Button onClick={handleReopen} disabled={!reopenReason.trim() || actionLoading}>
+              {actionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Confirmar Reabertura
             </Button>
           </DialogFooter>
         </DialogContent>
