@@ -2,14 +2,19 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/contexts/AuthContext";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Search, Plus, Users, CheckCircle, XCircle, Pencil } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Search, Plus, Users, CheckCircle, XCircle, Pencil, Link, ChevronDown } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const SERVICE_LABELS: Record<string, string> = {
   tow_light: "Guincho Leve",
@@ -24,7 +29,30 @@ const SERVICE_LABELS: Record<string, string> = {
 
 export default function ProvidersList() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
+
+  // Fetch tenant slug for the registration link
+  const { data: tenantSlug } = useQuery({
+    queryKey: ["user-tenant-slug", user?.id],
+    queryFn: async () => {
+      const { data: ut } = await supabase
+        .from("user_tenants")
+        .select("tenant_id")
+        .eq("user_id", user!.id)
+        .limit(1)
+        .single();
+      if (!ut) return null;
+      const { data: tenant } = await supabase
+        .from("tenants")
+        .select("slug")
+        .eq("id", ut.tenant_id)
+        .single();
+      return tenant?.slug ?? null;
+    },
+    enabled: !!user,
+  });
 
   const { data: providers = [], isLoading } = useQuery({
     queryKey: ["admin-providers"],
@@ -37,6 +65,16 @@ export default function ProvidersList() {
       return data;
     },
   });
+
+  const copyRegistrationLink = () => {
+    if (!tenantSlug) {
+      toast({ title: "Erro", description: "Não foi possível obter o link de cadastro.", variant: "destructive" });
+      return;
+    }
+    const link = `${window.location.origin}/cadastro/prestador/${tenantSlug}`;
+    navigator.clipboard.writeText(link);
+    toast({ title: "Link copiado!", description: "Envie o link ao prestador para que ele se cadastre." });
+  };
 
   const filtered = providers.filter((p) => {
     const q = search.toLowerCase();
@@ -59,10 +97,25 @@ export default function ProvidersList() {
           <h1 className="text-2xl font-bold">Prestadores</h1>
           <p className="text-sm text-muted-foreground">Gerencie sua rede de prestadores de serviço</p>
         </div>
-        <Button onClick={() => navigate("/network/providers/new")} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Novo Prestador
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
+              Novo Prestador
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => navigate("/network/providers/new")}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Cadastrar manualmente
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={copyRegistrationLink}>
+              <Link className="h-4 w-4 mr-2" />
+              Copiar link de cadastro
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* KPIs */}
