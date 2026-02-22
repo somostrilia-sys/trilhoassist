@@ -104,9 +104,50 @@ Deno.serve(async (req) => {
       });
     }
 
-    // CREATE user
+    // CREATE user or DELETE via POST
     if (method === "POST") {
-      const { email, password, full_name, role, tenant_id } = await req.json();
+      const body = await req.json();
+      
+      // Handle delete action via POST
+      if (body.action === "delete") {
+        const user_id = body.user_id;
+        if (!user_id) {
+          return new Response(JSON.stringify({ error: "user_id é obrigatório" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (user_id === caller.id) {
+          return new Response(JSON.stringify({ error: "Você não pode excluir sua própria conta" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (!isSuperAdmin) {
+          const { data: userTenants } = await adminClient
+            .from("user_tenants")
+            .select("tenant_id")
+            .eq("user_id", user_id);
+          const userTenantIds = userTenants?.map((t: any) => t.tenant_id) || [];
+          if (!userTenantIds.some((tid: string) => callerTenantIds.includes(tid))) {
+            return new Response(JSON.stringify({ error: "Sem permissão para remover este usuário" }), {
+              status: 403,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        }
+
+        const { error } = await adminClient.auth.admin.deleteUser(user_id);
+        if (error) throw error;
+
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { email, password, full_name, role, tenant_id } = body;
 
       if (!email || !password || !full_name || !role) {
         return new Response(JSON.stringify({ error: "Campos obrigatórios: email, password, full_name, role" }), {
