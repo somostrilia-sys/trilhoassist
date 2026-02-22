@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { maskPhone } from "@/lib/masks";
@@ -11,7 +11,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { User, Car, MapPin, Wrench } from "lucide-react";
+import { User, Car, MapPin, Wrench, AlertTriangle } from "lucide-react";
+import CarVerification, { defaultCarVerification } from "@/components/service-request/CarVerification";
+import MotorcycleVerification, { defaultMotorcycleVerification } from "@/components/service-request/MotorcycleVerification";
+import TruckVerification, { defaultTruckVerification } from "@/components/service-request/TruckVerification";
+
+type VehicleCategory = "car" | "motorcycle" | "truck";
 
 export default function NewServiceRequest() {
   const { user } = useAuth();
@@ -21,9 +26,13 @@ export default function NewServiceRequest() {
   const [loading, setLoading] = useState(false);
   const conversationId = searchParams.get("conversation_id");
 
-  // Parse origin coordinates from WhatsApp location
   const originCoords = searchParams.get("origin_coords");
   const originFromCoords = originCoords ? `Lat: ${originCoords.split(",")[0]}, Lng: ${originCoords.split(",")[1]}` : "";
+
+  // Determine initial vehicle category from service type hint
+  const initialCategory: VehicleCategory = searchParams.get("service_type") === "tow_motorcycle" ? "motorcycle" : "car";
+
+  const [vehicleCategory, setVehicleCategory] = useState<VehicleCategory>(initialCategory);
 
   const [form, setForm] = useState({
     requester_name: searchParams.get("name") || "",
@@ -42,7 +51,25 @@ export default function NewServiceRequest() {
     notes: searchParams.get("notes") || "",
   });
 
+  const [carVerification, setCarVerification] = useState(defaultCarVerification);
+  const [motoVerification, setMotoVerification] = useState(defaultMotorcycleVerification);
+  const [truckVerification, setTruckVerification] = useState(defaultTruckVerification);
+
   const update = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
+
+  // Auto-set service_type based on vehicle category
+  const handleCategoryChange = (cat: VehicleCategory) => {
+    setVehicleCategory(cat);
+    if (cat === "motorcycle") update("service_type", "tow_motorcycle");
+    else if (cat === "truck") update("service_type", "tow_heavy");
+    else update("service_type", "tow_light");
+  };
+
+  const getVerificationAnswers = () => {
+    if (vehicleCategory === "car") return { category: "car", ...carVerification };
+    if (vehicleCategory === "motorcycle") return { category: "motorcycle", ...motoVerification };
+    return { category: "truck", ...truckVerification };
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,10 +91,11 @@ export default function NewServiceRequest() {
       destination_address: form.destination_address || null,
       notes: form.notes || null,
       operator_id: user?.id,
-      protocol: "temp", // will be overwritten by trigger
+      protocol: "temp",
+      vehicle_category: vehicleCategory,
+      verification_answers: getVerificationAnswers() as any,
     }).select("id").single();
 
-    // Link WhatsApp conversation if from WhatsApp
     if (!error && conversationId && inserted) {
       await supabase
         .from("whatsapp_conversations")
@@ -84,6 +112,21 @@ export default function NewServiceRequest() {
       navigate("/operation/requests");
     }
   };
+
+  const serviceTypeOptions = vehicleCategory === "motorcycle"
+    ? [{ value: "tow_motorcycle", label: "Reboque Moto" }]
+    : vehicleCategory === "truck"
+    ? [{ value: "tow_heavy", label: "Reboque Pesado" }]
+    : [
+        { value: "tow_light", label: "Reboque Leve" },
+        { value: "tow_heavy", label: "Reboque Pesado" },
+        { value: "locksmith", label: "Chaveiro" },
+        { value: "tire_change", label: "Troca de Pneu" },
+        { value: "battery", label: "Bateria" },
+        { value: "fuel", label: "Combustível" },
+        { value: "lodging", label: "Hospedagem" },
+        { value: "other", label: "Outro" },
+      ];
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -120,7 +163,7 @@ export default function NewServiceRequest() {
           </CardContent>
         </Card>
 
-        {/* Vehicle */}
+        {/* Vehicle + Category */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -128,6 +171,35 @@ export default function NewServiceRequest() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Categoria do Veículo *</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={vehicleCategory === "car" ? "default" : "outline"}
+                  onClick={() => handleCategoryChange("car")}
+                  className="flex-1"
+                >
+                  Carro
+                </Button>
+                <Button
+                  type="button"
+                  variant={vehicleCategory === "motorcycle" ? "default" : "outline"}
+                  onClick={() => handleCategoryChange("motorcycle")}
+                  className="flex-1"
+                >
+                  Moto
+                </Button>
+                <Button
+                  type="button"
+                  variant={vehicleCategory === "truck" ? "default" : "outline"}
+                  onClick={() => handleCategoryChange("truck")}
+                  className="flex-1"
+                >
+                  Caminhão
+                </Button>
+              </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Placa</Label>
@@ -142,46 +214,19 @@ export default function NewServiceRequest() {
                 <Input type="number" value={form.vehicle_year} onChange={(e) => update("vehicle_year", e.target.value)} />
               </div>
             </div>
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <Checkbox checked={form.vehicle_lowered} onCheckedChange={(v) => update("vehicle_lowered", v)} id="lowered" />
-                <Label htmlFor="lowered">Veículo rebaixado</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox checked={form.difficult_access} onCheckedChange={(v) => update("difficult_access", v)} id="difficult" />
-                <Label htmlFor="difficult">Difícil acesso</Label>
-              </div>
-            </div>
           </CardContent>
         </Card>
 
-        {/* Service Details */}
+        {/* Event + Service type - FIRST as per user request */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Wrench className="h-5 w-5" /> SERVIÇO
+              <AlertTriangle className="h-5 w-5" /> MOTIVO DA PANE / SERVIÇO
             </CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Tipo de Serviço *</Label>
-              <Select value={form.service_type} onValueChange={(v) => update("service_type", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="tow_light">Reboque Leve</SelectItem>
-                  <SelectItem value="tow_heavy">Reboque Pesado</SelectItem>
-                  <SelectItem value="tow_motorcycle">Reboque Moto</SelectItem>
-                  <SelectItem value="locksmith">Chaveiro</SelectItem>
-                  <SelectItem value="tire_change">Troca de Pneu</SelectItem>
-                  <SelectItem value="battery">Bateria</SelectItem>
-                  <SelectItem value="fuel">Combustível</SelectItem>
-                  <SelectItem value="lodging">Hospedagem</SelectItem>
-                  <SelectItem value="other">Outro</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Tipo de Evento *</Label>
+              <Label>Motivo da Pane *</Label>
               <Select value={form.event_type} onValueChange={(v) => update("event_type", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -196,8 +241,41 @@ export default function NewServiceRequest() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label>Tipo de Serviço *</Label>
+              <Select key={vehicleCategory} value={form.service_type} onValueChange={(v) => update("service_type", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {serviceTypeOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </CardContent>
         </Card>
+
+        {/* Conditional Verification */}
+        <div key={vehicleCategory}>
+          {vehicleCategory === "car" && (
+            <CarVerification
+              data={carVerification}
+              onChange={(field, value) => setCarVerification((prev) => ({ ...prev, [field]: value }))}
+            />
+          )}
+          {vehicleCategory === "motorcycle" && (
+            <MotorcycleVerification
+              data={motoVerification}
+              onChange={(field, value) => setMotoVerification((prev) => ({ ...prev, [field]: value }))}
+            />
+          )}
+          {vehicleCategory === "truck" && (
+            <TruckVerification
+              data={truckVerification}
+              onChange={(field, value) => setTruckVerification((prev) => ({ ...prev, [field]: value }))}
+            />
+          )}
+        </div>
 
         {/* Addresses */}
         <Card>
@@ -208,11 +286,11 @@ export default function NewServiceRequest() {
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Endereço de Origem</Label>
+              <Label>Endereço de Origem *</Label>
               <Input value={form.origin_address} onChange={(e) => update("origin_address", e.target.value)} placeholder="Rua, Bairro, Cidade - UF" />
             </div>
             <div className="space-y-2">
-              <Label>Endereço de Destino</Label>
+              <Label>Endereço de Destino *</Label>
               <Input value={form.destination_address} onChange={(e) => update("destination_address", e.target.value)} placeholder="Rua, Bairro, Cidade - UF" />
             </div>
           </CardContent>
