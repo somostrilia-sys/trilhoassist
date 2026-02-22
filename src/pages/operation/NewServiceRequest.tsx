@@ -302,11 +302,21 @@ export default function NewServiceRequest() {
       verification_answers: getVerificationAnswers() as any,
     }).select("id").single();
 
-    if (!error && conversationId && inserted) {
-      await supabase
-        .from("whatsapp_conversations")
-        .update({ status: "service_created", service_request_id: inserted.id })
-        .eq("id", conversationId);
+    if (!error && inserted) {
+      // Log creation event
+      await supabase.from("service_request_events").insert({
+        service_request_id: inserted.id,
+        event_type: "creation",
+        description: "Atendimento criado",
+        user_id: user?.id || null,
+      });
+
+      if (conversationId) {
+        await supabase
+          .from("whatsapp_conversations")
+          .update({ status: "service_created", service_request_id: inserted.id })
+          .eq("id", conversationId);
+      }
     }
 
     setLoading(false);
