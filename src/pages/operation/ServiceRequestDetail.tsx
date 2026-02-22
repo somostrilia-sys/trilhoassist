@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft, User, Car, MapPin, AlertTriangle, ClipboardCheck, FileText,
   Share2, Truck, XCircle, PlayCircle, CheckCircle2, Loader2, Clock, History,
-  FilePlus2, RotateCcw,
+  FilePlus2, RotateCcw, Send,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import RouteMap, { type RoutePoint } from "@/components/RouteMap";
@@ -151,6 +151,8 @@ export default function ServiceRequestDetail() {
   const [quotedAmount, setQuotedAmount] = useState("");
   const [dispatchNotes, setDispatchNotes] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [noteLoading, setNoteLoading] = useState(false);
 
   const logEvent = useCallback(async (eventType: string, description: string, oldValue?: string, newValue?: string) => {
     if (!id) return;
@@ -654,6 +656,35 @@ export default function ServiceRequestDetail() {
               </div>
             </div>
           )}
+
+          {/* Add note form */}
+          <Separator className="my-4" />
+          <div className="flex gap-2">
+            <Textarea
+              placeholder="Adicionar observação ao histórico..."
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              rows={2}
+              className="flex-1 resize-none"
+              maxLength={500}
+            />
+            <Button
+              size="icon"
+              className="shrink-0 self-end"
+              disabled={!noteText.trim() || noteLoading}
+              onClick={async () => {
+                if (!noteText.trim() || !id) return;
+                setNoteLoading(true);
+                await logEvent("note", noteText.trim());
+                setNoteText("");
+                setNoteLoading(false);
+                loadEvents();
+                toast.success("Observação adicionada");
+              }}
+            >
+              {noteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
