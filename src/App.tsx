@@ -22,6 +22,8 @@ import ProviderFinancial from "./pages/provider/ProviderFinancial";
 import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientRequests from "./pages/client/ClientRequests";
 import ClientPlates from "./pages/client/ClientPlates";
+import ProvidersList from "./pages/network/ProvidersList";
+import ProviderForm from "./pages/network/ProviderForm";
 
 const queryClient = new QueryClient();
 
@@ -60,7 +62,9 @@ const App = () => (
               <Route path="/business/clients" element={<Placeholder />} />
               <Route path="/business/plans" element={<Placeholder />} />
               <Route path="/business/beneficiaries" element={<Placeholder />} />
-              <Route path="/network/providers" element={<Placeholder />} />
+              <Route path="/network/providers" element={<ProvidersList />} />
+              <Route path="/network/providers/new" element={<ProviderForm />} />
+              <Route path="/network/providers/:id" element={<ProviderForm />} />
               <Route path="/finance/closing" element={<Placeholder />} />
               <Route path="/finance/billing" element={<Placeholder />} />
               <Route path="/reports" element={<Placeholder />} />
