@@ -1,12 +1,13 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  roles: string[];
+  hasRole: (role: string) => boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -20,17 +21,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [roles, setRoles] = useState<string[]>([]);
+
+  const fetchRoles = async (userId: string) => {
+    const { data } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    setRoles(data?.map((r) => r.role) || []);
+  };
+
+  const hasRole = (role: string) => roles.includes(role);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user) {
+        setTimeout(() => fetchRoles(session.user.id), 0);
+      } else {
+        setRoles([]);
+      }
       setLoading(false);
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchRoles(session.user.id);
+      }
       setLoading(false);
     });
 
@@ -60,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, roles, hasRole, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );

@@ -4,13 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -29,7 +30,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Users, Search, Shield } from "lucide-react";
+import { Plus, Trash2, Search, Shield, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -53,6 +54,9 @@ export default function UsersManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserItem | null>(null);
+  const [editRole, setEditRole] = useState("");
   const [search, setSearch] = useState("");
   const [newUser, setNewUser] = useState({
     email: "",
@@ -64,7 +68,6 @@ export default function UsersManagement() {
   const { data: users = [], isLoading } = useQuery<UserItem[]>({
     queryKey: ["admin-users"],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
       const res = await supabase.functions.invoke("admin-users", {
         method: "GET",
       });
@@ -94,6 +97,27 @@ export default function UsersManagement() {
     },
   });
 
+  const updateRoleMutation = useMutation({
+    mutationFn: async ({ user_id, role }: { user_id: string; role: string }) => {
+      const res = await supabase.functions.invoke("admin-users", {
+        method: "PUT",
+        body: { user_id, role },
+      });
+      if (res.error) throw res.error;
+      if (res.data?.error) throw new Error(res.data.error);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      setEditOpen(false);
+      setEditingUser(null);
+      toast({ title: "Perfil atualizado com sucesso!" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Erro ao atualizar perfil", description: err.message, variant: "destructive" });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (userId: string) => {
       const res = await supabase.functions.invoke("admin-users", {
@@ -119,6 +143,12 @@ export default function UsersManagement() {
       u.email?.toLowerCase().includes(search.toLowerCase())
   );
 
+  const handleEdit = (user: UserItem) => {
+    setEditingUser(user);
+    setEditRole(user.roles[0] || "");
+    setEditOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -141,6 +171,7 @@ export default function UsersManagement() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Criar Novo Usuário</DialogTitle>
+              <DialogDescription>Preencha os dados para criar um novo usuário no sistema.</DialogDescription>
             </DialogHeader>
             <form
               onSubmit={(e) => {
@@ -154,9 +185,7 @@ export default function UsersManagement() {
                 <Input
                   placeholder="Nome do usuário"
                   value={newUser.full_name}
-                  onChange={(e) =>
-                    setNewUser({ ...newUser, full_name: e.target.value })
-                  }
+                  onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
                   required
                 />
               </div>
@@ -166,9 +195,7 @@ export default function UsersManagement() {
                   type="email"
                   placeholder="email@exemplo.com"
                   value={newUser.email}
-                  onChange={(e) =>
-                    setNewUser({ ...newUser, email: e.target.value })
-                  }
+                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
                   required
                 />
               </div>
@@ -178,9 +205,7 @@ export default function UsersManagement() {
                   type="password"
                   placeholder="Mínimo 6 caracteres"
                   value={newUser.password}
-                  onChange={(e) =>
-                    setNewUser({ ...newUser, password: e.target.value })
-                  }
+                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                   required
                   minLength={6}
                 />
@@ -190,7 +215,6 @@ export default function UsersManagement() {
                 <Select
                   value={newUser.role}
                   onValueChange={(v) => setNewUser({ ...newUser, role: v })}
-                  required
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o perfil" />
@@ -214,6 +238,45 @@ export default function UsersManagement() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Edit Role Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Perfil de Acesso</DialogTitle>
+            <DialogDescription>
+              Alterando perfil de {editingUser?.full_name || editingUser?.email}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Perfil de acesso</Label>
+              <Select value={editRole} onValueChange={setEditRole}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o perfil" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                  <SelectItem value="operator">Operador</SelectItem>
+                  <SelectItem value="provider">Prestador</SelectItem>
+                  <SelectItem value="client">Cliente (Associação)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              className="w-full"
+              disabled={updateRoleMutation.isPending || !editRole}
+              onClick={() => {
+                if (editingUser) {
+                  updateRoleMutation.mutate({ user_id: editingUser.id, role: editRole });
+                }
+              }}
+            >
+              {updateRoleMutation.isPending ? "Salvando..." : "Salvar"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -252,7 +315,7 @@ export default function UsersManagement() {
                 <TableHead>Perfil</TableHead>
                 <TableHead>Criado em</TableHead>
                 <TableHead>Último acesso</TableHead>
-                <TableHead className="w-12"></TableHead>
+                <TableHead className="w-24"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -295,18 +358,29 @@ export default function UsersManagement() {
                         : "Nunca"}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => {
-                          if (confirm("Tem certeza que deseja remover este usuário?")) {
-                            deleteMutation.mutate(user.id);
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(user)}
+                          title="Editar perfil"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => {
+                            if (confirm("Tem certeza que deseja remover este usuário?")) {
+                              deleteMutation.mutate(user.id);
+                            }
+                          }}
+                          title="Remover usuário"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
