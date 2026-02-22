@@ -99,9 +99,23 @@ export default function WhatsAppQueue() {
     const b = selectedConv.beneficiaries as any;
     const params = new URLSearchParams();
     params.set("phone", selectedConv.phone || "");
-    params.set("name", selectedConv.contact_name || b?.name || "");
-    if (b?.vehicle_plate) params.set("plate", b.vehicle_plate);
-    if (b?.vehicle_model) params.set("model", b.vehicle_model);
+    params.set("name", selectedConv.contact_name || (selectedConv as any).detected_beneficiary_name || b?.name || "");
+    
+    // Use detected plate or beneficiary plate
+    const plate = (selectedConv as any).detected_plate || b?.vehicle_plate;
+    if (plate) params.set("plate", plate);
+    
+    const model = (selectedConv as any).detected_vehicle_model || b?.vehicle_model;
+    if (model) params.set("model", model);
+    
+    const year = (selectedConv as any).detected_vehicle_year || b?.vehicle_year;
+    if (year) params.set("year", String(year));
+    
+    // Use stored GPS location as origin
+    const lat = (selectedConv as any).origin_lat;
+    const lng = (selectedConv as any).origin_lng;
+    if (lat && lng) params.set("origin_coords", `${lat},${lng}`);
+    
     params.set("conversation_id", selectedConv.id);
 
     // Collect last text messages as notes

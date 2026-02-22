@@ -6,6 +6,15 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Regex for Brazilian vehicle plates: ABC1D23 (Mercosul) or ABC-1234 (old)
+const PLATE_REGEX = /\b([A-Z]{3}[\-\s]?\d[A-Z0-9]\d{2})\b/i;
+
+function extractPlate(text: string): string | null {
+  const match = text?.match(PLATE_REGEX);
+  if (!match) return null;
+  return match[1].replace(/[\-\s]/g, "").toUpperCase();
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -20,13 +29,12 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const tenantSlug = url.searchParams.get("tenant");
 
-    // GET = webhook verification (used by many providers)
+    // GET = webhook verification
     if (req.method === "GET") {
       const challenge = url.searchParams.get("hub.challenge") || url.searchParams.get("challenge") || "ok";
       return new Response(challenge, { status: 200, headers: corsHeaders });
     }
 
-    // POST = incoming message
     const payload = await req.json();
 
     if (!tenantSlug) {
@@ -51,9 +59,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Normalize payload – generic structure
-    // Expects: { phone, name?, message?, message_type?, media_url?, latitude?, longitude?, external_id? }
-    // Or raw WhatsApp Cloud API / Evolution API payloads
     const normalized = normalizePayload(payload);
 
     if (!normalized.phone) {
@@ -63,7 +68,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Clean phone to digits only
     const cleanPhone = normalized.phone.replace(/\D/g, "");
 
     // Find or create conversation
@@ -81,7 +85,7 @@ Deno.serve(async (req) => {
       // Try to find beneficiary by phone
       const { data: beneficiary } = await supabase
         .from("beneficiaries")
-        .select("id, name, client_id")
+        .select("id, name, client_id, vehicle_plate, vehicle_model, vehicle_year")
         .or(`phone.eq.${cleanPhone},phone.ilike.%${cleanPhone.slice(-9)}%`)
         .limit(1)
         .single();
@@ -93,6 +97,10 @@ Deno.serve(async (req) => {
           phone: cleanPhone,
           contact_name: normalized.name || beneficiary?.name || null,
           beneficiary_id: beneficiary?.id || null,
+          detected_plate: beneficiary?.vehicle_plate || null,
+          detected_vehicle_model: beneficiary?.vehicle_model || null,
+          detected_vehicle_year: beneficiary?.vehicle_year || null,
+          detected_beneficiary_name: beneficiary?.name || null,
           status: "open",
         })
         .select()
@@ -100,6 +108,44 @@ Deno.serve(async (req) => {
 
       if (convErr) throw convErr;
       conversation = newConv;
+    }
+
+    // --- Smart extraction from message text ---
+    const messageText = normalized.message || "";
+    const updateFields: Record<string, any> = {
+      last_message_at: new Date().toISOString(),
+      contact_name: normalized.name || conversation.contact_name,
+    };
+
+    // 1) Extract plate from text if not already detected
+    if (!conversation.detected_plate && messageText) {
+      const plate = extractPlate(messageText);
+      if (plate) {
+        updateFields.detected_plate = plate;
+
+        // 2) Search beneficiary by plate
+        const { data: benByPlate } = await supabase
+          .from("beneficiaries")
+          .select("id, name, vehicle_plate, vehicle_model, vehicle_year, client_id")
+          .ilike("vehicle_plate", plate)
+          .eq("active", true)
+          .limit(1)
+          .single();
+
+        if (benByPlate) {
+          updateFields.beneficiary_id = benByPlate.id;
+          updateFields.detected_vehicle_model = benByPlate.vehicle_model;
+          updateFields.detected_vehicle_year = benByPlate.vehicle_year;
+          updateFields.detected_beneficiary_name = benByPlate.name;
+          console.log(`Beneficiary found by plate ${plate}: ${benByPlate.name}`);
+        }
+      }
+    }
+
+    // 3) Store location as origin if sent
+    if (normalized.latitude && normalized.longitude && !conversation.origin_lat) {
+      updateFields.origin_lat = normalized.latitude;
+      updateFields.origin_lng = normalized.longitude;
     }
 
     // Insert message
@@ -117,10 +163,10 @@ Deno.serve(async (req) => {
 
     if (msgErr) throw msgErr;
 
-    // Update conversation last_message_at
+    // Update conversation with extracted data
     await supabase
       .from("whatsapp_conversations")
-      .update({ last_message_at: new Date().toISOString(), contact_name: normalized.name || conversation.contact_name })
+      .update(updateFields)
       .eq("id", conversation.id);
 
     return new Response(JSON.stringify({ success: true, conversation_id: conversation.id }), {

@@ -21,6 +21,10 @@ export default function NewServiceRequest() {
   const [loading, setLoading] = useState(false);
   const conversationId = searchParams.get("conversation_id");
 
+  // Parse origin coordinates from WhatsApp location
+  const originCoords = searchParams.get("origin_coords");
+  const originFromCoords = originCoords ? `Lat: ${originCoords.split(",")[0]}, Lng: ${originCoords.split(",")[1]}` : "";
+
   const [form, setForm] = useState({
     requester_name: searchParams.get("name") || "",
     requester_phone: searchParams.get("phone") || "",
@@ -28,12 +32,12 @@ export default function NewServiceRequest() {
     requester_phone_secondary: "",
     vehicle_plate: searchParams.get("plate") || "",
     vehicle_model: searchParams.get("model") || "",
-    vehicle_year: "",
+    vehicle_year: searchParams.get("year") || "",
     vehicle_lowered: false,
     difficult_access: false,
     service_type: "tow_light" as string,
     event_type: "mechanical_failure" as string,
-    origin_address: "",
+    origin_address: originFromCoords,
     destination_address: "",
     notes: searchParams.get("notes") || "",
   });
