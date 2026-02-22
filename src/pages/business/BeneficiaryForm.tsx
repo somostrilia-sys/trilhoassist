@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -100,6 +100,14 @@ export default function BeneficiaryForm() {
       });
     }
   }, [beneficiary]);
+
+  const prevClientIdRef = useRef(form.client_id);
+  useEffect(() => {
+    if (prevClientIdRef.current !== form.client_id && prevClientIdRef.current !== "") {
+      setForm((prev) => ({ ...prev, plan_id: "" }));
+    }
+    prevClientIdRef.current = form.client_id;
+  }, [form.client_id]);
 
   const updateField = (field: keyof BeneficiaryFormData, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -218,7 +226,7 @@ export default function BeneficiaryForm() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Cliente *</Label>
-                <Select value={form.client_id} onValueChange={(v) => { updateField("client_id", v); updateField("plan_id", ""); }}>
+                <Select value={form.client_id || undefined} onValueChange={(v) => updateField("client_id", v)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o cliente" />
                   </SelectTrigger>
@@ -231,14 +239,16 @@ export default function BeneficiaryForm() {
               </div>
               <div className="space-y-2">
                 <Label>Plano</Label>
-                <Select value={form.plan_id} onValueChange={(v) => updateField("plan_id", v)} disabled={!form.client_id}>
+                <Select value={form.plan_id || undefined} onValueChange={(v) => updateField("plan_id", v)} disabled={!form.client_id}>
                   <SelectTrigger>
                     <SelectValue placeholder={form.client_id ? "Selecione o plano" : "Selecione um cliente primeiro"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {plans.map((p) => (
+                    {plans.length > 0 ? plans.map((p) => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
+                    )) : (
+                      <SelectItem value="__empty" disabled>Nenhum plano disponível</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
