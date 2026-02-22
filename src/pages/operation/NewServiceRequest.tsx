@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { maskPhone } from "@/lib/masks";
+import { maskPhone, maskCEP, unmask } from "@/lib/masks";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -64,7 +64,9 @@ export default function NewServiceRequest() {
     difficult_access: false,
     service_type: "tow_light" as string,
     event_type: "mechanical_failure" as string,
+    origin_cep: "",
     origin_address: originFromCoords,
+    destination_cep: "",
     destination_address: "",
     notes: searchParams.get("notes") || "",
   });
@@ -85,7 +87,9 @@ export default function NewServiceRequest() {
     plan_name?: string;
   } | null>(null);
   const [plateSearching, setPlateSearching] = useState(false);
+  const [cepLoading, setCepLoading] = useState<{ origin: boolean; destination: boolean }>({ origin: false, destination: false });
   const plateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cepDebounceRef = useRef<{ origin: ReturnType<typeof setTimeout> | null; destination: ReturnType<typeof setTimeout> | null }>({ origin: null, destination: null });
 
   const searchBeneficiaryByPlate = useCallback(async (plate: string) => {
     const cleanPlate = plate.replace(/[^A-Z0-9]/g, "");
@@ -145,6 +149,35 @@ export default function NewServiceRequest() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
+
+  const fetchCep = useCallback(async (cep: string, target: "origin" | "destination") => {
+    const digits = unmask(cep);
+    if (digits.length !== 8) return;
+    setCepLoading((prev) => ({ ...prev, [target]: true }));
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        const addr = `${data.logradouro || ""}, ${data.bairro || ""}, ${data.localidade || ""} - ${data.uf || ""}`.replace(/^, |, $/g, "");
+        const field = target === "origin" ? "origin_address" : "destination_address";
+        setForm((f) => ({ ...f, [field]: addr }));
+        setErrors((prev) => ({ ...prev, [field]: "" }));
+      } else {
+        toast({ title: "CEP não encontrado", description: "Verifique o CEP digitado.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Erro ao buscar CEP", variant: "destructive" });
+    } finally {
+      setCepLoading((prev) => ({ ...prev, [target]: false }));
+    }
+  }, [toast]);
+
+  const handleCepChange = (value: string, target: "origin" | "destination") => {
+    const masked = maskCEP(value);
+    update(target === "origin" ? "origin_cep" : "destination_cep", masked);
+    if (cepDebounceRef.current[target]) clearTimeout(cepDebounceRef.current[target]!);
+    cepDebounceRef.current[target] = setTimeout(() => fetchCep(masked, target), 500);
+  };
 
   // Auto-set service_type based on vehicle category
   const handleCategoryChange = (cat: VehicleCategory) => {
@@ -414,16 +447,34 @@ export default function NewServiceRequest() {
               <MapPin className="h-5 w-5" /> ENDEREÇOS
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Endereço de Origem *</Label>
-              <Input value={form.origin_address} onChange={(e) => { update("origin_address", e.target.value); setErrors(prev => ({ ...prev, origin_address: "" })); }} placeholder="Rua, Bairro, Cidade - UF" className={errors.origin_address ? "border-destructive" : ""} />
-              {errors.origin_address && <p className="text-xs text-destructive">{errors.origin_address}</p>}
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>CEP Origem</Label>
+                <div className="relative">
+                  <Input value={form.origin_cep} onChange={(e) => handleCepChange(e.target.value, "origin")} placeholder="00000-000" maxLength={9} className="pr-9" />
+                  {cepLoading.origin && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>CEP Destino</Label>
+                <div className="relative">
+                  <Input value={form.destination_cep} onChange={(e) => handleCepChange(e.target.value, "destination")} placeholder="00000-000" maxLength={9} className="pr-9" />
+                  {cepLoading.destination && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />}
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Endereço de Destino *</Label>
-              <Input value={form.destination_address} onChange={(e) => { update("destination_address", e.target.value); setErrors(prev => ({ ...prev, destination_address: "" })); }} placeholder="Rua, Bairro, Cidade - UF" className={errors.destination_address ? "border-destructive" : ""} />
-              {errors.destination_address && <p className="text-xs text-destructive">{errors.destination_address}</p>}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Endereço de Origem *</Label>
+                <Input value={form.origin_address} onChange={(e) => { update("origin_address", e.target.value); setErrors(prev => ({ ...prev, origin_address: "" })); }} placeholder="Rua, Bairro, Cidade - UF" className={errors.origin_address ? "border-destructive" : ""} />
+                {errors.origin_address && <p className="text-xs text-destructive">{errors.origin_address}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label>Endereço de Destino *</Label>
+                <Input value={form.destination_address} onChange={(e) => { update("destination_address", e.target.value); setErrors(prev => ({ ...prev, destination_address: "" })); }} placeholder="Rua, Bairro, Cidade - UF" className={errors.destination_address ? "border-destructive" : ""} />
+                {errors.destination_address && <p className="text-xs text-destructive">{errors.destination_address}</p>}
+              </div>
             </div>
           </CardContent>
         </Card>
