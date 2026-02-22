@@ -926,6 +926,117 @@ export type Database = {
           },
         ]
       }
+      whatsapp_conversations: {
+        Row: {
+          beneficiary_id: string | null
+          contact_name: string | null
+          created_at: string
+          id: string
+          last_message_at: string | null
+          phone: string
+          service_request_id: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          beneficiary_id?: string | null
+          contact_name?: string | null
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          phone: string
+          service_request_id?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          beneficiary_id?: string | null
+          contact_name?: string | null
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          phone?: string
+          service_request_id?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_conversations_beneficiary_id_fkey"
+            columns: ["beneficiary_id"]
+            isOneToOne: false
+            referencedRelation: "beneficiaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_conversations_service_request_id_fkey"
+            columns: ["service_request_id"]
+            isOneToOne: false
+            referencedRelation: "service_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_conversations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_messages: {
+        Row: {
+          content: string | null
+          conversation_id: string
+          created_at: string
+          direction: string
+          external_id: string | null
+          id: string
+          latitude: number | null
+          longitude: number | null
+          media_url: string | null
+          message_type: string
+          raw_payload: Json | null
+        }
+        Insert: {
+          content?: string | null
+          conversation_id: string
+          created_at?: string
+          direction?: string
+          external_id?: string | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          media_url?: string | null
+          message_type?: string
+          raw_payload?: Json | null
+        }
+        Update: {
+          content?: string | null
+          conversation_id?: string
+          created_at?: string
+          direction?: string
+          external_id?: string | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          media_url?: string | null
+          message_type?: string
+          raw_payload?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
