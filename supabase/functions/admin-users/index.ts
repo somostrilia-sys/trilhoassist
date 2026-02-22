@@ -189,7 +189,7 @@ Deno.serve(async (req) => {
 
     // DELETE user
     if (method === "DELETE") {
-      const { user_id } = await req.json();
+      const user_id = url.searchParams.get("user_id");
       if (!user_id) {
         return new Response(JSON.stringify({ error: "user_id é obrigatório" }), {
           status: 400,
