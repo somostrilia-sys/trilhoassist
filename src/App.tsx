@@ -11,6 +11,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ServiceRequests from "./pages/operation/ServiceRequests";
 import NewServiceRequest from "./pages/operation/NewServiceRequest";
+import ServiceRequestDetail from "./pages/operation/ServiceRequestDetail";
 import WhatsAppQueue from "./pages/operation/WhatsAppQueue";
 import UsersManagement from "./pages/settings/UsersManagement";
 import PermissionsManagement from "./pages/settings/PermissionsManagement";
@@ -70,7 +71,7 @@ const App = () => (
               <Route path="/operation/new" element={<NewServiceRequest />} />
               <Route path="/operation/requests" element={<ServiceRequests />} />
               <Route path="/operation/whatsapp" element={<WhatsAppQueue />} />
-              <Route path="/operation/requests/:id" element={<Placeholder />} />
+              <Route path="/operation/requests/:id" element={<ServiceRequestDetail />} />
               <Route path="/business/clients" element={<ClientsList />} />
               <Route path="/business/clients/new" element={<ClientForm />} />
               <Route path="/business/clients/:id" element={<ClientForm />} />
