@@ -66,6 +66,7 @@ const menuSections: MenuSection[] = [
     module: "network",
     items: [
       { title: "Prestadores", url: "/network/providers", icon: Users },
+      { title: "Blacklist", url: "/network/blacklist", icon: Shield },
     ],
   },
   {
