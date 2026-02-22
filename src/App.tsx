@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
 import { ProviderLayout } from "@/components/ProviderLayout";
+import { ClientLayout } from "@/components/ClientLayout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ServiceRequests from "./pages/operation/ServiceRequests";
@@ -18,6 +19,9 @@ import RegisterProvider from "./pages/RegisterProvider";
 import ProviderDashboard from "./pages/provider/ProviderDashboard";
 import ProviderServices from "./pages/provider/ProviderServices";
 import ProviderFinancial from "./pages/provider/ProviderFinancial";
+import ClientDashboard from "./pages/client/ClientDashboard";
+import ClientRequests from "./pages/client/ClientRequests";
+import ClientPlates from "./pages/client/ClientPlates";
 
 const queryClient = new QueryClient();
 
@@ -38,6 +42,13 @@ const App = () => (
               <Route path="/provider/dashboard" element={<ProviderDashboard />} />
               <Route path="/provider/services" element={<ProviderServices />} />
               <Route path="/provider/financial" element={<ProviderFinancial />} />
+            </Route>
+
+            {/* Client/Association Portal */}
+            <Route element={<ClientLayout />}>
+              <Route path="/client/dashboard" element={<ClientDashboard />} />
+              <Route path="/client/requests" element={<ClientRequests />} />
+              <Route path="/client/plates" element={<ClientPlates />} />
             </Route>
 
             {/* Admin/Operator Portal */}
