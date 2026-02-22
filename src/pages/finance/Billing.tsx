@@ -14,13 +14,14 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Search, Plus, Receipt, DollarSign, Clock, CheckCircle } from "lucide-react";
+import { Search, Plus, Receipt, DollarSign, Clock, CheckCircle, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   useTenantId, useInvoices, useClients,
-  INVOICE_STATUS_LABELS, formatCurrency,
+  INVOICE_STATUS_LABELS, SERVICE_TYPE_LABELS, formatCurrency,
 } from "@/hooks/useFinancialData";
 import { format } from "date-fns";
+import { generateFinancialPdf } from "@/lib/generateFinancialPdf";
 
 export default function Billing() {
   const { toast } = useToast();
@@ -305,6 +306,38 @@ export default function Billing() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        <Button size="sm" variant="outline" className="gap-1" onClick={async () => {
+                          // Fetch invoice items
+                          const { data: items } = await supabase
+                            .from("invoice_items")
+                            .select("service_request_id, charged_amount, provider_cost, service_requests (protocol, requester_name, vehicle_plate, service_type, completed_at)")
+                            .eq("invoice_id", inv.id);
+                          generateFinancialPdf({
+                            clientName: inv.clients?.name || "",
+                            billingModel: inv.notes?.includes("Somente Placa") ? "plate_only" : "plate_plus_service",
+                            periodStart: inv.period_start,
+                            periodEnd: inv.period_end,
+                            dueDate: inv.due_date,
+                            totalPlates: parseInt(inv.notes?.match(/Placas: (\d+)/)?.[1] || "0"),
+                            totalPlateValue: parseFloat(inv.notes?.match(/R\$\s?([\d.,]+)/)?.[1]?.replace(".", "").replace(",", ".") || "0"),
+                            items: (items || []).map((it: any) => ({
+                              protocol: it.service_requests?.protocol || "",
+                              date: it.service_requests?.completed_at ? format(new Date(it.service_requests.completed_at), "dd/MM/yyyy") : "",
+                              requesterName: it.service_requests?.requester_name || "",
+                              vehiclePlate: it.service_requests?.vehicle_plate || "",
+                              serviceType: SERVICE_TYPE_LABELS[it.service_requests?.service_type] || it.service_requests?.service_type || "",
+                              chargedAmount: Number(it.charged_amount || 0),
+                            })),
+                            totalServices: inv.total_services,
+                            totalCharged: Number(inv.total_charged),
+                            totalProviderCost: Number(inv.total_provider_cost),
+                            markupAmount: Number(inv.markup_amount),
+                            notes: inv.notes || undefined,
+                            type: "invoice",
+                          });
+                        }}>
+                          <Download className="h-3 w-3" /> PDF
+                        </Button>
                         {inv.status === "draft" && (
                           <Button size="sm" variant="outline" onClick={() => updateStatusMutation.mutate({ id: inv.id, status: "sent" })}>
                             Enviar

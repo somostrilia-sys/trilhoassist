@@ -13,13 +13,14 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, FileCheck, DollarSign, Clock, CheckCircle } from "lucide-react";
+import { Search, Plus, FileCheck, DollarSign, Clock, CheckCircle, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   useTenantId, useFinancialClosings, useProviders,
-  CLOSING_STATUS_LABELS, formatCurrency,
+  CLOSING_STATUS_LABELS, SERVICE_TYPE_LABELS, formatCurrency,
 } from "@/hooks/useFinancialData";
 import { format } from "date-fns";
+import { generateFinancialPdf } from "@/lib/generateFinancialPdf";
 
 export default function FinancialClosing() {
   const { toast } = useToast();
@@ -263,6 +264,35 @@ export default function FinancialClosing() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        <Button size="sm" variant="outline" className="gap-1" onClick={async () => {
+                          // Fetch closing items
+                          const { data: items } = await supabase
+                            .from("financial_closing_items")
+                            .select("service_request_id, provider_cost, service_requests (protocol, requester_name, vehicle_plate, service_type, completed_at)")
+                            .eq("closing_id", closing.id);
+                          generateFinancialPdf({
+                            providerName: closing.providers?.name || "",
+                            periodStart: closing.period_start,
+                            periodEnd: closing.period_end,
+                            items: (items || []).map((it: any) => ({
+                              protocol: it.service_requests?.protocol || "",
+                              date: it.service_requests?.completed_at ? format(new Date(it.service_requests.completed_at), "dd/MM/yyyy") : "",
+                              requesterName: it.service_requests?.requester_name || "",
+                              vehiclePlate: it.service_requests?.vehicle_plate || "",
+                              serviceType: SERVICE_TYPE_LABELS[it.service_requests?.service_type] || it.service_requests?.service_type || "",
+                              chargedAmount: Number(it.provider_cost || 0),
+                            })),
+                            totalServices: closing.total_services,
+                            totalCharged: Number(closing.total_provider_cost),
+                            totalProviderCost: Number(closing.total_provider_cost),
+                            markupAmount: 0,
+                            clientName: closing.providers?.name || "",
+                            notes: closing.notes || undefined,
+                            type: "closing",
+                          });
+                        }}>
+                          <Download className="h-3 w-3" /> PDF
+                        </Button>
                         {closing.status === "open" && (
                           <Button size="sm" variant="outline" onClick={() => updateStatusMutation.mutate({ id: closing.id, status: "closed" })}>
                             Fechar
