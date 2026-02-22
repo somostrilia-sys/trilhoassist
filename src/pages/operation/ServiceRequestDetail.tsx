@@ -5,8 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, User, Car, MapPin, AlertTriangle, ClipboardCheck, FileText } from "lucide-react";
+import { ArrowLeft, User, Car, MapPin, AlertTriangle, ClipboardCheck, FileText, Share2, Check } from "lucide-react";
 import RouteMap, { type RoutePoint } from "@/components/RouteMap";
+import { toast } from "sonner";
 
 const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   open: { label: "Aberto", variant: "default" },
@@ -114,6 +115,7 @@ export default function ServiceRequestDetail() {
   const [request, setRequest] = useState<any>(null);
   const [beneficiary, setBeneficiary] = useState<any>(null);
   const [provider, setProvider] = useState<any>(null);
+  const [dispatchId, setDispatchId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -136,6 +138,7 @@ export default function ServiceRequestDetail() {
       }
 
       // Fetch dispatch → provider for routing
+      let dispatchData: any = null;
       if (data) {
         const { data: dispatch } = await supabase
           .from("dispatches")
@@ -145,8 +148,12 @@ export default function ServiceRequestDetail() {
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
-        if (dispatch && (dispatch as any).providers) {
-          setProvider((dispatch as any).providers);
+        dispatchData = dispatch;
+        if (dispatch) {
+          setDispatchId(dispatch.id);
+          if ((dispatch as any).providers) {
+            setProvider((dispatch as any).providers);
+          }
         }
       }
       setLoading(false);
@@ -210,6 +217,21 @@ export default function ServiceRequestDetail() {
             Criado em {new Date(request.created_at).toLocaleDateString("pt-BR")} às {new Date(request.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
           </p>
         </div>
+        {dispatchId && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 shrink-0"
+            onClick={() => {
+              const url = `${window.location.origin}/nav/${dispatchId}`;
+              navigator.clipboard.writeText(url);
+              toast.success("Link copiado!", { description: "Envie para o prestador via WhatsApp." });
+            }}
+          >
+            <Share2 className="h-4 w-4" />
+            Copiar link prestador
+          </Button>
+        )}
       </div>
 
       {/* Requester */}
