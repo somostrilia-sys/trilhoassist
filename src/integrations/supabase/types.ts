@@ -731,10 +731,12 @@ export type Database = {
           status: Database["public"]["Enums"]["request_status"]
           tenant_id: string | null
           updated_at: string
+          vehicle_category: string | null
           vehicle_lowered: boolean | null
           vehicle_model: string | null
           vehicle_plate: string | null
           vehicle_year: number | null
+          verification_answers: Json | null
         }
         Insert: {
           beneficiary_id?: string | null
@@ -766,10 +768,12 @@ export type Database = {
           status?: Database["public"]["Enums"]["request_status"]
           tenant_id?: string | null
           updated_at?: string
+          vehicle_category?: string | null
           vehicle_lowered?: boolean | null
           vehicle_model?: string | null
           vehicle_plate?: string | null
           vehicle_year?: number | null
+          verification_answers?: Json | null
         }
         Update: {
           beneficiary_id?: string | null
@@ -801,10 +805,12 @@ export type Database = {
           status?: Database["public"]["Enums"]["request_status"]
           tenant_id?: string | null
           updated_at?: string
+          vehicle_category?: string | null
           vehicle_lowered?: boolean | null
           vehicle_model?: string | null
           vehicle_plate?: string | null
           vehicle_year?: number | null
+          verification_answers?: Json | null
         }
         Relationships: [
           {
