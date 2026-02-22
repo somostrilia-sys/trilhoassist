@@ -169,7 +169,20 @@ export default function ServiceRequestDetail() {
       .select("*")
       .eq("service_request_id", id)
       .order("created_at", { ascending: false });
-    setEvents(data || []);
+    const eventsData = data || [];
+
+    // Fetch operator names from profiles
+    const userIds = [...new Set(eventsData.map(e => e.user_id).filter(Boolean))];
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, full_name")
+        .in("user_id", userIds as string[]);
+      const nameMap = new Map(profiles?.map(p => [p.user_id, p.full_name]) || []);
+      setEvents(eventsData.map(e => ({ ...e, _operator_name: e.user_id ? nameMap.get(e.user_id) || null : null })));
+    } else {
+      setEvents(eventsData.map(e => ({ ...e, _operator_name: null })));
+    }
   }, [id]);
 
   const loadData = useCallback(async () => {
