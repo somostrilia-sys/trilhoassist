@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft, User, Car, MapPin, AlertTriangle, ClipboardCheck, FileText,
   Share2, Truck, XCircle, PlayCircle, CheckCircle2, Loader2, Clock, History,
+  FilePlus2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import RouteMap, { type RoutePoint } from "@/components/RouteMap";
@@ -580,6 +581,7 @@ export default function ServiceRequestDetail() {
               <div className="space-y-4">
                 {events.map((evt, idx) => {
                   const iconMap: Record<string, React.ReactNode> = {
+                    creation: <FilePlus2 className="h-4 w-4 text-green-600" />,
                     status_change: <PlayCircle className="h-4 w-4 text-primary" />,
                     dispatch: <Truck className="h-4 w-4 text-info" />,
                     cancel: <XCircle className="h-4 w-4 text-destructive" />,
