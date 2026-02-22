@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Headphones, Briefcase, Users, DollarSign,
   FileText, Settings, Link2, BarChart3, ChevronDown, Plus, List,
-  Building2, UserCheck, Award, Network, Receipt, FileCheck, LogOut, Shield
+  Building2, UserCheck, Award, Network, Receipt, FileCheck, LogOut, Shield, MessageSquare
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,6 +46,7 @@ const menuSections: MenuSection[] = [
     items: [
       { title: "Novo Atendimento", url: "/operation/new", icon: Plus },
       { title: "Atendimentos", url: "/operation/requests", icon: List },
+      { title: "WhatsApp", url: "/operation/whatsapp", icon: MessageSquare },
     ],
   },
   {

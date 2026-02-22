@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { maskPhone } from "@/lib/masks";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,16 +16,18 @@ import { User, Car, MapPin, Wrench } from "lucide-react";
 export default function NewServiceRequest() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const conversationId = searchParams.get("conversation_id");
 
   const [form, setForm] = useState({
-    requester_name: "",
-    requester_phone: "",
+    requester_name: searchParams.get("name") || "",
+    requester_phone: searchParams.get("phone") || "",
     requester_email: "",
     requester_phone_secondary: "",
-    vehicle_plate: "",
-    vehicle_model: "",
+    vehicle_plate: searchParams.get("plate") || "",
+    vehicle_model: searchParams.get("model") || "",
     vehicle_year: "",
     vehicle_lowered: false,
     difficult_access: false,
@@ -33,7 +35,7 @@ export default function NewServiceRequest() {
     event_type: "mechanical_failure" as string,
     origin_address: "",
     destination_address: "",
-    notes: "",
+    notes: searchParams.get("notes") || "",
   });
 
   const update = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
@@ -42,7 +44,7 @@ export default function NewServiceRequest() {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await supabase.from("service_requests").insert({
+    const { data: inserted, error } = await supabase.from("service_requests").insert({
       requester_name: form.requester_name,
       requester_phone: form.requester_phone,
       requester_email: form.requester_email || null,
@@ -59,7 +61,15 @@ export default function NewServiceRequest() {
       notes: form.notes || null,
       operator_id: user?.id,
       protocol: "temp", // will be overwritten by trigger
-    });
+    }).select("id").single();
+
+    // Link WhatsApp conversation if from WhatsApp
+    if (!error && conversationId && inserted) {
+      await supabase
+        .from("whatsapp_conversations")
+        .update({ status: "service_created", service_request_id: inserted.id })
+        .eq("id", conversationId);
+    }
 
     setLoading(false);
 

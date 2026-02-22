@@ -11,6 +11,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ServiceRequests from "./pages/operation/ServiceRequests";
 import NewServiceRequest from "./pages/operation/NewServiceRequest";
+import WhatsAppQueue from "./pages/operation/WhatsAppQueue";
 import UsersManagement from "./pages/settings/UsersManagement";
 import PermissionsManagement from "./pages/settings/PermissionsManagement";
 import Placeholder from "./pages/Placeholder";
@@ -68,6 +69,7 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/operation/new" element={<NewServiceRequest />} />
               <Route path="/operation/requests" element={<ServiceRequests />} />
+              <Route path="/operation/whatsapp" element={<WhatsAppQueue />} />
               <Route path="/operation/requests/:id" element={<Placeholder />} />
               <Route path="/business/clients" element={<ClientsList />} />
               <Route path="/business/clients/new" element={<ClientForm />} />
