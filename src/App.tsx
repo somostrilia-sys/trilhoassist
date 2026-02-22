@@ -25,6 +25,12 @@ import ClientPlates from "./pages/client/ClientPlates";
 import ProvidersList from "./pages/network/ProvidersList";
 import ProviderForm from "./pages/network/ProviderForm";
 import ProviderBlacklist from "./pages/network/ProviderBlacklist";
+import ClientsList from "./pages/business/ClientsList";
+import ClientForm from "./pages/business/ClientForm";
+import PlansList from "./pages/business/PlansList";
+import PlanForm from "./pages/business/PlanForm";
+import BeneficiariesList from "./pages/business/BeneficiariesList";
+import BeneficiaryForm from "./pages/business/BeneficiaryForm";
 
 const queryClient = new QueryClient();
 
@@ -60,9 +66,15 @@ const App = () => (
               <Route path="/operation/new" element={<NewServiceRequest />} />
               <Route path="/operation/requests" element={<ServiceRequests />} />
               <Route path="/operation/requests/:id" element={<Placeholder />} />
-              <Route path="/business/clients" element={<Placeholder />} />
-              <Route path="/business/plans" element={<Placeholder />} />
-              <Route path="/business/beneficiaries" element={<Placeholder />} />
+              <Route path="/business/clients" element={<ClientsList />} />
+              <Route path="/business/clients/new" element={<ClientForm />} />
+              <Route path="/business/clients/:id" element={<ClientForm />} />
+              <Route path="/business/clients/:clientId/plans" element={<PlansList />} />
+              <Route path="/business/clients/:clientId/plans/new" element={<PlanForm />} />
+              <Route path="/business/clients/:clientId/plans/:planId" element={<PlanForm />} />
+              <Route path="/business/beneficiaries" element={<BeneficiariesList />} />
+              <Route path="/business/beneficiaries/new" element={<BeneficiaryForm />} />
+              <Route path="/business/beneficiaries/:id" element={<BeneficiaryForm />} />
               <Route path="/network/providers" element={<ProvidersList />} />
               <Route path="/network/providers/new" element={<ProviderForm />} />
               <Route path="/network/providers/:id" element={<ProviderForm />} />

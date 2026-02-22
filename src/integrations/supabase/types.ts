@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           active: boolean
           client_id: string
+          cooperativa: string | null
           cpf: string | null
           created_at: string
           id: string
@@ -33,6 +34,7 @@ export type Database = {
         Insert: {
           active?: boolean
           client_id: string
+          cooperativa?: string | null
           cpf?: string | null
           created_at?: string
           id?: string
@@ -48,6 +50,7 @@ export type Database = {
         Update: {
           active?: boolean
           client_id?: string
+          cooperativa?: string | null
           cpf?: string | null
           created_at?: string
           id?: string
@@ -186,6 +189,59 @@ export type Database = {
             columns: ["service_request_id"]
             isOneToOne: false
             referencedRelation: "service_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_coverages: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          lodging_max_value: number | null
+          lodging_per: string | null
+          max_km: number | null
+          max_uses: number
+          period_days: number | null
+          period_type: string
+          plan_id: string
+          service_type: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          lodging_max_value?: number | null
+          lodging_per?: string | null
+          max_km?: number | null
+          max_uses?: number
+          period_days?: number | null
+          period_type?: string
+          plan_id: string
+          service_type: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          lodging_max_value?: number | null
+          lodging_per?: string | null
+          max_km?: number | null
+          max_uses?: number
+          period_days?: number | null
+          period_type?: string
+          plan_id?: string
+          service_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_coverages_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
             referencedColumns: ["id"]
           },
         ]
