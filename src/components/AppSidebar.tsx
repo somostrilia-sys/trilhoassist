@@ -71,6 +71,7 @@ const menuSections = [
     icon: Settings,
     collapsible: true,
     items: [
+      { title: "Usuários", url: "/settings/users", icon: Users },
       { title: "Configurações", url: "/settings", icon: Settings },
       { title: "Integrações", url: "/integrations", icon: Link2 },
     ],
