@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Search, Plus, Users, CheckCircle, XCircle, Pencil, Link, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { maskCNPJ, maskPhone } from "@/lib/masks";
 
 const SERVICE_LABELS: Record<string, string> = {
   tow_light: "Guincho Leve",
@@ -193,9 +194,9 @@ export default function ProvidersList() {
                   <TableRow key={provider.id} className="cursor-pointer hover:bg-muted/50">
                     <TableCell className="font-medium">{provider.name}</TableCell>
                     <TableCell className="text-muted-foreground font-mono text-sm">
-                      {provider.cnpj || "—"}
+                      {provider.cnpj ? maskCNPJ(provider.cnpj) : "—"}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{provider.phone}</TableCell>
+                    <TableCell className="text-muted-foreground">{maskPhone(provider.phone)}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {provider.city && provider.state
                         ? `${provider.city}/${provider.state}`
