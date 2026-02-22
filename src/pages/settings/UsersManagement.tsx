@@ -151,13 +151,16 @@ export default function UsersManagement() {
 
   const deleteMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const res = await supabase.functions.invoke("admin-users", {
+      const { data, error } = await supabase.functions.invoke("admin-users", {
         method: "POST",
         body: { action: "delete", user_id: userId },
       });
-      if (res.error) throw res.error;
-      if (res.data?.error) throw new Error(res.data.error);
-      return res.data;
+      if (error) {
+        console.error("Delete error:", error);
+        throw error;
+      }
+      if (data?.error) throw new Error(data.error);
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
