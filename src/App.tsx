@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
+import { ProviderLayout } from "@/components/ProviderLayout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ServiceRequests from "./pages/operation/ServiceRequests";
@@ -14,6 +15,9 @@ import PermissionsManagement from "./pages/settings/PermissionsManagement";
 import Placeholder from "./pages/Placeholder";
 import NotFound from "./pages/NotFound";
 import RegisterProvider from "./pages/RegisterProvider";
+import ProviderDashboard from "./pages/provider/ProviderDashboard";
+import ProviderServices from "./pages/provider/ProviderServices";
+import ProviderFinancial from "./pages/provider/ProviderFinancial";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +33,14 @@ const App = () => (
             <Route path="/cadastro/prestador/:tenantSlug" element={<RegisterProvider />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             
+            {/* Provider Portal */}
+            <Route element={<ProviderLayout />}>
+              <Route path="/provider/dashboard" element={<ProviderDashboard />} />
+              <Route path="/provider/services" element={<ProviderServices />} />
+              <Route path="/provider/financial" element={<ProviderFinancial />} />
+            </Route>
+
+            {/* Admin/Operator Portal */}
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/operation/new" element={<NewServiceRequest />} />
