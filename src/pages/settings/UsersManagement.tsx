@@ -151,8 +151,9 @@ export default function UsersManagement() {
 
   const deleteMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const res = await supabase.functions.invoke(`admin-users?user_id=${userId}`, {
-        method: "DELETE",
+      const res = await supabase.functions.invoke("admin-users", {
+        method: "POST",
+        body: { action: "delete", user_id: userId },
       });
       if (res.error) throw res.error;
       if (res.data?.error) throw new Error(res.data.error);
