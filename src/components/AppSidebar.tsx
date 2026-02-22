@@ -55,7 +55,6 @@ const menuSections: MenuSection[] = [
     module: "business",
     items: [
       { title: "Clientes", url: "/business/clients", icon: Building2 },
-      { title: "Planos", url: "/business/plans", icon: Award },
       { title: "Beneficiários", url: "/business/beneficiaries", icon: UserCheck },
     ],
   },
