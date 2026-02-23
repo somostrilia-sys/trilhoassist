@@ -319,6 +319,8 @@ export default function NewServiceRequest() {
     const providerCostNum = form.provider_cost ? parseFloat(form.provider_cost) : 0;
     const chargedAmountNum = form.charged_amount ? parseFloat(form.charged_amount) : 0;
 
+    const beneficiaryToken = crypto.randomUUID();
+
     const { data: inserted, error } = await supabase.from("service_requests").insert({
       requester_name: form.requester_name,
       requester_phone: form.requester_phone,
@@ -348,6 +350,7 @@ export default function NewServiceRequest() {
       protocol: "temp",
       vehicle_category: vehicleCategory,
       verification_answers: getVerificationAnswers() as any,
+      beneficiary_token: beneficiaryToken,
     }).select("id").single();
 
     if (!error && inserted) {
@@ -360,7 +363,11 @@ export default function NewServiceRequest() {
       });
 
       sendServiceLabel(inserted.id, "creation");
-      sendAutoNotify(inserted.id, "beneficiary_creation");
+
+      const beneficiaryTrackingUrl = `${window.location.origin}/tracking/${beneficiaryToken}`;
+      sendAutoNotify(inserted.id, "beneficiary_creation", {
+        beneficiary_tracking_url: beneficiaryTrackingUrl,
+      });
 
       if (conversationId) {
         await supabase

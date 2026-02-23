@@ -554,19 +554,44 @@ export default function ServiceRequestDetail() {
             Criado em {new Date(request.created_at).toLocaleDateString("pt-BR")} às {new Date(request.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
           </p>
         </div>
-        {dispatchId && (
+        {request.beneficiary_token && (
           <Button
             variant="outline"
             size="sm"
             className="gap-2 shrink-0"
             onClick={() => {
-              const url = `${window.location.origin}/nav/${dispatchId}`;
+              const url = `${window.location.origin}/tracking/${request.beneficiary_token}`;
               navigator.clipboard.writeText(url);
-              toast.success("Link copiado!", { description: "Envie para o prestador via WhatsApp." });
+              toast.success("Link do beneficiário copiado!", { description: "Link de acompanhamento em tempo real." });
+            }}
+          >
+            <LinkIcon className="h-4 w-4" />
+            Link Beneficiário
+          </Button>
+        )}
+        {dispatchId && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 shrink-0"
+            onClick={async () => {
+              // Fetch provider_token from dispatch
+              const { data: d } = await supabase
+                .from("dispatches")
+                .select("provider_token")
+                .eq("id", dispatchId)
+                .single();
+              if (d?.provider_token) {
+                const url = `${window.location.origin}/tracking/provider/${d.provider_token}`;
+                navigator.clipboard.writeText(url);
+                toast.success("Link do prestador copiado!", { description: "Link de navegação e rastreamento." });
+              } else {
+                toast.error("Token do prestador não encontrado.");
+              }
             }}
           >
             <Share2 className="h-4 w-4" />
-            Copiar link prestador
+            Link Prestador
           </Button>
         )}
         {request.service_type === "collision" && request.share_token && (
@@ -581,7 +606,7 @@ export default function ServiceRequestDetail() {
             }}
           >
             <LinkIcon className="h-4 w-4" />
-            Copiar link colisão
+            Link Colisão
           </Button>
         )}
       </div>

@@ -28,7 +28,7 @@ Seu atendimento foi registrado com sucesso pelo *{{tenant_name}}*.
 *Protocolo*: {{protocol}}
 *Serviço*: {{service_name}}
 
-Excelente! 👌 Encaminhei seus dados para o setor de acionamento. Agora estamos localizando o prestador mais próximo. Assim que tiver a previsão de chegada, retorno aqui com as informações.
+Excelente! 👌 Encaminhei seus dados para o setor de acionamento. Agora estamos localizando o prestador mais próximo. Assim que tiver a previsão de chegada, retorno aqui com as informações.{{tracking_text}}
 
 Aguarde, por favor! 🙏`,
 
@@ -211,7 +211,9 @@ Deno.serve(async (req) => {
 
     // Tracking text for beneficiary_dispatch
     vars.tracking_text = "";
-    if (trigger === "beneficiary_dispatch" && beneficiary_tracking_url) {
+    if (trigger === "beneficiary_creation" && beneficiary_tracking_url) {
+      vars.tracking_text = `\n\n📍 Acompanhe seu atendimento em tempo real:\n${beneficiary_tracking_url}`;
+    } else if (trigger === "beneficiary_dispatch" && beneficiary_tracking_url) {
       vars.tracking_text = `\n\n📍 Segue o link pra você acompanhar o andamento e a chegada do prestador:\n${beneficiary_tracking_url}\n\nPor favor, *não se esqueça de marcar no seu link quando ele chegar*, isso ajuda a gente a acompanhar aqui. ✅`;
     } else if (trigger === "provider_dispatch" && provider_tracking_url) {
       vars.tracking_text = `\n\n📍 *Navegação e rastreamento*:\n${provider_tracking_url}\n\nPor favor, acesse o link acima para iniciar a navegação e compartilhar sua localização em tempo real.`;
