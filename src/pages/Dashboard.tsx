@@ -2,7 +2,8 @@ import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  Headphones, Send, DollarSign, Clock, TrendingUp, AlertCircle
+  Headphones, Send, DollarSign, Clock, TrendingUp, AlertCircle,
+  Timer, Route, Banknote, Zap,
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -39,26 +40,25 @@ const serviceTypeColors = [
   "#8b5cf6", "#ec4899", "#14b8a6", "#f97316",
 ];
 
-interface Stats {
-  totalRequests: number;
-  totalDispatches: number;
-  totalRevenue: number;
-  avgCost: number;
-  openRequests: number;
-  inProgressRequests: number;
-}
-
 const tooltipStyle = {
   backgroundColor: "hsl(var(--card))",
   border: "1px solid hsl(var(--border))",
   borderRadius: "8px",
 };
 
+function formatDuration(minutes: number): string {
+  if (!minutes || !isFinite(minutes)) return "—";
+  if (minutes < 60) return `${Math.round(minutes)}min`;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return m > 0 ? `${h}h ${m}min` : `${h}h`;
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+}
+
 export default function Dashboard() {
-  const [stats, setStats] = useState<Stats>({
-    totalRequests: 0, totalDispatches: 0, totalRevenue: 0,
-    avgCost: 0, openRequests: 0, inProgressRequests: 0,
-  });
   const [allRequests, setAllRequests] = useState<any[]>([]);
   const [allDispatches, setAllDispatches] = useState<any[]>([]);
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
@@ -101,20 +101,59 @@ export default function Dashboard() {
     return allDispatches.filter((d) => reqIds.has(d.service_request_id));
   }, [allDispatches, clientFilter, requests]);
 
-  // Compute stats from filtered data
-  useEffect(() => {
-    const totalRevenue = requests.reduce((sum, r) => sum + Number(r.charged_amount || 0), 0);
-    setStats({
-      totalRequests: requests.length,
-      totalDispatches: dispatches.length,
-      totalRevenue,
-      avgCost: requests.length > 0 ? totalRevenue / requests.length : 0,
-      openRequests: requests.filter((r) => r.status === "open" || r.status === "awaiting_dispatch").length,
-      inProgressRequests: requests.filter((r) => r.status === "dispatched" || r.status === "in_progress").length,
-    });
-  }, [requests, dispatches]);
-
   const days = Number(periodDays);
+
+  // ===== COMPUTED KPIs =====
+  const kpiData = useMemo(() => {
+    const totalRequests = requests.length;
+    const totalDispatches = dispatches.length;
+    const totalRevenue = requests.reduce((s, r) => s + Number(r.charged_amount || 0), 0);
+    const totalCost = requests.reduce((s, r) => s + Number(r.provider_cost || 0), 0);
+    const totalGanho = totalRevenue - totalCost;
+    const avgCost = totalRequests > 0 ? totalRevenue / totalRequests : 0;
+    const openRequests = requests.filter((r) => r.status === "open" || r.status === "awaiting_dispatch").length;
+    const inProgressRequests = requests.filter((r) => r.status === "dispatched" || r.status === "in_progress").length;
+
+    // Tempo médio de atendimento (created_at → completed_at, only completed)
+    const completedReqs = requests.filter((r) => r.status === "completed" && r.completed_at);
+    let avgServiceTimeMin = 0;
+    if (completedReqs.length > 0) {
+      const totalMin = completedReqs.reduce((s, r) => {
+        const diff = (new Date(r.completed_at).getTime() - new Date(r.created_at).getTime()) / 60000;
+        return s + diff;
+      }, 0);
+      avgServiceTimeMin = totalMin / completedReqs.length;
+    }
+
+    // Tempo médio de acionamento (dispatch created_at → accepted_at)
+    const acceptedDisp = dispatches.filter((d) => d.accepted_at);
+    let avgDispatchTimeMin = 0;
+    if (acceptedDisp.length > 0) {
+      const totalMin = acceptedDisp.reduce((s, d) => {
+        const diff = (new Date(d.accepted_at).getTime() - new Date(d.created_at).getTime()) / 60000;
+        return s + diff;
+      }, 0);
+      avgDispatchTimeMin = totalMin / acceptedDisp.length;
+    }
+
+    // Distância média
+    const withKm = requests.filter((r) => r.estimated_km && Number(r.estimated_km) > 0);
+    const avgKm = withKm.length > 0
+      ? withKm.reduce((s, r) => s + Number(r.estimated_km), 0) / withKm.length
+      : 0;
+
+    // Valor médio prestador
+    const withCost = requests.filter((r) => Number(r.provider_cost) > 0);
+    const avgProviderCost = withCost.length > 0
+      ? withCost.reduce((s, r) => s + Number(r.provider_cost), 0) / withCost.length
+      : 0;
+
+    return {
+      totalRequests, totalDispatches, totalRevenue, totalCost, totalGanho,
+      avgCost, openRequests, inProgressRequests,
+      avgServiceTimeMin, avgDispatchTimeMin, avgKm, avgProviderCost,
+    };
+  }, [requests, dispatches]);
 
   // Status pie chart data
   const statusData = useMemo(() => {
@@ -173,13 +212,23 @@ export default function Dashboard() {
     }));
   }, [requests, days]);
 
-  const kpis = [
-    { label: "Atendimentos", value: stats.totalRequests, icon: Headphones, color: "text-primary" },
-    { label: "Acionamentos", value: stats.totalDispatches, icon: Send, color: "text-info" },
-    { label: "Total (R$)", value: `R$ ${stats.totalRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, icon: DollarSign, color: "text-success" },
-    { label: "Méd. Atend. (R$)", value: `R$ ${stats.avgCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, icon: TrendingUp, color: "text-warning" },
-    { label: "Abertos", value: stats.openRequests, icon: AlertCircle, color: "text-accent" },
-    { label: "Em andamento", value: stats.inProgressRequests, icon: Clock, color: "text-primary" },
+  // ===== KPI cards config =====
+  const kpiCards = [
+    { label: "Atendimentos", value: String(kpiData.totalRequests), icon: Headphones, color: "text-primary" },
+    { label: "Acionamentos", value: String(kpiData.totalDispatches), icon: Send, color: "text-info" },
+    { label: "Abertos", value: String(kpiData.openRequests), icon: AlertCircle, color: "text-accent" },
+    { label: "Em andamento", value: String(kpiData.inProgressRequests), icon: Clock, color: "text-primary" },
+    { label: "Faturado", value: formatCurrency(kpiData.totalRevenue), icon: DollarSign, color: "text-success" },
+    { label: "Ganho", value: formatCurrency(kpiData.totalGanho), icon: TrendingUp, color: "text-success", highlight: true },
+  ];
+
+  const kpiCards2 = [
+    { label: "Tempo Méd. Atendimento", value: formatDuration(kpiData.avgServiceTimeMin), icon: Timer, color: "text-info" },
+    { label: "Tempo Méd. Acionamento", value: formatDuration(kpiData.avgDispatchTimeMin), icon: Zap, color: "text-warning" },
+    { label: "Distância Média", value: kpiData.avgKm > 0 ? `${kpiData.avgKm.toFixed(1)} km` : "—", icon: Route, color: "text-primary" },
+    { label: "Valor Méd. Cobrado", value: formatCurrency(kpiData.avgCost), icon: DollarSign, color: "text-primary" },
+    { label: "Valor Méd. Prestador", value: formatCurrency(kpiData.avgProviderCost), icon: Banknote, color: "text-destructive" },
+    { label: "Custo Total Prestadores", value: formatCurrency(kpiData.totalCost), icon: Banknote, color: "text-destructive" },
   ];
 
   const RADIAN = Math.PI / 180;
@@ -229,16 +278,31 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs — Row 1: Operacionais */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {kpis.map((kpi) => (
+        {kpiCards.map((kpi) => (
+          <Card key={kpi.label} className={kpi.highlight ? "border-success/30 bg-success/5" : ""}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-muted-foreground">{kpi.label}</span>
+                <kpi.icon className={`h-4 w-4 ${kpi.color}`} />
+              </div>
+              <p className="text-xl font-bold">{loading ? "..." : kpi.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* KPIs — Row 2: Médias e Performance */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {kpiCards2.map((kpi) => (
           <Card key={kpi.label}>
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-muted-foreground">{kpi.label}</span>
-                <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
+                <span className="text-xs text-muted-foreground">{kpi.label}</span>
+                <kpi.icon className={`h-4 w-4 ${kpi.color}`} />
               </div>
-              <p className="text-2xl font-bold">{loading ? "..." : kpi.value}</p>
+              <p className="text-xl font-bold">{loading ? "..." : kpi.value}</p>
             </CardContent>
           </Card>
         ))}
