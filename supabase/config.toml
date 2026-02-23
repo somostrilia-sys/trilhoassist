@@ -27,3 +27,6 @@ verify_jwt = false
 [functions.nps-submit]
 verify_jwt = false
 
+[functions.google-places]
+verify_jwt = false
+
