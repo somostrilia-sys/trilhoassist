@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import RouteMap, { type RoutePoint } from "@/components/RouteMap";
 import { toast } from "sonner";
 import CollisionMediaUpload from "@/components/collision/CollisionMediaUpload";
+import { sendServiceLabel } from "@/lib/serviceLabel";
 
 const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   open: { label: "Aberto", variant: "default" },
@@ -273,6 +274,10 @@ export default function ServiceRequestDetail() {
       toast.error("Erro ao alterar status", { description: error.message });
     } else {
       await logEvent("status_change", `Status alterado de ${statusMap[oldStatus]?.label || oldStatus} para ${statusMap[newStatus]?.label || newStatus}`, oldStatus, newStatus);
+      // Send completion label
+      if (newStatus === "completed") {
+        sendServiceLabel(id, "completion");
+      }
       toast.success("Status alterado!", { description: `Novo status: ${statusMap[newStatus]?.label || newStatus}` });
       setStatusDialogOpen(false);
       loadData();
@@ -292,6 +297,8 @@ export default function ServiceRequestDetail() {
       toast.error("Erro ao cancelar", { description: error.message });
     } else {
       await logEvent("cancel", `Atendimento cancelado. Motivo: ${cancelReason}`, request.status, "cancelled");
+      // Send cancellation label
+      sendServiceLabel(id, "cancellation", { cancel_reason: cancelReason });
       toast.success("Atendimento cancelado");
       setCancelDialogOpen(false);
       setCancelReason("");
@@ -357,6 +364,12 @@ export default function ServiceRequestDetail() {
         },
       }).catch(console.error);
     }
+
+    // Send dispatch preview label to client WhatsApp group
+    sendServiceLabel(id, "dispatch_preview", {
+      provider_id: selectedProviderId,
+      quoted_amount: quotedAmount ? parseFloat(quotedAmount) : undefined,
+    });
 
     setActionLoading(false);
     toast.success("Prestador acionado!", { description: "Links de rastreamento enviados via WhatsApp." });
