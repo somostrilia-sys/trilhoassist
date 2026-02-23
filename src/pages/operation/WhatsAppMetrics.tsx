@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenantId } from "@/hooks/useFinancialData";
@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3, Clock, Users, MessageSquare, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { subDays } from "date-fns";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -23,15 +25,19 @@ const COLORS = [
 export default function WhatsAppMetrics() {
   const { data: tenantId } = useTenantId();
   const navigate = useNavigate();
+  const [period, setPeriod] = useState("30");
+
+  const sinceDate = useMemo(() => subDays(new Date(), Number(period)).toISOString(), [period]);
 
   // Fetch conversations
   const { data: conversations = [] } = useQuery({
-    queryKey: ["wa-metrics-conversations", tenantId],
+    queryKey: ["wa-metrics-conversations", tenantId, period],
     queryFn: async () => {
       const { data } = await supabase
         .from("whatsapp_conversations")
         .select("id, assigned_to, status, priority, created_at, last_message_at")
-        .eq("tenant_id", tenantId!);
+        .eq("tenant_id", tenantId!)
+        .gte("created_at", sinceDate);
       return data ?? [];
     },
     enabled: !!tenantId,
@@ -39,13 +45,14 @@ export default function WhatsAppMetrics() {
 
   // Fetch messages for response time calculation
   const { data: messages = [] } = useQuery({
-    queryKey: ["wa-metrics-messages", tenantId],
+    queryKey: ["wa-metrics-messages", tenantId, period],
     queryFn: async () => {
       const { data } = await supabase
         .from("whatsapp_messages")
         .select("conversation_id, direction, created_at")
+        .gte("created_at", sinceDate)
         .order("created_at", { ascending: true })
-        .limit(1000);
+        .limit(5000);
       return data ?? [];
     },
     enabled: !!tenantId,
@@ -153,17 +160,24 @@ export default function WhatsAppMetrics() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/operation/whatsapp")}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BarChart3 className="h-6 w-6 text-primary" />
-            Métricas WhatsApp
-          </h1>
-          <p className="text-sm text-muted-foreground">Visão geral do desempenho do atendimento via WhatsApp</p>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/operation/whatsapp")}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <BarChart3 className="h-6 w-6 text-primary" />
+              Métricas WhatsApp
+            </h1>
+            <p className="text-sm text-muted-foreground">Visão geral do desempenho do atendimento via WhatsApp</p>
+          </div>
         </div>
+        <ToggleGroup type="single" value={period} onValueChange={(v) => v && setPeriod(v)} className="border rounded-lg p-1">
+          <ToggleGroupItem value="7" className="text-xs px-3">7 dias</ToggleGroupItem>
+          <ToggleGroupItem value="30" className="text-xs px-3">30 dias</ToggleGroupItem>
+          <ToggleGroupItem value="90" className="text-xs px-3">90 dias</ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       {/* Summary Cards */}
