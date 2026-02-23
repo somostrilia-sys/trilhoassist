@@ -27,7 +27,7 @@ interface MenuSection {
   icon: any;
   collapsible: boolean;
   items: MenuItem[];
-  module: string; // maps to role_permissions.module
+  module: string;
 }
 
 const menuSections: MenuSection[] = [
@@ -116,30 +116,32 @@ export function AppSidebar() {
     <Sidebar className="border-r-0">
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <img src={logoTrilho} alt="Trilho Soluções" className="h-10 w-10 rounded-lg object-contain bg-white/10 p-1" />
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold text-sidebar-primary">Trilho Soluções</span>
-            <span className="text-xs text-sidebar-foreground/60">Gestão de Operações</span>
+          <div className="h-10 w-10 rounded-xl bg-white/10 p-1.5 ring-1 ring-white/10 shadow-lg">
+            <img src={logoTrilho} alt="Trilho Soluções" className="h-full w-full rounded-lg object-contain" />
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-bold text-sidebar-primary tracking-tight">Trilho Soluções</span>
+            <span className="text-[11px] text-sidebar-foreground/50 font-medium">Gestão de Operações</span>
           </div>
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="px-2 py-2">
+      <SidebarContent className="px-2 py-3 custom-scrollbar">
         {visibleSections.map((section) =>
           section.collapsible ? (
             <Collapsible key={section.label} className="group/collapsible">
-              <SidebarGroup>
+              <SidebarGroup className="py-0.5">
                 <CollapsibleTrigger asChild>
-                  <SidebarGroupLabel className="flex items-center justify-between cursor-pointer hover:bg-sidebar-accent rounded-md px-2 py-2 text-sidebar-foreground">
+                  <SidebarGroupLabel className="flex items-center justify-between cursor-pointer hover:bg-sidebar-accent/60 rounded-lg px-2.5 py-2 text-sidebar-foreground/70 text-[11px] uppercase tracking-wider font-semibold transition-colors">
                     <div className="flex items-center gap-2">
-                      <section.icon className="h-4 w-4" />
+                      <section.icon className="h-3.5 w-3.5" />
                       <span>{section.label}</span>
                     </div>
-                    <ChevronDown className="h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                    <ChevronDown className="h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180 opacity-50" />
                   </SidebarGroupLabel>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <SidebarGroupContent>
+                  <SidebarGroupContent className="mt-0.5">
                     <SidebarMenu>
                       {section.items.map((item) => (
                         <SidebarMenuItem key={item.title}>
@@ -147,10 +149,10 @@ export function AppSidebar() {
                             <NavLink
                               to={item.url}
                               end
-                              className="flex items-center gap-2 px-4 py-2 text-sm rounded-md text-sidebar-foreground hover:bg-sidebar-accent"
-                              activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                              className="flex items-center gap-2.5 px-3 py-1.5 text-[13px] rounded-lg text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground transition-all duration-150"
+                              activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
                             >
-                              <item.icon className="h-4 w-4" />
+                              <item.icon className="h-4 w-4 shrink-0" />
                               <span>{item.title}</span>
                             </NavLink>
                           </SidebarMenuButton>
@@ -162,7 +164,7 @@ export function AppSidebar() {
               </SidebarGroup>
             </Collapsible>
           ) : (
-            <SidebarGroup key={section.label}>
+            <SidebarGroup key={section.label} className="py-0.5">
               <SidebarGroupContent>
                 <SidebarMenu>
                   {section.items.map((item) => (
@@ -171,10 +173,10 @@ export function AppSidebar() {
                         <NavLink
                           to={item.url}
                           end
-                          className="flex items-center gap-2 px-2 py-2 text-sm rounded-md text-sidebar-foreground hover:bg-sidebar-accent"
-                          activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                          className="flex items-center gap-2.5 px-3 py-2 text-[13px] rounded-lg text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground transition-all duration-150"
+                          activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
                         >
-                          <item.icon className="h-4 w-4" />
+                          <item.icon className="h-4 w-4 shrink-0" />
                           <span>{item.title}</span>
                         </NavLink>
                       </SidebarMenuButton>
@@ -187,10 +189,10 @@ export function AppSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="p-2 border-t border-sidebar-border">
+      <SidebarFooter className="p-2.5 border-t border-sidebar-border">
         <Button
           variant="ghost"
-          className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent"
+          className="w-full justify-start gap-2.5 text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground rounded-lg text-[13px] transition-all duration-150"
           onClick={handleSignOut}
         >
           <LogOut className="h-4 w-4" />

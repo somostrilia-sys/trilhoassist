@@ -35,7 +35,7 @@
     --input: 214 20% 88%;
     --ring: 218 58% 26%;
 
-    --radius: 0.5rem;
+    --radius: 0.625rem;
 
     --sidebar-background: 218 58% 18%;
     --sidebar-foreground: 210 15% 80%;
@@ -90,7 +90,85 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground antialiased;
     font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply tracking-tight;
+  }
+}
+
+@layer components {
+  /* Professional card hover effect */
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-md hover:-translate-y-px;
+  }
+
+  /* Subtle gradient border accent */
+  .border-gradient {
+    @apply relative overflow-hidden;
+  }
+  .border-gradient::before {
+    content: '';
+    @apply absolute top-0 left-0 right-0 h-[2px];
+    background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)), hsl(var(--primary)));
+  }
+
+  /* Page header styling */
+  .page-header {
+    @apply pb-1;
+  }
+  .page-header h1 {
+    @apply text-2xl font-bold text-foreground;
+  }
+  .page-header p {
+    @apply text-sm text-muted-foreground mt-0.5;
+  }
+
+  /* Smooth scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+
+  /* KPI card refinement */
+  .kpi-card {
+    @apply relative overflow-hidden transition-all duration-200 hover:shadow-md;
+  }
+  .kpi-card::after {
+    content: '';
+    @apply absolute bottom-0 left-0 right-0 h-[2px] opacity-0 transition-opacity duration-200;
+    background: hsl(var(--primary));
+  }
+  .kpi-card:hover::after {
+    @apply opacity-100;
+  }
+}
+
+/* Smooth transitions for all interactive elements */
+@layer utilities {
+  .animate-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
