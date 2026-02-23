@@ -3,10 +3,36 @@ import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Car, Loader2, AlertCircle, Clock } from "lucide-react";
+import { MapPin, Car, Loader2, AlertCircle, Clock, Bell } from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function playNotificationSound() {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = "sine";
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.8);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.8);
+  } catch {}
+}
 
 const serviceTypeMap: Record<string, string> = {
   tow_light: "Reboque Leve", tow_heavy: "Reboque Pesado", tow_motorcycle: "Reboque Moto",
@@ -23,6 +49,9 @@ export default function BeneficiaryTracking() {
   const [error, setError] = useState<string | null>(null);
   const [providerPos, setProviderPos] = useState<{ lat: number; lng: number } | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [isNearby, setIsNearby] = useState(false);
+  const [distanceKm, setDistanceKm] = useState<number | null>(null);
+  const notifiedRef = useRef(false);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -167,6 +196,19 @@ export default function BeneficiaryTracking() {
     mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50] });
   }, [providerPos, providerName, request?.origin_lat, request?.origin_lng]);
 
+  // Proximity check
+  useEffect(() => {
+    if (!providerPos || !request?.origin_lat || !request?.origin_lng) return;
+    const dist = haversineDistance(providerPos.lat, providerPos.lng, request.origin_lat, request.origin_lng);
+    setDistanceKm(dist);
+    if (dist <= 1 && !notifiedRef.current) {
+      setIsNearby(true);
+      notifiedRef.current = true;
+      playNotificationSound();
+      if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
+    }
+  }, [providerPos, request?.origin_lat, request?.origin_lng]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -220,6 +262,21 @@ export default function BeneficiaryTracking() {
           </CardContent>
         </Card>
 
+        {/* Nearby alert */}
+        {isNearby && (
+          <Card className="border-primary bg-primary/10 animate-pulse">
+            <CardContent className="pt-4 flex items-center gap-3">
+              <Bell className="h-6 w-6 text-primary" />
+              <div>
+                <p className="font-bold text-primary text-sm">Prestador muito próximo!</p>
+                <p className="text-xs text-muted-foreground">
+                  {distanceKm !== null && `A ${(distanceKm * 1000).toFixed(0)}m de distância`}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Map */}
         <Card>
           <CardContent className="pt-4 space-y-3">
@@ -228,12 +285,19 @@ export default function BeneficiaryTracking() {
                 <MapPin className="h-4 w-4" />
                 Localização do prestador
               </h3>
-              {lastUpdate && (
-                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {lastUpdate.toLocaleTimeString("pt-BR")}
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {distanceKm !== null && (
+                  <Badge variant={isNearby ? "default" : "outline"} className="text-xs">
+                    {distanceKm < 1 ? `${(distanceKm * 1000).toFixed(0)}m` : `${distanceKm.toFixed(1)}km`}
+                  </Badge>
+                )}
+                {lastUpdate && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {lastUpdate.toLocaleTimeString("pt-BR")}
+                  </span>
+                )}
+              </div>
             </div>
 
             {!providerPos && !dispatch && (
