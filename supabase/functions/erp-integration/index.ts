@@ -12,6 +12,40 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const body = await req.json();
+    const { action } = body;
+
+    // ─── AUTO SYNC (called by cron, no user auth) ───
+    if (action === "auto_sync") {
+      const serviceSupabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+
+      const { data: clients } = await serviceSupabase
+        .from("clients")
+        .select("id, name, api_endpoint, api_key, tenant_id, auto_sync_enabled")
+        .eq("auto_sync_enabled", true);
+
+      if (!clients || clients.length === 0) {
+        return jsonResponse({ message: "No clients with auto sync enabled" });
+      }
+
+      const results = [];
+      for (const client of clients) {
+        if (!client.api_endpoint || !client.api_key) continue;
+        try {
+          const importResult = await importBeneficiaries(serviceSupabase, client, client.tenant_id, "automatic");
+          results.push({ client: client.name, ...importResult });
+        } catch (err: any) {
+          results.push({ client: client.name, error: err.message });
+        }
+      }
+
+      return jsonResponse({ synced: results.length, results });
+    }
+
+    // ─── AUTHENTICATED ACTIONS ───
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -35,8 +69,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const body = await req.json();
-    const { action, client_id, tenant_id } = body;
+    const { client_id, tenant_id } = body;
 
     // Get client's API config
     const { data: client, error: clientError } = await supabase
@@ -281,34 +314,97 @@ async function updateSyncLog(
     .eq("id", id);
 }
 
+async function importBeneficiaries(supabase: any, client: any, tenantId: string, syncType: string) {
+  const { data: syncLog } = await supabase
+    .from("erp_sync_logs")
+    .insert({ client_id: client.id, tenant_id: tenantId, sync_type: syncType, status: "running" })
+    .select()
+    .single();
+
+  try {
+    const response = await fetch(client.api_endpoint, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${client.api_key}`, "Content-Type": "application/json" },
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      if (syncLog) await updateSyncLog(supabase, syncLog.id, "error", 0, 0, 0, `ERP erro ${response.status}`);
+      return { error: `ERP erro ${response.status}: ${text.substring(0, 100)}` };
+    }
+
+    const erpData = await response.json();
+    const records = Array.isArray(erpData) ? erpData : erpData.data || erpData.results || erpData.beneficiarios || [];
+    if (!Array.isArray(records)) {
+      if (syncLog) await updateSyncLog(supabase, syncLog.id, "error", 0, 0, 0, "Formato não reconhecido");
+      return { error: "Formato não reconhecido" };
+    }
+
+    const { data: mappings } = await supabase.from("erp_field_mappings").select("*").eq("client_id", client.id);
+    const planMap = new Map((mappings || []).filter((m: any) => m.field_type === "plan").map((m: any) => [m.erp_value, m.trilho_id]));
+    const coopMap = new Map((mappings || []).filter((m: any) => m.field_type === "cooperativa").map((m: any) => [m.erp_value, m.trilho_value]));
+
+    let created = 0, updated = 0;
+    for (const record of records) {
+      const plate = record.placa || record.vehicle_plate || record.plate || "";
+      const name = record.nome || record.name || record.beneficiario || "";
+      if (!name && !plate) continue;
+
+      const phone = record.telefone || record.phone || record.celular || "";
+      const cpf = record.cpf || record.documento || "";
+      const vehicleModel = record.modelo || record.vehicle_model || record.veiculo || "";
+      const vehicleYear = record.ano || record.vehicle_year || record.year || null;
+      const vehicleChassis = record.chassi || record.chassis || "";
+      const erpPlan = record.plano || record.plan || record.plan_name || "";
+      const erpCoop = record.cooperativa || record.coop || record.cooperative || "";
+      const planId = planMap.get(erpPlan) || null;
+      const cooperativa = coopMap.get(erpCoop) || erpCoop;
+
+      const { data: existing } = await supabase
+        .from("beneficiaries").select("id").eq("client_id", client.id).eq("vehicle_plate", plate).maybeSingle();
+
+      if (existing) {
+        await supabase.from("beneficiaries").update({
+          name, phone: phone || undefined, cpf: cpf || undefined,
+          vehicle_model: vehicleModel || undefined, vehicle_year: vehicleYear ? parseInt(vehicleYear) : undefined,
+          vehicle_chassis: vehicleChassis || undefined, plan_id: planId || undefined, cooperativa: cooperativa || undefined,
+        }).eq("id", existing.id);
+        updated++;
+      } else {
+        await supabase.from("beneficiaries").insert({
+          client_id: client.id, name, vehicle_plate: plate, phone: phone || null, cpf: cpf || null,
+          vehicle_model: vehicleModel || null, vehicle_year: vehicleYear ? parseInt(vehicleYear) : null,
+          vehicle_chassis: vehicleChassis || null, plan_id: planId, cooperativa: cooperativa || null,
+        });
+        created++;
+      }
+    }
+
+    if (syncLog) await updateSyncLog(supabase, syncLog.id, "success", records.length, created, updated, null);
+    return { records_found: records.length, records_created: created, records_updated: updated };
+  } catch (err: any) {
+    if (syncLog) await updateSyncLog(supabase, syncLog.id, "error", 0, 0, 0, err.message);
+    return { error: err.message };
+  }
+}
+
 function extractSampleFields(data: any): any {
   const records = Array.isArray(data) ? data : data.data || data.results || data.beneficiarios || [];
   if (!Array.isArray(records) || records.length === 0) return { keys: [], sample: null };
-
   const sample = records[0];
-  return {
-    keys: Object.keys(sample),
-    sample,
-    total_records: records.length,
-  };
+  return { keys: Object.keys(sample), sample, total_records: records.length };
 }
 
 function extractUniqueFields(data: any): any {
   const records = Array.isArray(data) ? data : data.data || data.results || data.beneficiarios || [];
   if (!Array.isArray(records)) return { plans: [], cooperativas: [] };
-
   const plans = new Set<string>();
   const cooperativas = new Set<string>();
-
   for (const r of records) {
     const plan = r.plano || r.plan || r.plan_name || "";
     const coop = r.cooperativa || r.coop || r.cooperative || "";
     if (plan) plans.add(plan);
     if (coop) cooperativas.add(coop);
   }
-
-  return {
-    plans: [...plans].sort(),
-    cooperativas: [...cooperativas].sort(),
-  };
+  return { plans: [...plans].sort(), cooperativas: [...cooperativas].sort() };
 }
