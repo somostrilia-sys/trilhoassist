@@ -7,19 +7,11 @@ const corsHeaders = {
 };
 
 const serviceTypeMap: Record<string, string> = {
-  tow_light: "Reboque Leve",
-  tow_heavy: "Reboque Pesado",
-  tow_motorcycle: "Reboque Moto",
-  locksmith: "Chaveiro",
-  tire_change: "Troca de Pneu",
-  battery: "Bateria",
-  fuel: "Combustível",
-  lodging: "Hospedagem",
-  collision: "Colisão",
-  other: "Outro",
+  tow_light: "Reboque Leve", tow_heavy: "Reboque Pesado", tow_motorcycle: "Reboque Moto",
+  locksmith: "Chaveiro", tire_change: "Troca de Pneu", battery: "Bateria",
+  fuel: "Combustível", lodging: "Hospedagem", collision: "Colisão", other: "Outro",
 };
 
-// Default message templates
 const DEFAULT_MESSAGES: Record<string, string> = {
   beneficiary_creation: `Olá, {{beneficiary_name}}! 👋
 
@@ -65,27 +57,26 @@ function interpolateMessage(template: string, vars: Record<string, string>): str
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "—");
 }
 
-async function sendEvolutionMessage(phone: string, message: string): Promise<{ ok: boolean; result: any }> {
-  const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
-  const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
-  const EVOLUTION_INSTANCE = Deno.env.get("EVOLUTION_INSTANCE") || "default";
-
-  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
-    return { ok: false, result: { error: "Evolution API not configured" } };
+async function sendEvolutionMessage(
+  evolutionUrl: string,
+  evolutionKey: string,
+  evolutionInstance: string,
+  phone: string,
+  message: string
+): Promise<{ ok: boolean; result: any }> {
+  if (!evolutionUrl || !evolutionKey) {
+    return { ok: false, result: { error: "Evolution API not configured for this tenant" } };
   }
 
-  const baseUrl = EVOLUTION_API_URL.replace(/\/$/, "");
+  const baseUrl = evolutionUrl.replace(/\/$/, "");
   let cleanPhone = phone.replace(/\D/g, "");
   if (cleanPhone.length <= 11) {
     cleanPhone = `55${cleanPhone}`;
   }
 
-  const response = await fetch(`${baseUrl}/message/sendText/${EVOLUTION_INSTANCE}`, {
+  const response = await fetch(`${baseUrl}/message/sendText/${evolutionInstance}`, {
     method: "POST",
-    headers: {
-      apikey: EVOLUTION_API_KEY,
-      "Content-Type": "application/json",
-    },
+    headers: { apikey: evolutionKey, "Content-Type": "application/json" },
     body: JSON.stringify({ number: cleanPhone, text: message }),
   });
 
@@ -102,8 +93,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -117,26 +107,18 @@ Deno.serve(async (req) => {
     const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims(token);
     if (claimsErr || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const {
-      service_request_id,
-      trigger,
-      provider_name,
-      provider_phone,
-      estimated_arrival_min,
-      provider_tracking_url,
-      beneficiary_tracking_url,
-      nps_link,
+      service_request_id, trigger, provider_name, provider_phone,
+      estimated_arrival_min, provider_tracking_url, beneficiary_tracking_url, nps_link,
     } = await req.json();
 
     if (!service_request_id || !trigger) {
       return new Response(JSON.stringify({ error: "service_request_id and trigger are required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -145,7 +127,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Fetch service request
     const { data: sr, error: srErr } = await adminSupabase
       .from("service_requests")
       .select("*, clients(name), beneficiaries(name, phone)")
@@ -154,15 +135,14 @@ Deno.serve(async (req) => {
 
     if (srErr || !sr) {
       return new Response(JSON.stringify({ error: "Service request not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Fetch tenant for branding + notification settings
+    // Fetch tenant for branding, notification settings AND integration keys
     const { data: tenant } = await adminSupabase
       .from("tenants")
-      .select("name, notification_settings")
+      .select("name, notification_settings, evolution_api_url, evolution_api_key")
       .eq("id", sr.tenant_id)
       .single();
 
@@ -170,13 +150,17 @@ Deno.serve(async (req) => {
     const notifSettings = (tenant?.notification_settings as any) || {};
     const autoNotifyConfig = notifSettings.auto_notify || {};
 
+    // Get Evolution API config from tenant (per-tenant config)
+    const evolutionUrl = (tenant as any)?.evolution_api_url || Deno.env.get("EVOLUTION_API_URL") || "";
+    const evolutionKey = (tenant as any)?.evolution_api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
+    const evolutionInstance = Deno.env.get("EVOLUTION_INSTANCE") || "default";
+
     // Check if this trigger is enabled
     const phaseConfig = autoNotifyConfig[trigger];
     if (phaseConfig?.enabled === false) {
       console.log(`Auto-notify skipped: trigger=${trigger} is disabled for tenant`);
       return new Response(JSON.stringify({ success: true, trigger, skipped: true, reason: "disabled" }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -184,12 +168,9 @@ Deno.serve(async (req) => {
     const beneficiaryName = (sr as any).beneficiaries?.name || sr.requester_name;
     const serviceName = serviceTypeMap[sr.service_type] || sr.service_type;
 
-    // Build variable map for interpolation
     const vars: Record<string, string> = {
-      beneficiary_name: beneficiaryName || "—",
-      tenant_name: tenantName,
-      protocol: sr.protocol,
-      service_name: serviceName,
+      beneficiary_name: beneficiaryName || "—", tenant_name: tenantName,
+      protocol: sr.protocol, service_name: serviceName,
       provider_name: provider_name || "—",
       estimated_arrival_min: estimated_arrival_min ? String(estimated_arrival_min) : "—",
       beneficiary_tracking_url: beneficiary_tracking_url || "",
@@ -203,13 +184,11 @@ Deno.serve(async (req) => {
       nps_link: nps_link || "",
     };
 
-    // Build composite vars used only in default templates
     const etaText = estimated_arrival_min
       ? `aproximadamente *${estimated_arrival_min} minutos* do local`
       : "a caminho do local";
     vars.eta_text = etaText;
 
-    // Tracking text for beneficiary_dispatch
     vars.tracking_text = "";
     if (trigger === "beneficiary_creation" && beneficiary_tracking_url) {
       vars.tracking_text = `\n\n📍 Acompanhe seu atendimento em tempo real:\n${beneficiary_tracking_url}`;
@@ -219,38 +198,32 @@ Deno.serve(async (req) => {
       vars.tracking_text = `\n\n📍 *Navegação e rastreamento*:\n${provider_tracking_url}\n\nPor favor, acesse o link acima para iniciar a navegação e compartilhar sua localização em tempo real.`;
     }
 
-    // NPS text for beneficiary_completion
     if (trigger === "beneficiary_completion") {
       vars.nps_text = nps_link
         ? `\n\nPor favor, nos ajude a melhorar! Avalie nosso atendimento:\n${nps_link}`
         : "\n\nEm breve você receberá uma pesquisa de satisfação. Sua opinião é muito importante para nós! ⭐";
     }
 
-    // Get message template: custom if set, otherwise default
     const customMessage = phaseConfig?.custom_message;
-    const messageTemplate = customMessage && customMessage.trim()
-      ? customMessage
-      : DEFAULT_MESSAGES[trigger];
+    const messageTemplate = customMessage && customMessage.trim() ? customMessage : DEFAULT_MESSAGES[trigger];
 
     if (!messageTemplate) {
       return new Response(JSON.stringify({ error: `Unknown trigger: ${trigger}` }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const finalMessage = interpolateMessage(messageTemplate, vars);
     const results: any[] = [];
 
-    // Determine recipient
     if (trigger.startsWith("beneficiary_")) {
       if (beneficiaryPhone) {
-        const r = await sendEvolutionMessage(beneficiaryPhone, finalMessage);
+        const r = await sendEvolutionMessage(evolutionUrl, evolutionKey, evolutionInstance, beneficiaryPhone, finalMessage);
         results.push({ target: "beneficiary", trigger, ok: r.ok });
       }
     } else if (trigger === "provider_dispatch") {
       if (provider_phone) {
-        const r = await sendEvolutionMessage(provider_phone, finalMessage);
+        const r = await sendEvolutionMessage(evolutionUrl, evolutionKey, evolutionInstance, provider_phone, finalMessage);
         results.push({ target: "provider", trigger, ok: r.ok });
       }
     }
@@ -258,14 +231,12 @@ Deno.serve(async (req) => {
     console.log(`Auto-notify sent: trigger=${trigger}, protocol=${sr.protocol}, results=`, results);
 
     return new Response(JSON.stringify({ success: true, trigger, results }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     console.error("Auto-notify error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

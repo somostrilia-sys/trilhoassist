@@ -1218,7 +1218,10 @@ export type Database = {
           created_at: string
           custom_labels: Json | null
           email: string | null
+          evolution_api_key: string | null
+          evolution_api_url: string | null
           favicon_url: string | null
+          google_api_key: string | null
           id: string
           logo_url: string | null
           name: string
@@ -1244,7 +1247,10 @@ export type Database = {
           created_at?: string
           custom_labels?: Json | null
           email?: string | null
+          evolution_api_key?: string | null
+          evolution_api_url?: string | null
           favicon_url?: string | null
+          google_api_key?: string | null
           id?: string
           logo_url?: string | null
           name: string
@@ -1270,7 +1276,10 @@ export type Database = {
           created_at?: string
           custom_labels?: Json | null
           email?: string | null
+          evolution_api_key?: string | null
+          evolution_api_url?: string | null
           favicon_url?: string | null
+          google_api_key?: string | null
           id?: string
           logo_url?: string | null
           name?: string
