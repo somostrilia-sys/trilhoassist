@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MapPin, Navigation, ExternalLink } from "lucide-react";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 export interface RoutePoint {
   label: string;
@@ -14,34 +14,7 @@ export interface RoutePoint {
 
 interface RouteMapProps {
   points: RoutePoint[];
-  /** Title to display above the map */
   title?: string;
-}
-
-// Fix default marker icon issue with bundlers
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
-
-function createColorIcon(color: string) {
-  return L.divIcon({
-    className: "custom-marker",
-    html: `<div style="
-      width: 28px; height: 28px; border-radius: 50% 50% 50% 0;
-      background: ${color}; transform: rotate(-45deg);
-      border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-      display: flex; align-items: center; justify-content: center;
-    "><div style="
-      width: 10px; height: 10px; border-radius: 50%;
-      background: white; transform: rotate(45deg);
-    "></div></div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 28],
-    popupAnchor: [0, -28],
-  });
 }
 
 function buildGoogleMapsUrl(points: RoutePoint[]): string {
@@ -59,7 +32,6 @@ function buildGoogleMapsUrl(points: RoutePoint[]): string {
 }
 
 function buildWazeUrl(points: RoutePoint[]): string {
-  // Waze only supports navigate to a single destination, use final destination
   const dest = points[points.length - 1];
   return `https://www.waze.com/ul?ll=${dest.lat},${dest.lng}&navigate=yes`;
 }
@@ -72,68 +44,105 @@ async function fetchOSRMRoute(points: RoutePoint[]): Promise<[number, number][]>
     );
     const data = await res.json();
     if (data.routes?.[0]?.geometry?.coordinates) {
-      return data.routes[0].geometry.coordinates.map(([lng, lat]: [number, number]) => [lat, lng]);
+      return data.routes[0].geometry.coordinates as [number, number][];
     }
   } catch (err) {
     console.error("OSRM routing failed:", err);
   }
-  // Fallback: straight lines
-  return points.map((p) => [p.lat, p.lng]);
+  return points.map((p) => [p.lng, p.lat]);
+}
+
+function haversineDistance(coords: [number, number][]): number {
+  let total = 0;
+  for (let i = 1; i < coords.length; i++) {
+    const [lng1, lat1] = coords[i - 1];
+    const [lng2, lat2] = coords[i];
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+    total += R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+  return Math.round(total);
 }
 
 export default function RouteMap({ points, title = "ROTEIRIZAÇÃO" }: RouteMapProps) {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
   const [totalKm, setTotalKm] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!mapRef.current || points.length < 2) return;
+    if (!mapContainer.current || points.length < 2) return;
 
-    // Clean up previous map
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.remove();
-      mapInstanceRef.current = null;
-    }
-
-    const map = L.map(mapRef.current, { zoomControl: true, scrollWheelZoom: true });
-    mapInstanceRef.current = map;
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(map);
-
-    // Add markers
-    const bounds = L.latLngBounds([]);
-    points.forEach((point, idx) => {
-      const marker = L.marker([point.lat, point.lng], { icon: createColorIcon(point.color) }).addTo(map);
-      marker.bindPopup(`<b>${idx + 1}. ${point.label}</b>`);
-      bounds.extend([point.lat, point.lng]);
+    const map = new maplibregl.Map({
+      container: mapContainer.current,
+      style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+      center: [points[0].lng, points[0].lat],
+      zoom: 10,
     });
 
-    map.fitBounds(bounds, { padding: [40, 40] });
+    map.addControl(new maplibregl.NavigationControl(), "top-right");
+    mapRef.current = map;
 
-    // Fetch route
-    fetchOSRMRoute(points).then((routeCoords) => {
-      L.polyline(routeCoords, {
-        color: "hsl(220, 70%, 50%)",
-        weight: 4,
-        opacity: 0.8,
-        dashArray: "8, 4",
-      }).addTo(map);
+    // Add markers
+    const bounds = new maplibregl.LngLatBounds();
+    points.forEach((point, idx) => {
+      const el = document.createElement("div");
+      el.innerHTML = `<div style="
+        width: 28px; height: 28px; border-radius: 50% 50% 50% 0;
+        background: ${point.color}; transform: rotate(-45deg);
+        border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        display: flex; align-items: center; justify-content: center;
+      "><div style="
+        width: 10px; height: 10px; border-radius: 50%;
+        background: white; transform: rotate(45deg);
+      "></div></div>`;
+      el.style.cursor = "pointer";
 
-      // Calculate total distance
-      let totalM = 0;
-      for (let i = 1; i < routeCoords.length; i++) {
-        totalM += L.latLng(routeCoords[i - 1]).distanceTo(L.latLng(routeCoords[i]));
-      }
-      setTotalKm(Math.round(totalM / 1000));
+      new maplibregl.Marker({ element: el, anchor: "bottom" })
+        .setLngLat([point.lng, point.lat])
+        .setPopup(new maplibregl.Popup({ offset: 25 }).setHTML(`<b>${idx + 1}. ${point.label}</b>`))
+        .addTo(map);
+
+      bounds.extend([point.lng, point.lat]);
+    });
+
+    map.fitBounds(bounds, { padding: 50 });
+
+    // Fetch and draw route
+    map.on("load", () => {
+      fetchOSRMRoute(points).then((routeCoords) => {
+        map.addSource("route", {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "LineString", coordinates: routeCoords },
+          },
+        });
+
+        map.addLayer({
+          id: "route-line",
+          type: "line",
+          source: "route",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": "hsl(220, 70%, 50%)",
+            "line-width": 4,
+            "line-opacity": 0.8,
+            "line-dasharray": [2, 1],
+          },
+        });
+
+        setTotalKm(haversineDistance(routeCoords));
+      });
     });
 
     return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
+      map.remove();
+      mapRef.current = null;
     };
   }, [points]);
 
@@ -155,7 +164,6 @@ export default function RouteMap({ points, title = "ROTEIRIZAÇÃO" }: RouteMapP
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Route steps */}
         <div className="flex flex-wrap gap-2 items-center text-sm">
           {points.map((point, idx) => (
             <div key={idx} className="flex items-center gap-1">
@@ -169,14 +177,12 @@ export default function RouteMap({ points, title = "ROTEIRIZAÇÃO" }: RouteMapP
           ))}
         </div>
 
-        {/* Map */}
         <div
-          ref={mapRef}
+          ref={mapContainer}
           className="w-full rounded-lg border overflow-hidden"
           style={{ height: 380 }}
         />
 
-        {/* External links */}
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" asChild>
             <a href={googleUrl} target="_blank" rel="noopener noreferrer" className="gap-2">
