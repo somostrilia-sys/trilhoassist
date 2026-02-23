@@ -1073,6 +1073,38 @@ export type Database = {
           },
         ]
       }
+      whatsapp_conversation_notes: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_conversation_notes_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_conversations: {
         Row: {
           assigned_to: string | null
@@ -1088,8 +1120,10 @@ export type Database = {
           origin_lat: number | null
           origin_lng: number | null
           phone: string
+          priority: string | null
           service_request_id: string | null
           status: string
+          tags: string[] | null
           tenant_id: string
           updated_at: string
         }
@@ -1107,8 +1141,10 @@ export type Database = {
           origin_lat?: number | null
           origin_lng?: number | null
           phone: string
+          priority?: string | null
           service_request_id?: string | null
           status?: string
+          tags?: string[] | null
           tenant_id: string
           updated_at?: string
         }
@@ -1126,8 +1162,10 @@ export type Database = {
           origin_lat?: number | null
           origin_lng?: number | null
           phone?: string
+          priority?: string | null
           service_request_id?: string | null
           status?: string
+          tags?: string[] | null
           tenant_id?: string
           updated_at?: string
         }
@@ -1201,6 +1239,44 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_quick_replies: {
+        Row: {
+          category: string | null
+          created_at: string
+          id: string
+          message: string
+          sort_order: number | null
+          tenant_id: string
+          title: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          message: string
+          sort_order?: number | null
+          tenant_id: string
+          title: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          message?: string
+          sort_order?: number | null
+          tenant_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_quick_replies_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]

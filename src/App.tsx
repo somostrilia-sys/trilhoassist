@@ -40,6 +40,7 @@ import PlansList from "./pages/business/PlansList";
 import PlanForm from "./pages/business/PlanForm";
 import BeneficiariesList from "./pages/business/BeneficiariesList";
 import BeneficiaryForm from "./pages/business/BeneficiaryForm";
+import QuickRepliesSettings from "./pages/settings/QuickRepliesSettings";
 
 const queryClient = new QueryClient();
 
@@ -99,6 +100,7 @@ const App = () => (
               <Route path="/settings/users" element={<UsersManagement />} />
               <Route path="/settings/permissions" element={<PermissionsManagement />} />
               <Route path="/settings" element={<Placeholder />} />
+              <Route path="/settings/quick-replies" element={<QuickRepliesSettings />} />
               <Route path="/integrations" element={<Placeholder />} />
             </Route>
 
