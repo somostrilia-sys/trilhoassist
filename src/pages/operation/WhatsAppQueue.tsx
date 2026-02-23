@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -80,6 +80,30 @@ export default function WhatsAppQueue() {
     enabled: !!tenantId,
   });
 
+  // Notification sound using Web Audio API
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const playNotificationSound = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContext();
+      }
+      const ctx = audioCtxRef.current;
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+      oscillator.frequency.setValueAtTime(1100, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      oscillator.start(ctx.currentTime);
+      oscillator.stop(ctx.currentTime + 0.3);
+    } catch {
+      // Audio not available
+    }
+  }, []);
+
   // Realtime
   useEffect(() => {
     if (!tenantId) return;
@@ -88,12 +112,15 @@ export default function WhatsAppQueue() {
       .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_conversations" }, () => {
         queryClient.invalidateQueries({ queryKey: ["whatsapp-conversations"] });
       })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "whatsapp_messages" }, () => {
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "whatsapp_messages" }, (payload) => {
         queryClient.invalidateQueries({ queryKey: ["whatsapp-messages"] });
+        if ((payload.new as any)?.direction === "inbound") {
+          playNotificationSound();
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [tenantId, queryClient]);
+  }, [tenantId, queryClient, playNotificationSound]);
 
   const getOperatorName = (userId: string | null) => {
     if (!userId) return null;
