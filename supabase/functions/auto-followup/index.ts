@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
     // Get all open conversations
     const { data: conversations, error: convErr } = await supabase
       .from("whatsapp_conversations")
-      .select("id, phone, tenant_id, followup_count, last_followup_at")
+      .select("id, phone, tenant_id, followup_count, last_followup_at, current_flow_id, current_flow_step")
       .eq("status", "open");
 
     if (convErr) throw convErr;
@@ -42,19 +42,34 @@ Deno.serve(async (req) => {
       tenantMap[t.id] = t;
     }
 
+    // Cache flow steps for active flows
+    const flowIds = [...new Set(conversations.filter(c => c.current_flow_id).map(c => c.current_flow_id))];
+    const flowStepMap: Record<string, any[]> = {};
+    if (flowIds.length > 0) {
+      const { data: steps } = await supabase
+        .from("whatsapp_flow_steps")
+        .select("*")
+        .in("flow_id", flowIds)
+        .order("step_order", { ascending: true });
+
+      for (const step of steps || []) {
+        if (!flowStepMap[step.flow_id]) flowStepMap[step.flow_id] = [];
+        flowStepMap[step.flow_id].push(step);
+      }
+    }
+
     let processed = 0;
+    const EVOLUTION_INSTANCE = Deno.env.get("EVOLUTION_INSTANCE") || "default";
 
     for (const conv of conversations) {
       const tenant = tenantMap[conv.tenant_id];
       if (!tenant) continue;
 
-      const timeoutMin = tenant.followup_timeout_minutes || 3;
-      const maxRetries = tenant.followup_max_retries || 3;
+      const apiUrl = tenant.evolution_api_url;
+      const apiKey = tenant.evolution_api_key;
+      if (!apiUrl || !apiKey) continue;
 
-      // Skip if already at max retries
-      if ((conv.followup_count || 0) >= maxRetries) continue;
-
-      // Get the last few messages to check if there's a pending outbound question
+      // Get last messages
       const { data: messages } = await supabase
         .from("whatsapp_messages")
         .select("id, direction, content, created_at, message_type")
@@ -64,37 +79,121 @@ Deno.serve(async (req) => {
 
       if (!messages || messages.length === 0) continue;
 
-      // Find the last message - if it's outbound (our question), check timeout
       const lastMsg = messages[0];
-      if (lastMsg.direction !== "outbound") {
-        // Last message is inbound (user responded), reset counter if needed
-        if ((conv.followup_count || 0) > 0) {
-          await supabase
-            .from("whatsapp_conversations")
-            .update({ followup_count: 0, last_followup_at: null })
-            .eq("id", conv.id);
+      const now = Date.now();
+
+      // ========== FLOW-BASED AUTOMATION ==========
+      if (conv.current_flow_id && conv.current_flow_step > 0) {
+        const steps = flowStepMap[conv.current_flow_id] || [];
+        const currentStep = steps.find((s: any) => s.step_order === conv.current_flow_step);
+
+        if (!currentStep) continue;
+
+        // If last message is INBOUND (client responded), advance to next step
+        if (lastMsg.direction === "inbound") {
+          const nextStep = steps.find((s: any) => s.step_order === conv.current_flow_step + 1);
+
+          if (nextStep) {
+            // Send next step message
+            const sent = await sendMessage(apiUrl, apiKey, EVOLUTION_INSTANCE, conv.phone, nextStep.message_text);
+            if (sent) {
+              await supabase.from("whatsapp_messages").insert({
+                conversation_id: conv.id,
+                direction: "outbound",
+                message_type: "text",
+                content: nextStep.message_text,
+                external_id: sent.key?.id || null,
+              });
+              await supabase.from("whatsapp_conversations").update({
+                current_flow_step: nextStep.step_order,
+                last_message_at: new Date().toISOString(),
+                followup_count: 0,
+                last_followup_at: null,
+              }).eq("id", conv.id);
+              processed++;
+              console.log(`Flow step ${nextStep.step_order} sent to ${conv.phone}`);
+            }
+          } else {
+            // Flow complete — clear flow tracking
+            await supabase.from("whatsapp_conversations").update({
+              current_flow_id: null,
+              current_flow_step: 0,
+              followup_count: 0,
+              last_followup_at: null,
+            }).eq("id", conv.id);
+            console.log(`Flow completed for ${conv.phone}`);
+          }
+          continue;
+        }
+
+        // If last message is OUTBOUND (waiting for response), check timeout for reminder
+        if (lastMsg.direction === "outbound") {
+          const msgTime = new Date(lastMsg.created_at).getTime();
+          const elapsedMin = (now - msgTime) / 60000;
+          const stepTimeout = currentStep.timeout_minutes || 3;
+          const maxRetries = tenant.followup_max_retries || 3;
+
+          if (elapsedMin < stepTimeout) continue;
+          if ((conv.followup_count || 0) >= maxRetries) continue;
+
+          // Check cooldown
+          if (conv.last_followup_at) {
+            const sinceLastFollowup = (now - new Date(conv.last_followup_at).getTime()) / 60000;
+            if (sinceLastFollowup < stepTimeout) continue;
+          }
+
+          const currentCount = (conv.followup_count || 0) + 1;
+          const reminderMessage = currentCount >= maxRetries
+            ? `⚠️ Última tentativa: ainda precisamos da sua resposta para continuar o atendimento. 🙏`
+            : `Olá! 😊 Ainda aguardamos sua resposta para dar continuidade. Por favor, responda a última mensagem. 🙏`;
+
+          const sent = await sendMessage(apiUrl, apiKey, EVOLUTION_INSTANCE, conv.phone, reminderMessage);
+          if (sent) {
+            await supabase.from("whatsapp_messages").insert({
+              conversation_id: conv.id,
+              direction: "outbound",
+              message_type: "text",
+              content: reminderMessage,
+              external_id: sent.key?.id || null,
+            });
+            await supabase.from("whatsapp_conversations").update({
+              followup_count: currentCount,
+              last_followup_at: new Date().toISOString(),
+              last_message_at: new Date().toISOString(),
+            }).eq("id", conv.id);
+            processed++;
+            console.log(`Flow reminder ${currentCount}/${maxRetries} sent to ${conv.phone}`);
+          }
+          continue;
         }
         continue;
       }
 
-      // Check if enough time has passed since the outbound message
-      const msgTime = new Date(lastMsg.created_at).getTime();
-      const now = Date.now();
-      const elapsedMin = (now - msgTime) / 60000;
+      // ========== STANDARD FOLLOW-UP (no flow) ==========
+      const timeoutMin = tenant.followup_timeout_minutes || 3;
+      const maxRetries = tenant.followup_max_retries || 3;
 
+      if ((conv.followup_count || 0) >= maxRetries) continue;
+
+      if (lastMsg.direction !== "outbound") {
+        if ((conv.followup_count || 0) > 0) {
+          await supabase.from("whatsapp_conversations").update({ followup_count: 0, last_followup_at: null }).eq("id", conv.id);
+        }
+        continue;
+      }
+
+      const msgTime = new Date(lastMsg.created_at).getTime();
+      const elapsedMin = (now - msgTime) / 60000;
       if (elapsedMin < timeoutMin) continue;
 
-      // Also check if we already sent a followup recently (avoid double-sending within the timeout window)
       if (conv.last_followup_at) {
-        const lastFollowupTime = new Date(conv.last_followup_at).getTime();
-        const sinceLastFollowup = (now - lastFollowupTime) / 60000;
+        const sinceLastFollowup = (now - new Date(conv.last_followup_at).getTime()) / 60000;
         if (sinceLastFollowup < timeoutMin) continue;
       }
 
-      // Build the reminder message
       const questionText = lastMsg.content || "a pergunta anterior";
       const currentCount = (conv.followup_count || 0) + 1;
-      
+
       let reminderMessage = "";
       if (currentCount === 1) {
         reminderMessage = `Olá! 😊 Notamos que você ainda não respondeu:\n\n*"${questionText}"*\n\nPor favor, responda para darmos continuidade ao seu atendimento. 🙏`;
@@ -104,55 +203,22 @@ Deno.serve(async (req) => {
         reminderMessage = `⚠️ Última tentativa de contato!\n\nPrecisamos da sua resposta para:\n*"${questionText}"*\n\nCaso não responda, o atendimento poderá ser encerrado. Por favor, nos retorne. 🙏`;
       }
 
-      // Send via Evolution API
-      const apiUrl = tenant.evolution_api_url;
-      const apiKey = tenant.evolution_api_key;
-
-      if (!apiUrl || !apiKey) continue;
-
-      const baseUrl = apiUrl.replace(/\/$/, "");
-      let cleanPhone = (conv.phone || "").replace(/\D/g, "");
-      if (cleanPhone.length <= 11) cleanPhone = `55${cleanPhone}`;
-
-      const EVOLUTION_INSTANCE = Deno.env.get("EVOLUTION_INSTANCE") || "default";
-
-      try {
-        const response = await fetch(`${baseUrl}/message/sendText/${EVOLUTION_INSTANCE}`, {
-          method: "POST",
-          headers: { apikey: apiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({ number: cleanPhone, text: reminderMessage }),
+      const sent = await sendMessage(apiUrl, apiKey, EVOLUTION_INSTANCE, conv.phone, reminderMessage);
+      if (sent) {
+        await supabase.from("whatsapp_messages").insert({
+          conversation_id: conv.id,
+          direction: "outbound",
+          message_type: "text",
+          content: reminderMessage,
+          external_id: sent.key?.id || null,
         });
-
-        if (response.ok) {
-          const result = await response.json();
-
-          // Save the followup message
-          await supabase.from("whatsapp_messages").insert({
-            conversation_id: conv.id,
-            direction: "outbound",
-            message_type: "text",
-            content: reminderMessage,
-            external_id: result.key?.id || null,
-          });
-
-          // Update conversation followup tracking
-          await supabase
-            .from("whatsapp_conversations")
-            .update({
-              followup_count: currentCount,
-              last_followup_at: new Date().toISOString(),
-              last_message_at: new Date().toISOString(),
-            })
-            .eq("id", conv.id);
-
-          processed++;
-          console.log(`Followup ${currentCount}/${maxRetries} sent to ${conv.phone} (conv: ${conv.id})`);
-        } else {
-          const errBody = await response.text();
-          console.error(`Failed to send followup to ${conv.phone}:`, errBody);
-        }
-      } catch (sendErr) {
-        console.error(`Error sending followup to ${conv.phone}:`, sendErr);
+        await supabase.from("whatsapp_conversations").update({
+          followup_count: currentCount,
+          last_followup_at: new Date().toISOString(),
+          last_message_at: new Date().toISOString(),
+        }).eq("id", conv.id);
+        processed++;
+        console.log(`Followup ${currentCount}/${maxRetries} sent to ${conv.phone}`);
       }
     }
 
@@ -167,3 +233,23 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+async function sendMessage(apiUrl: string, apiKey: string, instance: string, phone: string, text: string): Promise<any | null> {
+  const baseUrl = apiUrl.replace(/\/$/, "");
+  let cleanPhone = (phone || "").replace(/\D/g, "");
+  if (cleanPhone.length <= 11) cleanPhone = `55${cleanPhone}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/message/sendText/${instance}`, {
+      method: "POST",
+      headers: { apikey: apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ number: cleanPhone, text }),
+    });
+    if (response.ok) return await response.json();
+    console.error(`Send failed:`, await response.text());
+    return null;
+  } catch (e) {
+    console.error(`Send error:`, e);
+    return null;
+  }
+}

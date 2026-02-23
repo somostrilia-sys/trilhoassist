@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   User, Phone, Plus, X, Send, UserCheck, Zap, ArrowRightLeft,
-  AlertCircle, Tag, ClipboardCheck, Car, Bike, Truck,
+  AlertCircle, Tag, ClipboardCheck, Car, Bike, Truck, GitBranch,
 } from "lucide-react";
 import { buildVerificationFormMessage, type VehicleCategory } from "@/lib/verificationFormMessages";
 interface ChatAreaProps {
@@ -30,6 +30,8 @@ interface ChatAreaProps {
   quickReplies: any[];
   onQuickReply: (message: string) => void;
   onSendVerification?: (category: VehicleCategory) => void;
+  flows?: any[];
+  onStartFlow?: (flowId: string, firstMessage: string) => void;
 }
 
 export function ChatArea({
@@ -52,6 +54,8 @@ export function ChatArea({
   quickReplies,
   onQuickReply,
   onSendVerification,
+  flows,
+  onStartFlow,
 }: ChatAreaProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [tagInput, setTagInput] = useState("");
@@ -246,6 +250,37 @@ export function ChatArea({
                 <Button variant="ghost" size="sm" className="w-full justify-start text-xs gap-2" onClick={() => onSendVerification("truck")}>
                   <Truck className="h-3 w-3" /> Caminhão
                 </Button>
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {/* Start flow button */}
+          {onStartFlow && flows && flows.length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="text-xs h-7 gap-1">
+                  <GitBranch className="h-3 w-3" /> Fluxo
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-52 p-2">
+                <p className="text-xs font-medium mb-2">Iniciar fluxo:</p>
+                {flows.map((flow: any) => {
+                  const firstStep = flow.whatsapp_flow_steps?.[0];
+                  const catIcon = flow.vehicle_category === "motorcycle" ? Bike : flow.vehicle_category === "truck" ? Truck : Car;
+                  const CatIcon = catIcon;
+                  return (
+                    <Button
+                      key={flow.id}
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start text-xs gap-2"
+                      disabled={!firstStep}
+                      onClick={() => firstStep && onStartFlow(flow.id, firstStep.message_text)}
+                    >
+                      <CatIcon className="h-3 w-3" /> {flow.name}
+                    </Button>
+                  );
+                })}
               </PopoverContent>
             </Popover>
           )}
