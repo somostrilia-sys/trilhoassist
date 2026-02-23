@@ -14,8 +14,13 @@ import {
   ArrowLeft, User, Car, MapPin, AlertTriangle, ClipboardCheck, FileText,
   Share2, Truck, XCircle, PlayCircle, CheckCircle2, Loader2, Clock, History,
   FilePlus2, RotateCcw, Send, Camera, Mic, Video, File, Link as LinkIcon,
+  DollarSign, CalendarIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { format } from "date-fns";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import RouteMap, { type RoutePoint } from "@/components/RouteMap";
 import { toast } from "sonner";
 import CollisionMediaUpload from "@/components/collision/CollisionMediaUpload";
@@ -697,20 +702,118 @@ export default function ServiceRequestDetail() {
         </Card>
       )}
 
-      {/* Financial */}
-      {(request.provider_cost > 0 || request.charged_amount > 0) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">FINANCEIRO</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-              <InfoRow label="Custo Prestador" value={`R$ ${Number(request.provider_cost || 0).toFixed(2)}`} />
-              <InfoRow label="Valor Cobrado" value={`R$ ${Number(request.charged_amount || 0).toFixed(2)}`} />
+      {/* Financial & Payment */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <DollarSign className="h-5 w-5" /> FINANCEIRO
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+            <InfoRow label="Custo Prestador" value={`R$ ${Number(request.provider_cost || 0).toFixed(2)}`} />
+            <InfoRow label="Valor Cobrado" value={`R$ ${Number(request.charged_amount || 0).toFixed(2)}`} />
+          </div>
+          <Separator />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Payment Method */}
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Forma de Pagamento</Label>
+              <Select
+                value={request.payment_method || ""}
+                onValueChange={async (val) => {
+                  const { error } = await supabase
+                    .from("service_requests")
+                    .update({ payment_method: val })
+                    .eq("id", id!);
+                  if (error) {
+                    toast.error("Erro ao salvar", { description: error.message });
+                  } else {
+                    await logEvent("payment_update", `Forma de pagamento definida: ${val === "cash" ? "À vista" : "Faturado"}`);
+                    toast.success("Forma de pagamento atualizada");
+                    loadData();
+                    loadEvents();
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">À vista</SelectItem>
+                  <SelectItem value="invoiced">Faturado</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </CardContent>
-        </Card>
-      )}
+            {/* Payment Term */}
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Prazo de Pagamento</Label>
+              <Input
+                placeholder="Ex: 30 dias, 15/30..."
+                defaultValue={request.payment_term || ""}
+                onBlur={async (e) => {
+                  const val = e.target.value.trim();
+                  if (val === (request.payment_term || "")) return;
+                  const { error } = await supabase
+                    .from("service_requests")
+                    .update({ payment_term: val || null })
+                    .eq("id", id!);
+                  if (error) {
+                    toast.error("Erro ao salvar", { description: error.message });
+                  } else {
+                    if (val) await logEvent("payment_update", `Prazo de pagamento definido: ${val}`);
+                    toast.success("Prazo atualizado");
+                    loadData();
+                    loadEvents();
+                  }
+                }}
+              />
+            </div>
+            {/* Payment Received Date */}
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Data de Recebimento</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !request.payment_received_at && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {request.payment_received_at
+                      ? format(new Date(request.payment_received_at), "dd/MM/yyyy")
+                      : "Selecione a data"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={request.payment_received_at ? new Date(request.payment_received_at) : undefined}
+                    onSelect={async (date) => {
+                      const val = date ? date.toISOString() : null;
+                      const { error } = await supabase
+                        .from("service_requests")
+                        .update({ payment_received_at: val })
+                        .eq("id", id!);
+                      if (error) {
+                        toast.error("Erro ao salvar", { description: error.message });
+                      } else {
+                        if (date) await logEvent("payment_update", `Data de recebimento definida: ${format(date, "dd/MM/yyyy")}`);
+                        toast.success("Data de recebimento atualizada");
+                        loadData();
+                        loadEvents();
+                      }
+                    }}
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Timeline / History */}
       <Card>
