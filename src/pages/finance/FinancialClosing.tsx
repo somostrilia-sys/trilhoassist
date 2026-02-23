@@ -27,6 +27,9 @@ export default function FinancialClosing() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [providerFilter, setProviderFilter] = useState<string>("all");
+  const [dueDateFilter, setDueDateFilter] = useState<string>("all");
   const [showCreate, setShowCreate] = useState(false);
   const [newClosing, setNewClosing] = useState({
     provider_id: "",
@@ -150,10 +153,34 @@ export default function FinancialClosing() {
     },
   });
 
+  const getDueDate = (closing: any) => {
+    const dueDate = new Date(closing.period_end);
+    dueDate.setDate(dueDate.getDate() + 30);
+    return dueDate;
+  };
+
   const filtered = closings.filter((c: any) => {
     const q = search.toLowerCase();
     const providerName = c.providers?.name ?? "";
-    return providerName.toLowerCase().includes(q);
+    if (!providerName.toLowerCase().includes(q)) return false;
+    if (statusFilter !== "all" && c.status !== statusFilter) return false;
+    if (providerFilter !== "all" && c.providers?.id !== providerFilter) return false;
+    if (dueDateFilter === "overdue") {
+      if (c.status === "paid") return false;
+      return new Date() > getDueDate(c);
+    }
+    if (dueDateFilter === "due_soon") {
+      if (c.status === "paid") return false;
+      const dueDate = getDueDate(c);
+      const remaining = Math.ceil((dueDate.getTime() - new Date().getTime()) / 86400000);
+      return remaining >= 0 && remaining <= 7;
+    }
+    if (dueDateFilter === "on_time") {
+      if (c.status === "paid") return true;
+      const remaining = Math.ceil((getDueDate(c).getTime() - new Date().getTime()) / 86400000);
+      return remaining > 7;
+    }
+    return true;
   });
 
   const openCount = closings.filter((c: any) => c.status === "open").length;
@@ -253,9 +280,38 @@ export default function FinancialClosing() {
         </Card>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Buscar por prestador..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Buscar por prestador..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+        </div>
+        <Select value={providerFilter} onValueChange={setProviderFilter}>
+          <SelectTrigger className="w-[200px]"><SelectValue placeholder="Prestador" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os prestadores</SelectItem>
+            {providers.map((p) => (
+              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os status</SelectItem>
+            <SelectItem value="open">Aberto</SelectItem>
+            <SelectItem value="closed">Fechado</SelectItem>
+            <SelectItem value="paid">Pago</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Vencimento" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="overdue">Vencidos</SelectItem>
+            <SelectItem value="due_soon">Vence em 7 dias</SelectItem>
+            <SelectItem value="on_time">Em dia</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <Card>
@@ -270,9 +326,11 @@ export default function FinancialClosing() {
                 <TableRow>
                   <TableHead>Prestador</TableHead>
                   <TableHead>Período</TableHead>
+                  <TableHead>Vencimento</TableHead>
                   <TableHead>Serviços</TableHead>
                   <TableHead>Valor</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Ações</TableHead>
                   <TableHead>Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -282,6 +340,35 @@ export default function FinancialClosing() {
                     <TableCell className="font-medium">{closing.providers?.name ?? "—"}</TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {format(new Date(closing.period_start), "dd/MM/yyyy")} - {format(new Date(closing.period_end), "dd/MM/yyyy")}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {(() => {
+                        const dueDate = getDueDate(closing);
+                        const now = new Date();
+                        const isPaid = closing.status === "paid";
+                        if (isPaid) {
+                          return <span className="text-muted-foreground">{format(dueDate, "dd/MM/yyyy")}</span>;
+                        }
+                        if (now > dueDate) {
+                          const overdueDays = Math.floor((now.getTime() - dueDate.getTime()) / 86400000);
+                          return (
+                            <span className="flex items-center gap-1 text-destructive font-medium">
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                              {format(dueDate, "dd/MM/yyyy")} ({overdueDays}d atraso)
+                            </span>
+                          );
+                        }
+                        const remaining = Math.ceil((dueDate.getTime() - now.getTime()) / 86400000);
+                        if (remaining <= 7) {
+                          return (
+                            <span className="flex items-center gap-1 text-yellow-600 font-medium">
+                              <Clock className="h-3.5 w-3.5" />
+                              {format(dueDate, "dd/MM/yyyy")} ({remaining}d)
+                            </span>
+                          );
+                        }
+                        return <span>{format(dueDate, "dd/MM/yyyy")}</span>;
+                      })()}
                     </TableCell>
                     <TableCell>{closing.total_services}</TableCell>
                     <TableCell className="font-medium">{formatCurrency(closing.total_provider_cost)}</TableCell>
