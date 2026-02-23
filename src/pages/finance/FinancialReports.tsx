@@ -208,13 +208,14 @@ export default function FinancialReports() {
   }, [requests]);
 
   const clientChartData = useMemo(() => {
-    const map = new Map<string, { name: string; atendimentos: number; custo: number; faturado: number }>();
+    const map = new Map<string, { name: string; atendimentos: number; custo: number; faturado: number; ganho: number }>();
     requests.forEach((r) => {
       const name = (r.clients as any)?.name || "Sem cliente";
-      const entry = map.get(name) || { name, atendimentos: 0, custo: 0, faturado: 0 };
+      const entry = map.get(name) || { name, atendimentos: 0, custo: 0, faturado: 0, ganho: 0 };
       entry.atendimentos += 1;
       entry.custo += Number(r.provider_cost) || 0;
       entry.faturado += Number(r.charged_amount) || 0;
+      entry.ganho += (Number(r.charged_amount) || 0) - (Number(r.provider_cost) || 0);
       map.set(name, entry);
     });
     return Array.from(map.values()).sort((a, b) => b.faturado - a.faturado);
@@ -334,7 +335,7 @@ export default function FinancialReports() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Margem</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Ganho</CardTitle>
             <TrendingUp className="h-4 w-4" />
           </CardHeader>
           <CardContent>
@@ -397,7 +398,7 @@ export default function FinancialReports() {
                         <Legend />
                         <Line type="monotone" dataKey="custo" name="Custo" stroke="hsl(354, 82%, 42%)" strokeWidth={2} dot={{ r: 4 }} />
                         <Line type="monotone" dataKey="faturado" name="Faturado" stroke="hsl(218, 58%, 26%)" strokeWidth={2} dot={{ r: 4 }} />
-                        <Line type="monotone" dataKey="markup" name="Margem" stroke="hsl(142, 60%, 45%)" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="markup" name="Ganho" stroke="hsl(142, 60%, 45%)" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} />
                       </LineChart>
                     </ResponsiveContainer>
                   ) : <EmptyChart />}
@@ -536,6 +537,7 @@ export default function FinancialReports() {
                         <TableHead>Origem</TableHead>
                         <TableHead className="text-right">Custo</TableHead>
                         <TableHead className="text-right">Cobrado</TableHead>
+                        <TableHead className="text-right">Ganho</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Dados</TableHead>
                       </TableRow>
@@ -586,6 +588,9 @@ export default function FinancialReports() {
                             </TableCell>
                             <TableCell className="text-right font-mono text-xs text-primary whitespace-nowrap">
                               {formatCurrency(Number(r.charged_amount) || 0)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs whitespace-nowrap" style={{ color: (Number(r.charged_amount) || 0) - (Number(r.provider_cost) || 0) >= 0 ? "hsl(142, 60%, 45%)" : "hsl(354, 82%, 42%)" }}>
+                              {formatCurrency((Number(r.charged_amount) || 0) - (Number(r.provider_cost) || 0))}
                             </TableCell>
                             <TableCell>
                               <Badge variant={r.status === "completed" ? "default" : r.status === "cancelled" ? "destructive" : "secondary"} className="text-xs whitespace-nowrap">
@@ -787,6 +792,7 @@ export default function FinancialReports() {
                       <Legend />
                       <Bar dataKey="custo" name="Custo" fill="hsl(354, 82%, 42%)" radius={[0, 4, 4, 0]} />
                       <Bar dataKey="faturado" name="Faturado" fill="hsl(218, 58%, 26%)" radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="ganho" name="Ganho" fill="hsl(142, 60%, 45%)" radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : <EmptyChart />}
@@ -807,7 +813,7 @@ export default function FinancialReports() {
                       <TableHead className="text-right">Atendimentos</TableHead>
                       <TableHead className="text-right">Custo</TableHead>
                       <TableHead className="text-right">Faturado</TableHead>
-                      <TableHead className="text-right">Margem</TableHead>
+                      <TableHead className="text-right">Ganho</TableHead>
                       <TableHead>Dados</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -825,13 +831,25 @@ export default function FinancialReports() {
                           <TableCell className="text-right">{c.atendimentos}</TableCell>
                           <TableCell className="text-right text-destructive font-mono text-sm">{formatCurrency(c.custo)}</TableCell>
                           <TableCell className="text-right text-primary font-mono text-sm">{formatCurrency(c.faturado)}</TableCell>
-                          <TableCell className="text-right font-mono text-sm" style={{ color: c.faturado - c.custo >= 0 ? "hsl(142, 60%, 45%)" : "hsl(354, 82%, 42%)" }}>
-                            {formatCurrency(c.faturado - c.custo)}
+                          <TableCell className="text-right font-mono text-sm" style={{ color: c.ganho >= 0 ? "hsl(142, 60%, 45%)" : "hsl(354, 82%, 42%)" }}>
+                            {formatCurrency(c.ganho)}
                           </TableCell>
                           <TableCell><Badge variant="outline" className="text-xs">{origin}</Badge></TableCell>
                         </TableRow>
                       );
                     })}
+                    {clientChartData.length > 0 && (
+                      <TableRow className="bg-muted/50 font-bold">
+                        <TableCell>Total</TableCell>
+                        <TableCell />
+                        <TableCell className="text-right">{beneficiaries.filter((b) => b.active).length}</TableCell>
+                        <TableCell className="text-right">{clientChartData.reduce((s, c) => s + c.atendimentos, 0)}</TableCell>
+                        <TableCell className="text-right text-destructive font-mono text-sm">{formatCurrency(clientChartData.reduce((s, c) => s + c.custo, 0))}</TableCell>
+                        <TableCell className="text-right text-primary font-mono text-sm">{formatCurrency(clientChartData.reduce((s, c) => s + c.faturado, 0))}</TableCell>
+                        <TableCell className="text-right font-mono text-sm" style={{ color: "hsl(142, 60%, 45%)" }}>{formatCurrency(clientChartData.reduce((s, c) => s + c.ganho, 0))}</TableCell>
+                        <TableCell />
+                      </TableRow>
+                    )}
                     {clientChartData.length === 0 && (
                       <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">Sem dados</TableCell></TableRow>
                     )}
