@@ -47,6 +47,7 @@ const menuSections: MenuSection[] = [
       { title: "Novo Atendimento", url: "/operation/new", icon: Plus },
       { title: "Atendimentos", url: "/operation/requests", icon: List },
       { title: "WhatsApp", url: "/operation/whatsapp", icon: MessageSquare },
+      { title: "Métricas WhatsApp", url: "/operation/whatsapp/metrics", icon: BarChart3 },
     ],
   },
   {
