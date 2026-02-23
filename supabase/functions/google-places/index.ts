@@ -1,3 +1,5 @@
+import { createClient } from "npm:@supabase/supabase-js@2";
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -9,23 +11,41 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const apiKey = Deno.env.get('GOOGLE_PLACES_API_KEY');
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'GOOGLE_PLACES_API_KEY não configurada. Adicione a chave nas configurações do projeto.',
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const { latitude, longitude, radius = 30000, keyword = 'guincho reboque auto socorro' } = await req.json();
+    const { latitude, longitude, radius = 30000, keyword = 'guincho reboque auto socorro', tenant_id } = await req.json();
 
     if (!latitude || !longitude) {
       return new Response(
         JSON.stringify({ success: false, error: 'Latitude e longitude são obrigatórios.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Get API key from tenant config, fallback to env
+    let apiKey = Deno.env.get('GOOGLE_PLACES_API_KEY') || '';
+
+    if (tenant_id) {
+      const adminSupabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      const { data: tenant } = await adminSupabase
+        .from("tenants")
+        .select("google_api_key")
+        .eq("id", tenant_id)
+        .single();
+
+      if ((tenant as any)?.google_api_key) {
+        apiKey = (tenant as any).google_api_key;
+      }
+    }
+
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Google API Key não configurada. Vá em Configurações → Integrações → Google Maps e adicione sua chave.',
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -49,15 +69,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Haversine to calculate distance
     const toRad = (v: number) => (v * Math.PI) / 180;
     const haversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
       const R = 6371;
       const dLat = toRad(lat2 - lat1);
       const dLon = toRad(lon2 - lon1);
-      const a =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     };
 
@@ -70,12 +87,7 @@ Deno.serve(async (req) => {
       rating: place.rating || null,
       user_ratings_total: place.user_ratings_total || 0,
       open_now: place.opening_hours?.open_now ?? null,
-      distance_km: haversine(
-        latitude,
-        longitude,
-        place.geometry?.location?.lat,
-        place.geometry?.location?.lng
-      ),
+      distance_km: haversine(latitude, longitude, place.geometry?.location?.lat, place.geometry?.location?.lng),
     }));
 
     results.sort((a: any, b: any) => a.distance_km - b.distance_km);
