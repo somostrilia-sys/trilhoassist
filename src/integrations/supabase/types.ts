@@ -185,6 +185,7 @@ export type Database = {
           id: string
           notes: string | null
           provider_id: string | null
+          provider_token: string | null
           quoted_amount: number | null
           service_request_id: string
           status: Database["public"]["Enums"]["dispatch_status"]
@@ -200,6 +201,7 @@ export type Database = {
           id?: string
           notes?: string | null
           provider_id?: string | null
+          provider_token?: string | null
           quoted_amount?: number | null
           service_request_id: string
           status?: Database["public"]["Enums"]["dispatch_status"]
@@ -215,6 +217,7 @@ export type Database = {
           id?: string
           notes?: string | null
           provider_id?: string | null
+          provider_token?: string | null
           quoted_amount?: number | null
           service_request_id?: string
           status?: Database["public"]["Enums"]["dispatch_status"]
@@ -631,6 +634,47 @@ export type Database = {
           },
         ]
       }
+      provider_tracking: {
+        Row: {
+          accuracy: number | null
+          created_at: string
+          dispatch_id: string
+          heading: number | null
+          id: string
+          latitude: number
+          longitude: number
+          speed: number | null
+        }
+        Insert: {
+          accuracy?: number | null
+          created_at?: string
+          dispatch_id: string
+          heading?: number | null
+          id?: string
+          latitude: number
+          longitude: number
+          speed?: number | null
+        }
+        Update: {
+          accuracy?: number | null
+          created_at?: string
+          dispatch_id?: string
+          heading?: number | null
+          id?: string
+          latitude?: number
+          longitude?: number
+          speed?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_tracking_dispatch_id_fkey"
+            columns: ["dispatch_id"]
+            isOneToOne: false
+            referencedRelation: "dispatches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       providers: {
         Row: {
           active: boolean
@@ -785,6 +829,7 @@ export type Database = {
       service_requests: {
         Row: {
           beneficiary_id: string | null
+          beneficiary_token: string | null
           charged_amount: number | null
           client_id: string | null
           completed_at: string | null
@@ -826,6 +871,7 @@ export type Database = {
         }
         Insert: {
           beneficiary_id?: string | null
+          beneficiary_token?: string | null
           charged_amount?: number | null
           client_id?: string | null
           completed_at?: string | null
@@ -867,6 +913,7 @@ export type Database = {
         }
         Update: {
           beneficiary_id?: string | null
+          beneficiary_token?: string | null
           charged_amount?: number | null
           client_id?: string | null
           completed_at?: string | null
