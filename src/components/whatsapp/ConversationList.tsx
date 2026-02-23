@@ -51,8 +51,19 @@ export function ConversationList({
   currentUserId,
   getOperatorName,
 }: ConversationListProps) {
+  // Count conversations per tab (ignoring text search)
+  const counts = conversations.reduce(
+    (acc, c: any) => {
+      if (c.status !== "closed") acc.all++;
+      if (c.assigned_to === currentUserId) acc.mine++;
+      if (!c.assigned_to) acc.unassigned++;
+      if (c.priority === "high") acc.high++;
+      return acc;
+    },
+    { all: 0, mine: 0, unassigned: 0, high: 0 }
+  );
+
   const filtered = conversations.filter((c: any) => {
-    // Text search
     const s = search.toLowerCase();
     const matchesSearch =
       !search ||
@@ -61,7 +72,6 @@ export function ConversationList({
       (c.beneficiaries as any)?.name?.toLowerCase().includes(s) ||
       c.detected_plate?.toLowerCase().includes(s);
 
-    // Tab filter
     let matchesFilter = true;
     switch (filter) {
       case "mine":
@@ -97,10 +107,10 @@ export function ConversationList({
         </div>
         <Tabs value={filter} onValueChange={onFilterChange}>
           <TabsList className="w-full grid grid-cols-4 h-8">
-            <TabsTrigger value="all" className="text-xs">Todas</TabsTrigger>
-            <TabsTrigger value="mine" className="text-xs">Minhas</TabsTrigger>
-            <TabsTrigger value="unassigned" className="text-xs">Sem atend.</TabsTrigger>
-            <TabsTrigger value="high" className="text-xs">Urgente</TabsTrigger>
+            <TabsTrigger value="all" className="text-xs">Todas ({counts.all})</TabsTrigger>
+            <TabsTrigger value="mine" className="text-xs">Minhas ({counts.mine})</TabsTrigger>
+            <TabsTrigger value="unassigned" className="text-xs">Sem atend. ({counts.unassigned})</TabsTrigger>
+            <TabsTrigger value="high" className="text-xs">Urgente ({counts.high})</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
