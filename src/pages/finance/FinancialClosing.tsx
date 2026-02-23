@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, FileCheck, DollarSign, Clock, CheckCircle, Download } from "lucide-react";
+import { Search, Plus, FileCheck, DollarSign, Clock, CheckCircle, Download, AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import {
   useTenantId, useFinancialClosings, useProviders,
@@ -158,6 +159,12 @@ export default function FinancialClosing() {
   const openCount = closings.filter((c: any) => c.status === "open").length;
   const closedCount = closings.filter((c: any) => c.status === "closed").length;
   const paidCount = closings.filter((c: any) => c.status === "paid").length;
+  const overdueCount = closings.filter((c: any) => {
+    if (c.status === "paid") return false;
+    const dueDate = new Date(c.period_end);
+    dueDate.setDate(dueDate.getDate() + 30); // 30 days after period end
+    return new Date() > dueDate;
+  }).length;
   const totalValue = closings.reduce((sum: number, c: any) => sum + Number(c.total_provider_cost), 0);
 
   const statusVariant = (status: string) => {
@@ -179,7 +186,16 @@ export default function FinancialClosing() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {overdueCount > 0 && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>{overdueCount}</strong> fechamento{overdueCount !== 1 ? "s" : ""} com pagamento vencido (mais de 30 dias após o fim do período sem registro de pagamento).
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="flex items-center gap-4 p-4">
             <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -199,6 +215,17 @@ export default function FinancialClosing() {
             <div>
               <p className="text-sm text-muted-foreground">Abertos</p>
               <p className="text-2xl font-bold">{openCount}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={overdueCount > 0 ? "border-destructive/50" : ""}>
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="h-10 w-10 rounded-lg bg-destructive/10 flex items-center justify-center">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Vencidos</p>
+              <p className="text-2xl font-bold text-destructive">{overdueCount}</p>
             </div>
           </CardContent>
         </Card>
@@ -259,9 +286,33 @@ export default function FinancialClosing() {
                     <TableCell>{closing.total_services}</TableCell>
                     <TableCell className="font-medium">{formatCurrency(closing.total_provider_cost)}</TableCell>
                     <TableCell>
-                      <Badge variant={statusVariant(closing.status)}>
-                        {CLOSING_STATUS_LABELS[closing.status] || closing.status}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={statusVariant(closing.status)}>
+                          {CLOSING_STATUS_LABELS[closing.status] || closing.status}
+                        </Badge>
+                        {closing.status !== "paid" && (() => {
+                          const dueDate = new Date(closing.period_end);
+                          dueDate.setDate(dueDate.getDate() + 30);
+                          const now = new Date();
+                          if (now > dueDate) {
+                            const overdueDays = Math.floor((now.getTime() - dueDate.getTime()) / 86400000);
+                            return (
+                              <span className="flex items-center gap-1 text-destructive text-xs font-medium" title={`Vencido há ${overdueDays} dias`}>
+                                <AlertTriangle className="h-3.5 w-3.5" /> {overdueDays}d
+                              </span>
+                            );
+                          }
+                          const remaining = Math.ceil((dueDate.getTime() - now.getTime()) / 86400000);
+                          if (remaining <= 7) {
+                            return (
+                              <span className="flex items-center gap-1 text-yellow-600 text-xs font-medium" title={`Vence em ${remaining} dias`}>
+                                <Clock className="h-3.5 w-3.5" /> {remaining}d
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">

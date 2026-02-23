@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Clock, CheckCircle, AlertCircle, XCircle, ChevronLeft, ChevronRight, CalendarIcon, X, Download, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle } from "lucide-react";
+import { Plus, Search, Clock, CheckCircle, AlertCircle, XCircle, ChevronLeft, ChevronRight, CalendarIcon, X, Download, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -408,30 +408,6 @@ export default function ServiceRequests() {
                               {req.payment_method === "cash" ? "À Vista" : "Faturado"}
                             </Badge>
                           )}
-                          {/* Overdue alert icon */}
-                          {req.payment_method === "invoiced" && !req.payment_received_at && req.status === "completed" && (() => {
-                            const termDays = parseInt(req.payment_term || "0", 10);
-                            if (!termDays || !req.completed_at) return null;
-                            const dueDate = new Date(req.completed_at);
-                            dueDate.setDate(dueDate.getDate() + termDays);
-                            const now = new Date();
-                            if (now > dueDate) {
-                              return (
-                                <span className="flex items-center gap-1 text-destructive text-xs font-medium" title={`Vencido há ${Math.floor((now.getTime() - dueDate.getTime()) / 86400000)} dias`}>
-                                  <AlertTriangle className="h-3.5 w-3.5" /> Vencido
-                                </span>
-                              );
-                            }
-                            const remaining = Math.ceil((dueDate.getTime() - now.getTime()) / 86400000);
-                            if (remaining <= 5) {
-                              return (
-                                <span className="flex items-center gap-1 text-yellow-600 text-xs font-medium" title={`Vence em ${remaining} dias`}>
-                                  <Clock className="h-3.5 w-3.5" /> Vence em {remaining}d
-                                </span>
-                              );
-                            }
-                            return null;
-                          })()}
                           <span>{req.requester_name}</span>
                         </div>
                       </div>
