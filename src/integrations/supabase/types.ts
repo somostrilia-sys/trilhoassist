@@ -92,10 +92,12 @@ export type Database = {
           contact_phone: string | null
           created_at: string
           id: string
+          km_margin: number | null
           name: string
           sync_interval_minutes: number | null
           tenant_id: string | null
           updated_at: string
+          whatsapp_group_id: string | null
         }
         Insert: {
           active?: boolean
@@ -108,10 +110,12 @@ export type Database = {
           contact_phone?: string | null
           created_at?: string
           id?: string
+          km_margin?: number | null
           name: string
           sync_interval_minutes?: number | null
           tenant_id?: string | null
           updated_at?: string
+          whatsapp_group_id?: string | null
         }
         Update: {
           active?: boolean
@@ -124,10 +128,12 @@ export type Database = {
           contact_phone?: string | null
           created_at?: string
           id?: string
+          km_margin?: number | null
           name?: string
           sync_interval_minutes?: number | null
           tenant_id?: string | null
           updated_at?: string
+          whatsapp_group_id?: string | null
         }
         Relationships: [
           {

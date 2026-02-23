@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { maskPhone, maskCNPJ } from "@/lib/masks";
 import { Loader2, ArrowLeft, Save } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { MessageSquare } from "lucide-react";
 
 interface ClientFormData {
   name: string;
@@ -22,11 +23,14 @@ interface ClientFormData {
   api_key: string;
   billing_model: string;
   active: boolean;
+  whatsapp_group_id: string;
+  km_margin: string;
 }
 
 const emptyForm: ClientFormData = {
   name: "", cnpj: "", contact_email: "", contact_phone: "",
   api_endpoint: "", api_key: "", billing_model: "plate_plus_service", active: true,
+  whatsapp_group_id: "", km_margin: "10",
 };
 
 export default function ClientForm() {
@@ -77,6 +81,8 @@ export default function ClientForm() {
         api_key: client.api_key || "",
         billing_model: (client as any).billing_model || "plate_plus_service",
         active: client.active,
+        whatsapp_group_id: (client as any).whatsapp_group_id || "",
+        km_margin: String((client as any).km_margin ?? 10),
       });
     }
   }, [client]);
@@ -97,6 +103,8 @@ export default function ClientForm() {
         billing_model: form.billing_model,
         active: form.active,
         tenant_id: tenantId,
+        whatsapp_group_id: form.whatsapp_group_id || null,
+        km_margin: form.km_margin ? parseInt(form.km_margin) : 10,
       };
 
       if (isEdit) {
@@ -220,6 +228,44 @@ export default function ClientForm() {
                 </div>
               </div>
             </RadioGroup>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <MessageSquare className="h-5 w-5" /> WhatsApp — Etiquetas Automáticas
+            </CardTitle>
+            <CardDescription>Configure o envio automático de etiquetas de atendimento no grupo do cliente</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="whatsapp_group_id">ID do Grupo WhatsApp</Label>
+                <Input
+                  id="whatsapp_group_id"
+                  value={form.whatsapp_group_id}
+                  onChange={(e) => updateField("whatsapp_group_id", e.target.value)}
+                  placeholder="5531999999999-1234567890@g.us"
+                />
+                <p className="text-xs text-muted-foreground">
+                  JID do grupo no formato: número@g.us
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="km_margin">Margem de KM (+)</Label>
+                <Input
+                  id="km_margin"
+                  type="number"
+                  value={form.km_margin}
+                  onChange={(e) => updateField("km_margin", e.target.value)}
+                  placeholder="10"
+                />
+                <p className="text-xs text-muted-foreground">
+                  KM adicionados à roteirização estimada
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 

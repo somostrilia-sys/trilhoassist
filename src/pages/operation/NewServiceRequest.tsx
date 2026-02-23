@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { maskPhone, maskCEP, unmask } from "@/lib/masks";
 import { useAuth } from "@/contexts/AuthContext";
+import { sendServiceLabel } from "@/lib/serviceLabel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -315,6 +316,9 @@ export default function NewServiceRequest() {
         description: "Atendimento criado",
         user_id: user?.id || null,
       });
+
+      // Send automatic label to client WhatsApp group (fire and forget)
+      sendServiceLabel(inserted.id, "creation");
 
       if (conversationId) {
         await supabase
