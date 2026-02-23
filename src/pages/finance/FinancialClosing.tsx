@@ -280,38 +280,40 @@ export default function FinancialClosing() {
         </Card>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-col gap-3">
+        <div className="relative w-full sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Buscar por prestador..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <Select value={providerFilter} onValueChange={setProviderFilter}>
-          <SelectTrigger className="w-[200px]"><SelectValue placeholder="Prestador" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os prestadores</SelectItem>
-            {providers.map((p) => (
-              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os status</SelectItem>
-            <SelectItem value="open">Aberto</SelectItem>
-            <SelectItem value="closed">Fechado</SelectItem>
-            <SelectItem value="paid">Pago</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
-          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Vencimento" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="overdue">Vencidos</SelectItem>
-            <SelectItem value="due_soon">Vence em 7 dias</SelectItem>
-            <SelectItem value="on_time">Em dia</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Select value={providerFilter} onValueChange={setProviderFilter}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Prestador" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os prestadores</SelectItem>
+              {providers.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os status</SelectItem>
+              <SelectItem value="open">Aberto</SelectItem>
+              <SelectItem value="closed">Fechado</SelectItem>
+              <SelectItem value="paid">Pago</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Vencimento" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="overdue">Vencidos</SelectItem>
+              <SelectItem value="due_soon">Vence em 7 dias</SelectItem>
+              <SelectItem value="on_time">Em dia</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card>
