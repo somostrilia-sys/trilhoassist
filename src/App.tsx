@@ -22,6 +22,7 @@ import FinancialReports from "./pages/finance/FinancialReports";
 import NotFound from "./pages/NotFound";
 import RegisterProvider from "./pages/RegisterProvider";
 import ProviderNavigation from "./pages/provider/ProviderNavigation";
+import CollisionPublicView from "./pages/collision/CollisionPublicView";
 import ProviderDashboard from "./pages/provider/ProviderDashboard";
 import ProviderServices from "./pages/provider/ProviderServices";
 import ProviderFinancial from "./pages/provider/ProviderFinancial";
@@ -51,6 +52,7 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/cadastro/prestador/:tenantSlug" element={<RegisterProvider />} />
             <Route path="/nav/:dispatchId" element={<ProviderNavigation />} />
+            <Route path="/collision/:token" element={<CollisionPublicView />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             
             {/* Provider Portal */}

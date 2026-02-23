@@ -29,13 +29,14 @@ const serviceTypeMap: Record<string, string> = {
   battery: "Bateria",
   fuel: "Combustível",
   lodging: "Hospedagem",
+  collision: "Colisão",
   other: "Outro",
 };
 
 const serviceTypeColors = [
   "hsl(var(--primary))", "hsl(var(--info))", "hsl(var(--success))",
   "hsl(var(--warning))", "hsl(var(--destructive))", "hsl(var(--accent))",
-  "#8b5cf6", "#ec4899", "#14b8a6",
+  "#8b5cf6", "#ec4899", "#14b8a6", "#f97316",
 ];
 
 interface Stats {

@@ -13,11 +13,12 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft, User, Car, MapPin, AlertTriangle, ClipboardCheck, FileText,
   Share2, Truck, XCircle, PlayCircle, CheckCircle2, Loader2, Clock, History,
-  FilePlus2, RotateCcw, Send,
+  FilePlus2, RotateCcw, Send, Camera, Mic, Video, File, Link as LinkIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import RouteMap, { type RoutePoint } from "@/components/RouteMap";
 import { toast } from "sonner";
+import CollisionMediaUpload from "@/components/collision/CollisionMediaUpload";
 
 const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   open: { label: "Aberto", variant: "default" },
@@ -38,6 +39,7 @@ const serviceTypeMap: Record<string, string> = {
   battery: "Bateria",
   fuel: "Combustível",
   lodging: "Hospedagem",
+  collision: "Colisão",
   other: "Outro",
 };
 
@@ -153,6 +155,7 @@ export default function ServiceRequestDetail() {
   const [actionLoading, setActionLoading] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteLoading, setNoteLoading] = useState(false);
+  const [collisionMedia, setCollisionMedia] = useState<any[]>([]);
 
   const logEvent = useCallback(async (eventType: string, description: string, oldValue?: string, newValue?: string) => {
     if (!id) return;
@@ -229,7 +232,17 @@ export default function ServiceRequestDetail() {
     setLoading(false);
   }, [id]);
 
-  useEffect(() => { loadData(); loadEvents(); }, [loadData, loadEvents]);
+  const loadCollisionMedia = useCallback(async () => {
+    if (!id) return;
+    const { data } = await supabase
+      .from("collision_media")
+      .select("*")
+      .eq("service_request_id", id)
+      .order("created_at");
+    setCollisionMedia(data || []);
+  }, [id]);
+
+  useEffect(() => { loadData(); loadEvents(); loadCollisionMedia(); }, [loadData, loadEvents, loadCollisionMedia]);
 
   // Load providers list for dispatch dialog
   const loadProviders = useCallback(async () => {
@@ -407,6 +420,21 @@ export default function ServiceRequestDetail() {
             Copiar link prestador
           </Button>
         )}
+        {request.service_type === "collision" && request.share_token && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 shrink-0"
+            onClick={() => {
+              const url = `${window.location.origin}/collision/${request.share_token}`;
+              navigator.clipboard.writeText(url);
+              toast.success("Link da colisão copiado!", { description: "Compartilhe com o setor responsável." });
+            }}
+          >
+            <LinkIcon className="h-4 w-4" />
+            Copiar link colisão
+          </Button>
+        )}
       </div>
 
       {/* Action Buttons */}
@@ -582,6 +610,78 @@ export default function ServiceRequestDetail() {
 
       {/* Route Map */}
       {routePoints.length >= 2 && <RouteMap points={routePoints} />}
+
+      {/* Collision Media */}
+      {request.service_type === "collision" && (
+        <>
+          {/* Existing media display */}
+          {collisionMedia.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Camera className="h-5 w-5" /> MÍDIAS DA COLISÃO ({collisionMedia.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Photos */}
+                {collisionMedia.filter(m => m.file_type === "photo").length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium mb-2">Fotos</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {collisionMedia.filter(m => m.file_type === "photo").map((m: any) => (
+                        <a key={m.id} href={m.file_url} target="_blank" rel="noopener noreferrer">
+                          <img src={m.file_url} alt={m.file_name} className="w-full h-28 object-cover rounded-lg border hover:opacity-90 transition-opacity" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Videos */}
+                {collisionMedia.filter(m => m.file_type === "video").length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium mb-2">Vídeos</p>
+                    {collisionMedia.filter(m => m.file_type === "video").map((m: any) => (
+                      <video key={m.id} controls className="w-full rounded-lg border mb-2" preload="metadata">
+                        <source src={m.file_url} type={m.mime_type || "video/mp4"} />
+                      </video>
+                    ))}
+                  </div>
+                )}
+                {/* Audios */}
+                {collisionMedia.filter(m => m.file_type === "audio").length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium mb-2">Áudios</p>
+                    {collisionMedia.filter(m => m.file_type === "audio").map((m: any) => (
+                      <div key={m.id} className="flex items-center gap-2 mb-2">
+                        <audio controls className="flex-1"><source src={m.file_url} type={m.mime_type || "audio/mpeg"} /></audio>
+                        <span className="text-xs text-muted-foreground">{m.file_name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Documents */}
+                {collisionMedia.filter(m => m.file_type === "document").length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium mb-2">Documentos</p>
+                    {collisionMedia.filter(m => m.file_type === "document").map((m: any) => (
+                      <a key={m.id} href={m.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 rounded border hover:bg-muted/50 mb-1">
+                        <File className="h-4 w-4 text-primary" />
+                        <span className="text-sm truncate">{m.file_name}</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Upload more media */}
+          <CollisionMediaUpload
+            serviceRequestId={request.id}
+            onMediaChange={() => loadCollisionMedia()}
+          />
+        </>
+      )}
 
       {/* Notes */}
       {request.notes && (
