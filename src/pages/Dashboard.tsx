@@ -431,9 +431,11 @@ export default function Dashboard() {
                 {heatPoints.length === 0 ? (
                   <p className="text-muted-foreground text-center py-12">Nenhuma coordenada registrada</p>
                 ) : (
-                  <Suspense fallback={<div className="h-[450px] flex items-center justify-center text-muted-foreground">Carregando mapa…</div>}>
-                    <ServiceHeatmap points={heatPoints} />
-                  </Suspense>
+                  <MapErrorBoundary>
+                    <Suspense fallback={<div className="h-[450px] flex items-center justify-center text-muted-foreground">Carregando mapa…</div>}>
+                      <ServiceHeatmap points={heatPoints} />
+                    </Suspense>
+                  </MapErrorBoundary>
                 )}
               </CardContent>
             </Card>
