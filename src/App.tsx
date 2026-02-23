@@ -42,6 +42,7 @@ import PlanForm from "./pages/business/PlanForm";
 import BeneficiariesList from "./pages/business/BeneficiariesList";
 import BeneficiaryForm from "./pages/business/BeneficiaryForm";
 import QuickRepliesSettings from "./pages/settings/QuickRepliesSettings";
+import TemplatesSettings from "./pages/settings/TemplatesSettings";
 
 const queryClient = new QueryClient();
 
@@ -103,6 +104,7 @@ const App = () => (
               <Route path="/settings/permissions" element={<PermissionsManagement />} />
               <Route path="/settings" element={<Placeholder />} />
               <Route path="/settings/quick-replies" element={<QuickRepliesSettings />} />
+              <Route path="/settings/templates" element={<TemplatesSettings />} />
               <Route path="/integrations" element={<Placeholder />} />
             </Route>
 
