@@ -1,6 +1,8 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, lazy, Suspense } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+
+const ServiceHeatmap = lazy(() => import("@/components/ServiceHeatmap"));
 import {
   Headphones, Send, DollarSign, Clock, TrendingUp, AlertCircle,
   Timer, Route, Banknote, Zap,
@@ -385,6 +387,89 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </CardContent>
       </Card>
+      {/* Heatmap + Origin/Destination Lists */}
+      {(() => {
+        const heatPoints: [number, number, number][] = requests
+          .filter((r) => r.origin_lat && r.origin_lng)
+          .map((r) => [Number(r.origin_lat), Number(r.origin_lng), 1]);
+
+        // Aggregate origins
+        const originCounts: Record<string, number> = {};
+        const destCounts: Record<string, number> = {};
+        requests.forEach((r) => {
+          if (r.origin_address) originCounts[r.origin_address] = (originCounts[r.origin_address] || 0) + 1;
+          if (r.destination_address) destCounts[r.destination_address] = (destCounts[r.destination_address] || 0) + 1;
+        });
+        const topOrigins = Object.entries(originCounts).sort((a, b) => b[1] - a[1]).slice(0, 15);
+        const topDests = Object.entries(destCounts).sort((a, b) => b[1] - a[1]).slice(0, 15);
+
+        return (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Mapa de Calor — Origens dos Atendimentos</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {heatPoints.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-12">Nenhuma coordenada registrada</p>
+                ) : (
+                  <Suspense fallback={<div className="h-[450px] flex items-center justify-center text-muted-foreground">Carregando mapa…</div>}>
+                    <ServiceHeatmap points={heatPoints} />
+                  </Suspense>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Top Origens</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {topOrigins.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-8">Sem dados</p>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {topOrigins.map(([address, count], i) => (
+                        <div key={i} className="flex items-center justify-between px-6 py-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{i + 1}</span>
+                            <span className="text-sm truncate">{address}</span>
+                          </div>
+                          <span className="text-sm font-semibold text-primary shrink-0 ml-2">{count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Top Destinos</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {topDests.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-8">Sem dados</p>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {topDests.map(([address, count], i) => (
+                        <div key={i} className="flex items-center justify-between px-6 py-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{i + 1}</span>
+                            <span className="text-sm truncate">{address}</span>
+                          </div>
+                          <span className="text-sm font-semibold text-primary shrink-0 ml-2">{count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }
