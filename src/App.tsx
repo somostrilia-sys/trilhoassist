@@ -34,6 +34,7 @@ import ProviderFinancial from "./pages/provider/ProviderFinancial";
 import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientRequests from "./pages/client/ClientRequests";
 import ClientPlates from "./pages/client/ClientPlates";
+import ClientReports from "./pages/client/ClientReports";
 import ProvidersList from "./pages/network/ProvidersList";
 import ProviderForm from "./pages/network/ProviderForm";
 import ProviderBlacklist from "./pages/network/ProviderBlacklist";
@@ -78,6 +79,7 @@ const App = () => (
             <Route element={<ClientLayout />}>
               <Route path="/client/dashboard" element={<ClientDashboard />} />
               <Route path="/client/requests" element={<ClientRequests />} />
+              <Route path="/client/reports" element={<ClientReports />} />
               <Route path="/client/plates" element={<ClientPlates />} />
             </Route>
 

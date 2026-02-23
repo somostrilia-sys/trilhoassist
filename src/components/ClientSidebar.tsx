@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, FileText, Car, LogOut,
+  LayoutDashboard, FileText, Car, LogOut, BarChart3,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,6 +15,7 @@ import { Building2 } from "lucide-react";
 const menuItems = [
   { title: "Dashboard", url: "/client/dashboard", icon: LayoutDashboard },
   { title: "Atendimentos", url: "/client/requests", icon: FileText },
+  { title: "Relatórios", url: "/client/reports", icon: BarChart3 },
   { title: "Placas", url: "/client/plates", icon: Car },
 ];
 
