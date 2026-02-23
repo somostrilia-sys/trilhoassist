@@ -1,0 +1,314 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const body = await req.json();
+    const { action, client_id, tenant_id } = body;
+
+    // Get client's API config
+    const { data: client, error: clientError } = await supabase
+      .from("clients")
+      .select("id, name, api_endpoint, api_key")
+      .eq("id", client_id)
+      .single();
+
+    if (clientError || !client) {
+      return jsonResponse({ error: "Cliente não encontrado" }, 404);
+    }
+
+    if (!client.api_endpoint || !client.api_key) {
+      return jsonResponse({ error: "API endpoint ou chave não configurados para este cliente" }, 400);
+    }
+
+    // ─── ACTION: TEST CONNECTION ───
+    if (action === "test") {
+      try {
+        const response = await fetch(client.api_endpoint, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${client.api_key}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          return jsonResponse({
+            success: false,
+            status: response.status,
+            message: `ERP retornou erro ${response.status}: ${text.substring(0, 200)}`,
+          });
+        }
+
+        const data = await response.json();
+
+        // Try to extract available fields/plans/cooperativas from response
+        const sampleFields = extractSampleFields(data);
+
+        return jsonResponse({
+          success: true,
+          status: response.status,
+          message: "Conexão bem-sucedida",
+          sample_data: sampleFields,
+          raw_count: Array.isArray(data) ? data.length : typeof data === "object" ? Object.keys(data).length : 0,
+        });
+      } catch (fetchErr: any) {
+        return jsonResponse({
+          success: false,
+          message: `Erro ao conectar: ${fetchErr.message}`,
+        });
+      }
+    }
+
+    // ─── ACTION: FETCH ERP DATA (for mapping preview) ───
+    if (action === "fetch_fields") {
+      try {
+        const response = await fetch(client.api_endpoint, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${client.api_key}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          return jsonResponse({ error: `ERP retornou erro ${response.status}: ${text.substring(0, 200)}` }, 500);
+        }
+
+        const data = await response.json();
+        const fields = extractUniqueFields(data);
+
+        return jsonResponse({ success: true, fields });
+      } catch (fetchErr: any) {
+        return jsonResponse({ error: `Erro ao buscar campos: ${fetchErr.message}` }, 500);
+      }
+    }
+
+    // ─── ACTION: IMPORT BENEFICIARIES ───
+    if (action === "import") {
+      // Create sync log
+      const { data: syncLog, error: logError } = await supabase
+        .from("erp_sync_logs")
+        .insert({
+          client_id,
+          tenant_id,
+          sync_type: body.sync_type || "manual",
+          status: "running",
+        })
+        .select()
+        .single();
+
+      if (logError) {
+        return jsonResponse({ error: `Erro ao criar log: ${logError.message}` }, 500);
+      }
+
+      try {
+        // Fetch data from ERP
+        const response = await fetch(client.api_endpoint, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${client.api_key}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          await updateSyncLog(supabase, syncLog.id, "error", 0, 0, 0, `ERP erro ${response.status}: ${text.substring(0, 200)}`);
+          return jsonResponse({ error: `ERP retornou erro ${response.status}` }, 500);
+        }
+
+        const erpData = await response.json();
+        const records = Array.isArray(erpData) ? erpData : erpData.data || erpData.results || erpData.beneficiarios || [];
+
+        if (!Array.isArray(records)) {
+          await updateSyncLog(supabase, syncLog.id, "error", 0, 0, 0, "Resposta do ERP não contém array de registros");
+          return jsonResponse({ error: "Formato de resposta do ERP não reconhecido" }, 400);
+        }
+
+        // Get field mappings for this client
+        const { data: mappings } = await supabase
+          .from("erp_field_mappings")
+          .select("*")
+          .eq("client_id", client_id);
+
+        const planMap = new Map((mappings || []).filter((m: any) => m.field_type === "plan").map((m: any) => [m.erp_value, m.trilho_id]));
+        const coopMap = new Map((mappings || []).filter((m: any) => m.field_type === "cooperativa").map((m: any) => [m.erp_value, m.trilho_value]));
+
+        let created = 0;
+        let updated = 0;
+
+        for (const record of records) {
+          const plate = record.placa || record.vehicle_plate || record.plate || "";
+          const name = record.nome || record.name || record.beneficiario || "";
+          const phone = record.telefone || record.phone || record.celular || "";
+          const cpf = record.cpf || record.documento || "";
+          const vehicleModel = record.modelo || record.vehicle_model || record.veiculo || "";
+          const vehicleYear = record.ano || record.vehicle_year || record.year || null;
+          const vehicleChassis = record.chassi || record.chassis || "";
+          const erpPlan = record.plano || record.plan || record.plan_name || "";
+          const erpCoop = record.cooperativa || record.coop || record.cooperative || "";
+
+          if (!name && !plate) continue; // skip empty records
+
+          const planId = planMap.get(erpPlan) || null;
+          const cooperativa = coopMap.get(erpCoop) || erpCoop;
+
+          // Check if beneficiary already exists by plate
+          const { data: existing } = await supabase
+            .from("beneficiaries")
+            .select("id")
+            .eq("client_id", client_id)
+            .eq("vehicle_plate", plate)
+            .maybeSingle();
+
+          if (existing) {
+            await supabase
+              .from("beneficiaries")
+              .update({
+                name,
+                phone: phone || undefined,
+                cpf: cpf || undefined,
+                vehicle_model: vehicleModel || undefined,
+                vehicle_year: vehicleYear ? parseInt(vehicleYear) : undefined,
+                vehicle_chassis: vehicleChassis || undefined,
+                plan_id: planId || undefined,
+                cooperativa: cooperativa || undefined,
+              })
+              .eq("id", existing.id);
+            updated++;
+          } else {
+            await supabase.from("beneficiaries").insert({
+              client_id,
+              name,
+              vehicle_plate: plate,
+              phone: phone || null,
+              cpf: cpf || null,
+              vehicle_model: vehicleModel || null,
+              vehicle_year: vehicleYear ? parseInt(vehicleYear) : null,
+              vehicle_chassis: vehicleChassis || null,
+              plan_id: planId,
+              cooperativa: cooperativa || null,
+            });
+            created++;
+          }
+        }
+
+        await updateSyncLog(supabase, syncLog.id, "success", records.length, created, updated, null);
+
+        return jsonResponse({
+          success: true,
+          records_found: records.length,
+          records_created: created,
+          records_updated: updated,
+        });
+      } catch (err: any) {
+        await updateSyncLog(supabase, syncLog.id, "error", 0, 0, 0, err.message);
+        return jsonResponse({ error: `Erro na importação: ${err.message}` }, 500);
+      }
+    }
+
+    return jsonResponse({ error: `Ação desconhecida: ${action}` }, 400);
+  } catch (err: any) {
+    console.error("ERP integration error:", err);
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
+
+function jsonResponse(data: any, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+async function updateSyncLog(
+  supabase: any,
+  id: string,
+  status: string,
+  found: number,
+  created: number,
+  updated: number,
+  error: string | null
+) {
+  await supabase
+    .from("erp_sync_logs")
+    .update({
+      status,
+      records_found: found,
+      records_created: created,
+      records_updated: updated,
+      error_message: error,
+      completed_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+}
+
+function extractSampleFields(data: any): any {
+  const records = Array.isArray(data) ? data : data.data || data.results || data.beneficiarios || [];
+  if (!Array.isArray(records) || records.length === 0) return { keys: [], sample: null };
+
+  const sample = records[0];
+  return {
+    keys: Object.keys(sample),
+    sample,
+    total_records: records.length,
+  };
+}
+
+function extractUniqueFields(data: any): any {
+  const records = Array.isArray(data) ? data : data.data || data.results || data.beneficiarios || [];
+  if (!Array.isArray(records)) return { plans: [], cooperativas: [] };
+
+  const plans = new Set<string>();
+  const cooperativas = new Set<string>();
+
+  for (const r of records) {
+    const plan = r.plano || r.plan || r.plan_name || "";
+    const coop = r.cooperativa || r.coop || r.cooperative || "";
+    if (plan) plans.add(plan);
+    if (coop) cooperativas.add(coop);
+  }
+
+  return {
+    plans: [...plans].sort(),
+    cooperativas: [...cooperativas].sort(),
+  };
+}
