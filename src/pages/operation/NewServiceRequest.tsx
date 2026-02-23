@@ -13,7 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-import { User, Car, MapPin, AlertTriangle, Search, CheckCircle2, Loader2, XCircle, MapPinned, Share2, DollarSign } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { User, Car, MapPin, AlertTriangle, Search, CheckCircle2, Loader2, XCircle, MapPinned, Share2, DollarSign, ShieldAlert } from "lucide-react";
 import CarVerification, { defaultCarVerification } from "@/components/service-request/CarVerification";
 import MotorcycleVerification, { defaultMotorcycleVerification } from "@/components/service-request/MotorcycleVerification";
 import TruckVerification, { defaultTruckVerification } from "@/components/service-request/TruckVerification";
@@ -99,6 +100,16 @@ export default function NewServiceRequest() {
   const [carVerification, setCarVerification] = useState(defaultCarVerification);
   const [motoVerification, setMotoVerification] = useState(defaultMotorcycleVerification);
   const [truckVerification, setTruckVerification] = useState(defaultTruckVerification);
+
+  // Usage control state
+  const [usageCheck, setUsageCheck] = useState<{
+    allowed: boolean; reason: string; usage: number; limit: number;
+    period_type?: string; period_days?: number; has_exception?: boolean;
+  } | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [exceptionDialogOpen, setExceptionDialogOpen] = useState(false);
+  const [exceptionJustification, setExceptionJustification] = useState("");
+  const [exceptionSaving, setExceptionSaving] = useState(false);
 
   // Beneficiary lookup
   const [beneficiaryFound, setBeneficiaryFound] = useState<{
@@ -243,6 +254,54 @@ export default function NewServiceRequest() {
     if (cat === "motorcycle") update("service_type", "tow_motorcycle");
     else if (cat === "truck") update("service_type", "tow_heavy");
     else update("service_type", "tow_light");
+  };
+
+  // Check beneficiary usage whenever beneficiary or service_type changes
+  useEffect(() => {
+    if (!beneficiaryFound?.id || !form.service_type) {
+      setUsageCheck(null);
+      return;
+    }
+    let cancelled = false;
+    const check = async () => {
+      setUsageLoading(true);
+      const { data, error } = await supabase.rpc("check_beneficiary_usage", {
+        _beneficiary_id: beneficiaryFound.id,
+        _service_type: form.service_type,
+      });
+      if (!cancelled) {
+        setUsageLoading(false);
+        if (!error && data) setUsageCheck(data as any);
+        else setUsageCheck(null);
+      }
+    };
+    check();
+    return () => { cancelled = true; };
+  }, [beneficiaryFound?.id, form.service_type]);
+
+  const handleGrantException = async () => {
+    if (!beneficiaryFound?.id || !exceptionJustification.trim()) return;
+    setExceptionSaving(true);
+    const { error } = await supabase.from("plan_usage_exceptions" as any).insert({
+      beneficiary_id: beneficiaryFound.id,
+      service_type: form.service_type,
+      justification: exceptionJustification.trim(),
+      granted_by: user?.id,
+    });
+    setExceptionSaving(false);
+    if (error) {
+      toast({ title: "Erro ao conceder exceção", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Exceção concedida com sucesso!" });
+      setExceptionDialogOpen(false);
+      setExceptionJustification("");
+      // Re-check usage
+      const { data } = await supabase.rpc("check_beneficiary_usage", {
+        _beneficiary_id: beneficiaryFound.id,
+        _service_type: form.service_type,
+      });
+      if (data) setUsageCheck(data as any);
+    }
   };
 
   const getVerificationAnswers = () => {
@@ -473,6 +532,58 @@ export default function NewServiceRequest() {
                       </div>
                     )}
                   </div>
+                )}
+
+                {/* Usage control banner */}
+                {beneficiaryFound && usageLoading && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Verificando uso do plano…
+                  </div>
+                )}
+                {beneficiaryFound && usageCheck && !usageLoading && (
+                  <>
+                    {usageCheck.reason === "limit_reached" && !usageCheck.allowed && (
+                      <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm space-y-2">
+                        <div className="flex items-center gap-2 font-medium text-destructive">
+                          <ShieldAlert className="h-4 w-4" />
+                          Limite do plano atingido
+                        </div>
+                        <p className="text-destructive/80">
+                          Uso: {usageCheck.usage}/{usageCheck.limit} no período ({usageCheck.period_type === "calendar_month" ? "mês corrente" : `últimos ${usageCheck.period_days} dias`}).
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="border-destructive/30 text-destructive hover:bg-destructive/10"
+                          onClick={() => setExceptionDialogOpen(true)}
+                        >
+                          Conceder Exceção
+                        </Button>
+                      </div>
+                    )}
+                    {usageCheck.reason === "service_not_covered" && (
+                      <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
+                        <div className="flex items-center gap-2 font-medium text-amber-800">
+                          <AlertTriangle className="h-4 w-4" />
+                          Serviço não coberto pelo plano
+                        </div>
+                      </div>
+                    )}
+                    {usageCheck.reason === "exception_granted" && (
+                      <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-sm">
+                        <div className="flex items-center gap-2 font-medium text-blue-800">
+                          <CheckCircle2 className="h-4 w-4" />
+                          Exceção concedida — uso liberado ({usageCheck.usage}/{usageCheck.limit})
+                        </div>
+                      </div>
+                    )}
+                    {usageCheck.reason === "within_limit" && (
+                      <div className="text-xs text-muted-foreground">
+                        Uso do plano: {usageCheck.usage}/{usageCheck.limit}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
               <div className="space-y-2">
@@ -713,6 +824,39 @@ export default function NewServiceRequest() {
           </div>
         )}
       </form>
+
+      {/* Exception Dialog */}
+      <Dialog open={exceptionDialogOpen} onOpenChange={setExceptionDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Conceder Exceção de Uso</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              O beneficiário <strong>{beneficiaryFound?.name}</strong> atingiu o limite de uso para este serviço
+              ({usageCheck?.usage}/{usageCheck?.limit}). Informe a justificativa para liberar uma exceção.
+            </p>
+            <div className="space-y-2">
+              <Label>Justificativa *</Label>
+              <Textarea
+                value={exceptionJustification}
+                onChange={(e) => setExceptionJustification(e.target.value)}
+                placeholder="Descreva o motivo da exceção..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExceptionDialogOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={handleGrantException}
+              disabled={!exceptionJustification.trim() || exceptionSaving}
+            >
+              {exceptionSaving ? "Salvando..." : "Conceder Exceção"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
