@@ -108,23 +108,29 @@ export default function BeneficiaryTracking() {
   // Initialize map
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
-    if (!request?.origin_lat) return;
+    if (!request) return;
 
-    const map = L.map(mapRef.current).setView([request.origin_lat, request.origin_lng], 14);
+    const centerLat = request.origin_lat || -15.79;
+    const centerLng = request.origin_lng || -47.88;
+    const zoom = request.origin_lat ? 14 : 5;
+
+    const map = L.map(mapRef.current).setView([centerLat, centerLng], zoom);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "&copy; OpenStreetMap",
     }).addTo(map);
 
-    // Origin marker
-    const originIcon = L.divIcon({
-      html: `<div style="background:#22c55e;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)"></div>`,
-      iconSize: [14, 14],
-      iconAnchor: [7, 7],
-      className: "",
-    });
-    originMarkerRef.current = L.marker([request.origin_lat, request.origin_lng], { icon: originIcon })
-      .addTo(map)
-      .bindPopup("Você está aqui");
+    // Origin marker (only if coordinates exist)
+    if (request.origin_lat && request.origin_lng) {
+      const originIcon = L.divIcon({
+        html: `<div style="background:#22c55e;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)"></div>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+        className: "",
+      });
+      originMarkerRef.current = L.marker([request.origin_lat, request.origin_lng], { icon: originIcon })
+        .addTo(map)
+        .bindPopup("Localização do cliente");
+    }
 
     mapInstanceRef.current = map;
 
@@ -132,7 +138,7 @@ export default function BeneficiaryTracking() {
       map.remove();
       mapInstanceRef.current = null;
     };
-  }, [request?.origin_lat, request?.origin_lng]);
+  }, [request]);
 
   // Update provider marker
   useEffect(() => {
