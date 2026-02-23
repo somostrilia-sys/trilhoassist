@@ -515,9 +515,18 @@ export default function NewServiceRequest() {
                   <div className="absolute right-3 top-1/2 -translate-y-1/2">
                     {plateSearching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                     {!plateSearching && beneficiaryFound && <CheckCircle2 className="h-4 w-4 text-green-600" />}
-                    {!plateSearching && !beneficiaryFound && form.vehicle_plate.length >= 7 && <Search className="h-4 w-4 text-muted-foreground opacity-50" />}
+                    {!plateSearching && !beneficiaryFound && form.vehicle_plate.length >= 7 && <XCircle className="h-4 w-4 text-amber-500" />}
                   </div>
                 </div>
+                {!plateSearching && !beneficiaryFound && form.vehicle_plate.length >= 7 && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-sm">
+                    <div className="flex items-center gap-2 font-medium text-amber-800">
+                      <AlertTriangle className="h-4 w-4" />
+                      Caso Avulso (99)
+                      <Badge variant="outline" className="text-xs border-amber-300 text-amber-700">Sem vínculo</Badge>
+                    </div>
+                  </div>
+                )}
                 {beneficiaryFound && (
                   <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm space-y-1">
                     <div className="flex items-center gap-2 font-medium text-green-800">
