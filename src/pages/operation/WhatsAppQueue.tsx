@@ -217,20 +217,22 @@ export default function WhatsAppQueue() {
             {activeCount} conversa(s) ativa(s) · API Oficial Meta
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowInfo(!showInfo)}
-          className="lg:flex hidden"
-        >
-          <Info className="h-4 w-4 mr-1" />
-          {showInfo ? "Ocultar" : "Info"}
-        </Button>
+        {selectedConv && (
+          <Button
+            variant={showInfo ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowInfo(!showInfo)}
+            className="lg:flex hidden"
+          >
+            <Info className="h-4 w-4 mr-1" />
+            {showInfo ? "Ocultar Painel" : "Informações"}
+          </Button>
+        )}
       </div>
 
       <div className={`grid gap-4 h-[calc(100%-4rem)] ${
         showInfo && selectedConv
-          ? "grid-cols-1 lg:grid-cols-[320px_1fr_280px]"
+          ? "grid-cols-1 lg:grid-cols-[320px_1fr_320px]"
           : "grid-cols-1 lg:grid-cols-[320px_1fr]"
       }`}>
         {/* Conversation list */}
