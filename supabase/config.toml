@@ -21,3 +21,6 @@ verify_jwt = false
 [functions.service-label]
 verify_jwt = false
 
+[functions.auto-notify]
+verify_jwt = false
+

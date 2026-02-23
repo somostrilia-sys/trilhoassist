@@ -26,6 +26,7 @@ import RouteMap, { type RoutePoint } from "@/components/RouteMap";
 import { toast } from "sonner";
 import CollisionMediaUpload from "@/components/collision/CollisionMediaUpload";
 import { sendServiceLabel } from "@/lib/serviceLabel";
+import { sendAutoNotify } from "@/lib/autoNotify";
 
 const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   open: { label: "Aberto", variant: "default" },
@@ -275,9 +276,11 @@ export default function ServiceRequestDetail() {
       toast.error("Erro ao alterar status", { description: error.message });
     } else {
       await logEvent("status_change", `Status alterado de ${statusMap[oldStatus]?.label || oldStatus} para ${statusMap[newStatus]?.label || newStatus}`, oldStatus, newStatus);
-      // Send completion label
+      // Send completion label to group
       if (newStatus === "completed") {
         sendServiceLabel(id, "completion");
+        // Send NPS/completion message to beneficiary
+        sendAutoNotify(id, "beneficiary_completion");
       }
       toast.success("Status alterado!", { description: `Novo status: ${statusMap[newStatus]?.label || newStatus}` });
       setStatusDialogOpen(false);
@@ -346,31 +349,28 @@ export default function ServiceRequestDetail() {
     const providerName = providers.find(p => p.id === selectedProviderId)?.name || "Prestador";
     await logEvent("dispatch", `Prestador acionado: ${providerName} — Valor Prestador: R$ ${parseFloat(quotedAmount).toFixed(2)} — Valor Cobrado: R$ ${parseFloat(chargedAmount).toFixed(2)}`, request.status, "dispatched");
 
-    // Send WhatsApp tracking links (fire and forget)
+    // Send WhatsApp tracking links via auto-notify (fire and forget)
     const baseUrl = window.location.origin;
     const providerTrackingUrl = `${baseUrl}/tracking/provider/${providerToken}`;
     const beneficiaryTrackingUrl = `${baseUrl}/tracking/${beneficiaryToken}`;
 
-    // Send provider tracking link
     const selectedProvider = providers.find(p => p.id === selectedProviderId);
+
+    // Notify provider via WhatsApp with tracking link
     if (selectedProvider?.phone) {
-      supabase.functions.invoke("send-whatsapp", {
-        body: {
-          phone: selectedProvider.phone,
-          message: `🚗 Novo acionamento!\n\nProtocolo: ${request.protocol}\nServiço: ${serviceTypeMap[request.service_type] || request.service_type}\nVeículo: ${request.vehicle_model || ""} ${request.vehicle_plate || ""}\n\n📍 Navegação e rastreamento:\n${providerTrackingUrl}`,
-        },
-      }).catch(console.error);
+      sendAutoNotify(id, "provider_dispatch", {
+        provider_name: selectedProvider.name || "Prestador",
+        provider_phone: selectedProvider.phone,
+        provider_tracking_url: providerTrackingUrl,
+      });
     }
 
-    // Send beneficiary tracking link
-    if (request.requester_phone) {
-      supabase.functions.invoke("send-whatsapp", {
-        body: {
-          phone: request.requester_phone,
-          message: `✅ Seu atendimento foi acionado!\n\nProtocolo: ${request.protocol}\nPrestador: ${providerName}\n\n📍 Acompanhe a chegada em tempo real:\n${beneficiaryTrackingUrl}`,
-        },
-      }).catch(console.error);
-    }
+    // Notify beneficiary via WhatsApp: "prestador a caminho"
+    sendAutoNotify(id, "beneficiary_dispatch", {
+      provider_name: selectedProvider?.name || "Prestador",
+      estimated_arrival_min: undefined, // Can be set if dispatch includes ETA
+      beneficiary_tracking_url: beneficiaryTrackingUrl,
+    });
 
     // Send dispatch preview label to client WhatsApp group
     sendServiceLabel(id, "dispatch_preview", {
