@@ -1147,7 +1147,10 @@ export default function ServiceRequestDetail() {
                         {selectedProviderId
                           ? (() => {
                               const p = providers.find(p => p.id === selectedProviderId);
-                              return p ? `${p.name}${p.city ? ` — ${p.city}/${p.state}` : ""}` : "Selecione...";
+                              if (!p) return "Selecione...";
+                              const dist = (p as any)._distance;
+                              const distLabel = dist != null && dist < 99999 ? ` — ${dist.toFixed(1)} km` : "";
+                              return `${p.name}${p.city ? ` (${p.city}/${p.state})` : ""}${distLabel}`;
                             })()
                           : "Buscar prestador..."}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
