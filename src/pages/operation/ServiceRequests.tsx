@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Clock, CheckCircle, AlertCircle, XCircle, ChevronLeft, ChevronRight, CalendarIcon, X, Download } from "lucide-react";
+import { Plus, Search, Clock, CheckCircle, AlertCircle, XCircle, ChevronLeft, ChevronRight, CalendarIcon, X, Download, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -39,6 +39,9 @@ const serviceTypeMap: Record<string, string> = {
   other: "Outro",
 };
 
+type SortField = "created_at" | "charged_amount" | "status";
+type SortDirection = "asc" | "desc";
+
 export default function ServiceRequests() {
   const [requests, setRequests] = useState<any[]>([]);
   const [search, setSearch] = useState("");
@@ -51,7 +54,25 @@ export default function ServiceRequests() {
   const [pageSize, setPageSize] = useState(25);
   const [totalCount, setTotalCount] = useState(0);
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+  const [sortField, setSortField] = useState<SortField>("created_at");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const navigate = useNavigate();
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection(field === "charged_amount" ? "desc" : field === "created_at" ? "desc" : "asc");
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3.5 w-3.5 ml-1 opacity-50" />;
+    return sortDirection === "asc"
+      ? <ArrowUp className="h-3.5 w-3.5 ml-1" />
+      : <ArrowDown className="h-3.5 w-3.5 ml-1" />;
+  };
 
   const loadCounts = useCallback(async () => {
     const { data } = await supabase
@@ -72,7 +93,7 @@ export default function ServiceRequests() {
     let query = supabase
       .from("service_requests")
       .select("*", { count: "exact" })
-      .order("created_at", { ascending: false });
+      .order(sortField, { ascending: sortDirection === "asc" });
 
     if (statusFilter !== "all") {
       query = query.eq("status", statusFilter as any);
@@ -108,7 +129,7 @@ export default function ServiceRequests() {
       setTotalCount(count);
     }
     setLoading(false);
-  }, [page, pageSize, statusFilter, serviceTypeFilter, search, dateFrom, dateTo]);
+  }, [page, pageSize, statusFilter, serviceTypeFilter, search, dateFrom, dateTo, sortField, sortDirection]);
 
   useEffect(() => {
     loadCounts();
@@ -129,7 +150,7 @@ export default function ServiceRequests() {
   // Reset page when filters change
   useEffect(() => {
     setPage(0);
-  }, [statusFilter, serviceTypeFilter, search, dateFrom, dateTo]);
+  }, [statusFilter, serviceTypeFilter, search, dateFrom, dateTo, sortField, sortDirection]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const allTotal = Object.values(statusCounts).reduce((a, b) => a + b, 0);
@@ -308,6 +329,19 @@ export default function ServiceRequests() {
             </Button>
           );
         })}
+      </div>
+
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-muted-foreground">Ordenar por:</span>
+        <Button variant={sortField === "created_at" ? "secondary" : "ghost"} size="sm" onClick={() => toggleSort("created_at")} className="gap-1 h-7 text-xs">
+          Data <SortIcon field="created_at" />
+        </Button>
+        <Button variant={sortField === "charged_amount" ? "secondary" : "ghost"} size="sm" onClick={() => toggleSort("charged_amount")} className="gap-1 h-7 text-xs">
+          Valor <SortIcon field="charged_amount" />
+        </Button>
+        <Button variant={sortField === "status" ? "secondary" : "ghost"} size="sm" onClick={() => toggleSort("status")} className="gap-1 h-7 text-xs">
+          Status <SortIcon field="status" />
+        </Button>
       </div>
 
       <div className="space-y-3">
