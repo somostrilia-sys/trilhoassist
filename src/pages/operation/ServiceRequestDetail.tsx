@@ -263,15 +263,33 @@ export default function ServiceRequestDetail() {
 
   useEffect(() => { loadData(); loadEvents(); loadCollisionMedia(); }, [loadData, loadEvents, loadCollisionMedia]);
 
-  // Load providers list for dispatch dialog
+  // Load providers list for dispatch dialog, sorted by proximity to origin
   const loadProviders = useCallback(async () => {
     const { data } = await supabase
       .from("providers")
-      .select("id, name, phone, city, state, services")
+      .select("id, name, phone, city, state, services, latitude, longitude")
       .eq("active", true)
       .order("name");
-    setProviders(data || []);
-  }, []);
+    let list = data || [];
+
+    // Sort by distance to origin if available
+    const oLat = request?.origin_lat;
+    const oLng = request?.origin_lng;
+    if (oLat && oLng) {
+      const haversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      };
+      list = list.map(p => ({
+        ...p,
+        _distance: p.latitude && p.longitude ? haversine(oLat, oLng, p.latitude, p.longitude) : 99999,
+      })).sort((a, b) => (a as any)._distance - (b as any)._distance);
+    }
+    setProviders(list);
+  }, [request?.origin_lat, request?.origin_lng]);
 
   // --- Actions ---
   const handleStatusChange = async () => {
@@ -1153,7 +1171,10 @@ export default function ServiceRequestDetail() {
                                 <Check className={cn("mr-2 h-4 w-4", selectedProviderId === p.id ? "opacity-100" : "opacity-0")} />
                                 <div className="flex flex-col">
                                   <span>{p.name}</span>
-                                  {p.city && <span className="text-xs text-muted-foreground">{p.city}/{p.state}</span>}
+                                  <span className="text-xs text-muted-foreground">
+                                    {p.city ? `${p.city}/${p.state}` : "Sem cidade"}
+                                    {(p as any)._distance != null && (p as any)._distance < 99999 && ` — ${(p as any)._distance.toFixed(1)} km`}
+                                  </span>
                                 </div>
                               </CommandItem>
                             ))}
