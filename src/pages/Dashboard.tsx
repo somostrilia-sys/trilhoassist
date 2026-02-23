@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, lazy, Suspense, Component, type ReactNode } from "react";
+import { useEffect, useState, useMemo, lazy, Suspense } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -49,16 +49,6 @@ const tooltipStyle = {
   borderRadius: "8px",
 };
 
-class MapErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
-  state = { hasError: false };
-  static getDerivedStateFromError() { return { hasError: true }; }
-  render() {
-    if (this.state.hasError) {
-      return <p className="text-muted-foreground text-center py-12">Mapa indisponível</p>;
-    }
-    return this.props.children;
-  }
-}
 
 function formatDuration(minutes: number): string {
   if (!minutes || !isFinite(minutes)) return "—";
@@ -431,11 +421,9 @@ export default function Dashboard() {
                 {heatPoints.length === 0 ? (
                   <p className="text-muted-foreground text-center py-12">Nenhuma coordenada registrada</p>
                 ) : (
-                  <MapErrorBoundary>
-                    <Suspense fallback={<div className="h-[450px] flex items-center justify-center text-muted-foreground">Carregando mapa…</div>}>
+                  <Suspense fallback={<div className="h-[450px] flex items-center justify-center text-muted-foreground">Carregando mapa…</div>}>
                       <ServiceHeatmap points={heatPoints} />
                     </Suspense>
-                  </MapErrorBoundary>
                 )}
               </CardContent>
             </Card>
