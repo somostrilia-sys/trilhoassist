@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 
 const ServiceHeatmap = lazy(() => import("@/components/ServiceHeatmap"));
+const NpsPanel = lazy(() => import("@/components/NpsPanel"));
 import {
   Headphones, Send, DollarSign, Clock, TrendingUp, AlertCircle,
   Timer, Route, Banknote, Zap,
@@ -470,6 +471,11 @@ export default function Dashboard() {
           </>
         );
       })()}
+
+      {/* NPS Panel */}
+      <Suspense fallback={<div className="text-muted-foreground text-center py-8">Carregando NPS…</div>}>
+        <NpsPanel />
+      </Suspense>
     </div>
   );
 }
