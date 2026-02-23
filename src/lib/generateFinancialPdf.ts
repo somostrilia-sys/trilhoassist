@@ -1,6 +1,28 @@
 import { formatCurrency, SERVICE_TYPE_LABELS } from "@/hooks/useFinancialData";
 import { format } from "date-fns";
 
+interface InvoiceItem {
+  protocol: string;
+  date: string;
+  requesterName: string;
+  vehiclePlate: string;
+  vehicleModel: string;
+  serviceType: string;
+  chargedAmount: number;
+  originAddress: string;
+  destinationAddress: string;
+  estimatedKm: number | null;
+  cooperativa: string;
+}
+
+interface CooperativaGroup {
+  cooperativa: string;
+  plates: number;
+  plateValue: number;
+  items: InvoiceItem[];
+  totalCharged: number;
+}
+
 interface InvoicePdfData {
   tenantName?: string;
   tenantLogo?: string;
@@ -11,14 +33,7 @@ interface InvoicePdfData {
   dueDate?: string | null;
   totalPlates?: number;
   totalPlateValue?: number;
-  items: {
-    protocol: string;
-    date: string;
-    requesterName: string;
-    vehiclePlate: string;
-    serviceType: string;
-    chargedAmount: number;
-  }[];
+  items: InvoiceItem[];
   totalServices: number;
   totalCharged: number;
   totalProviderCost: number;
@@ -26,10 +41,71 @@ interface InvoicePdfData {
   notes?: string;
   type: "invoice" | "closing";
   providerName?: string;
+  cooperativaGroups?: CooperativaGroup[];
 }
 
 function escapeHtml(str: string) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function renderItemRow(item: InvoiceItem, i: number) {
+  const route = item.originAddress && item.destinationAddress
+    ? `${escapeHtml(item.originAddress)} → ${escapeHtml(item.destinationAddress)}`
+    : item.originAddress ? escapeHtml(item.originAddress) : "—";
+  
+  return `
+    <tr style="${i % 2 === 0 ? "background:#f8fafc;" : ""}">
+      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-family:monospace;font-size:11px;">${escapeHtml(item.protocol)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:11px;">${escapeHtml(item.date)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:11px;">${escapeHtml(item.vehiclePlate || "—")}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:11px;">${escapeHtml(item.vehicleModel || "—")}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:11px;">${escapeHtml(item.serviceType)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:11px;max-width:200px;word-break:break-word;">${route}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:center;font-size:11px;">${item.estimatedKm != null ? `${Number(item.estimatedKm).toFixed(0)} km` : "—"}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;font-size:11px;font-weight:600;">${formatCurrency(item.chargedAmount)}</td>
+    </tr>`;
+}
+
+function renderTableHeader() {
+  return `
+    <thead>
+      <tr style="background:#1e3a5f;">
+        <th style="padding:8px;text-align:left;color:#fff;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Protocolo</th>
+        <th style="padding:8px;text-align:left;color:#fff;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Data</th>
+        <th style="padding:8px;text-align:left;color:#fff;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Placa</th>
+        <th style="padding:8px;text-align:left;color:#fff;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Modelo</th>
+        <th style="padding:8px;text-align:left;color:#fff;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Serviço</th>
+        <th style="padding:8px;text-align:left;color:#fff;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Roteirização</th>
+        <th style="padding:8px;text-align:center;color:#fff;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">KM</th>
+        <th style="padding:8px;text-align:right;color:#fff;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Valor</th>
+      </tr>
+    </thead>`;
+}
+
+function renderCooperativaSection(group: CooperativaGroup, billingModel?: string) {
+  const itemRows = group.items.map((item, i) => renderItemRow(item, i)).join("");
+  const showPlates = group.plates > 0;
+  
+  return `
+    <div style="margin-bottom:28px;page-break-inside:avoid;">
+      <div style="background:linear-gradient(135deg,#1e3a5f10,#1e3a5f05);border:1px solid #1e3a5f20;border-radius:8px;padding:14px 18px;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="font-size:14px;font-weight:700;color:#1e3a5f;">${escapeHtml(group.cooperativa)}</div>
+          </div>
+          <div style="display:flex;gap:24px;font-size:12px;">
+            ${showPlates ? `<div><span style="color:#64748b;">Placas:</span> <strong>${group.plates}</strong> (${formatCurrency(group.plateValue)})</div>` : ""}
+            <div><span style="color:#64748b;">Acionamentos:</span> <strong>${group.items.length}</strong></div>
+            <div><span style="color:#64748b;">Total:</span> <strong style="color:#1e3a5f;">${formatCurrency(group.totalCharged)}</strong></div>
+          </div>
+        </div>
+      </div>
+      ${group.items.length > 0 ? `
+      <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;font-size:11px;">
+        ${renderTableHeader()}
+        <tbody>${itemRows}</tbody>
+      </table>` : `<p style="font-size:12px;color:#64748b;text-align:center;padding:8px;">Nenhum acionamento neste período.</p>`}
+    </div>`;
 }
 
 export function generateFinancialPdf(data: InvoicePdfData) {
@@ -38,30 +114,38 @@ export function generateFinancialPdf(data: InvoicePdfData) {
   const entity = isInvoice ? data.clientName : data.providerName || "";
   const entityLabel = isInvoice ? "Cliente" : "Prestador";
 
-  const itemRows = data.items
-    .map(
-      (item, i) => `
-      <tr style="${i % 2 === 0 ? "background:#f8fafc;" : ""}">
-        <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;font-family:monospace;font-size:12px;">${escapeHtml(item.protocol)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:12px;">${escapeHtml(item.date)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:12px;">${escapeHtml(item.requesterName)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:12px;">${escapeHtml(item.vehiclePlate || "—")}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:12px;">${escapeHtml(item.serviceType)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;font-size:12px;font-weight:600;">
-          ${formatCurrency(item.chargedAmount)}
-        </td>
-      </tr>`
-    )
-    .join("");
+  // For invoices with cooperativa groups, render grouped view
+  const hasCooperativaGroups = isInvoice && data.cooperativaGroups && data.cooperativaGroups.length > 0;
+
+  let servicesSection = "";
+
+  if (hasCooperativaGroups && data.cooperativaGroups) {
+    servicesSection = `
+      <div style="margin-bottom:24px;">
+        <div style="font-size:13px;font-weight:600;color:#1e3a5f;margin-bottom:16px;text-transform:uppercase;letter-spacing:0.5px;">Detalhamento por Cooperativa</div>
+        ${data.cooperativaGroups.map(g => renderCooperativaSection(g, data.billingModel)).join("")}
+      </div>`;
+  } else if (data.items.length > 0) {
+    // Fallback: flat table (for closing PDFs or invoices without cooperativa)
+    const itemRows = data.items.map((item, i) => renderItemRow(item, i)).join("");
+    servicesSection = `
+      <div style="margin-bottom:24px;">
+        <div style="font-size:13px;font-weight:600;color:#1e3a5f;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px;">Serviços Realizados</div>
+        <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+          ${renderTableHeader()}
+          <tbody>${itemRows}</tbody>
+        </table>
+      </div>`;
+  }
 
   const plateSection =
     isInvoice && data.totalPlates && data.totalPlates > 0
       ? `
     <div style="margin-bottom:24px;padding:16px 20px;background:linear-gradient(135deg,#1e3a5f08,#1e3a5f05);border:1px solid #1e3a5f20;border-radius:8px;">
-      <div style="font-size:13px;font-weight:600;color:#1e3a5f;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Placas Ativas</div>
+      <div style="font-size:13px;font-weight:600;color:#1e3a5f;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Resumo Geral de Placas</div>
       <div style="display:flex;gap:32px;">
-        <div><span style="color:#64748b;font-size:12px;">Quantidade:</span> <strong>${data.totalPlates}</strong></div>
-        <div><span style="color:#64748b;font-size:12px;">Valor:</span> <strong>${formatCurrency(data.totalPlateValue || 0)}</strong></div>
+        <div><span style="color:#64748b;font-size:12px;">Quantidade Total:</span> <strong>${data.totalPlates}</strong></div>
+        <div><span style="color:#64748b;font-size:12px;">Valor Total:</span> <strong>${formatCurrency(data.totalPlateValue || 0)}</strong></div>
       </div>
     </div>`
       : "";
@@ -75,7 +159,7 @@ export function generateFinancialPdf(data: InvoicePdfData) {
   <style>
     @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
     body { margin:0; padding:0; font-family:'Inter','Segoe UI',system-ui,sans-serif; color:#1e293b; background:#fff; }
-    .page { max-width:800px; margin:0 auto; padding:40px; }
+    .page { max-width:900px; margin:0 auto; padding:40px; }
   </style>
 </head>
 <body>
@@ -108,39 +192,27 @@ export function generateFinancialPdf(data: InvoicePdfData) {
 
   ${plateSection}
 
-  <!-- Items Table -->
-  ${data.items.length > 0 ? `
-  <div style="margin-bottom:24px;">
-    <div style="font-size:13px;font-weight:600;color:#1e3a5f;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px;">Serviços Realizados</div>
-    <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
-      <thead>
-        <tr style="background:#1e3a5f;">
-          <th style="padding:10px 12px;text-align:left;color:#fff;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Protocolo</th>
-          <th style="padding:10px 12px;text-align:left;color:#fff;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Data</th>
-          <th style="padding:10px 12px;text-align:left;color:#fff;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Solicitante</th>
-          <th style="padding:10px 12px;text-align:left;color:#fff;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Placa</th>
-          <th style="padding:10px 12px;text-align:left;color:#fff;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Serviço</th>
-          <th style="padding:10px 12px;text-align:right;color:#fff;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Valor</th>
-        </tr>
-      </thead>
-      <tbody>${itemRows}</tbody>
-    </table>
-  </div>` : ""}
+  ${servicesSection}
 
   <!-- Totals -->
   <div style="background:linear-gradient(135deg,#1e3a5f,#1e40af);color:#fff;border-radius:12px;padding:24px 28px;margin-bottom:24px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${isInvoice ? "12px" : "0"};">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
       <div>
-        <div style="font-size:11px;opacity:0.7;text-transform:uppercase;letter-spacing:0.5px;">Total de Serviços</div>
+        <div style="font-size:11px;opacity:0.7;text-transform:uppercase;letter-spacing:0.5px;">Total de Acionamentos</div>
         <div style="font-size:24px;font-weight:800;">${data.totalServices}</div>
       </div>
+      ${isInvoice && data.totalPlates ? `
+      <div style="text-align:center;">
+        <div style="font-size:11px;opacity:0.7;text-transform:uppercase;letter-spacing:0.5px;">Total de Placas</div>
+        <div style="font-size:24px;font-weight:800;">${data.totalPlates}</div>
+      </div>` : ""}
       <div style="text-align:right;">
         <div style="font-size:11px;opacity:0.7;text-transform:uppercase;letter-spacing:0.5px;">Valor Total</div>
         <div style="font-size:28px;font-weight:800;">${formatCurrency(data.totalCharged)}</div>
       </div>
     </div>
     ${!isInvoice ? `
-    <div style="border-top:1px solid rgba(255,255,255,0.2);padding-top:12px;display:flex;justify-content:space-between;">
+    <div style="border-top:1px solid rgba(255,255,255,0.2);padding-top:12px;margin-top:12px;display:flex;justify-content:space-between;">
       <div>
         <span style="font-size:11px;opacity:0.7;">Valor por Serviço: </span>
         <span style="font-size:13px;font-weight:600;">${formatCurrency(data.totalProviderCost)}</span>
