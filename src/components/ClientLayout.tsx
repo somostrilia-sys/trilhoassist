@@ -4,7 +4,6 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ClientSidebar } from "@/components/ClientSidebar";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 
 export function ClientLayout() {
   const { user, loading, hasRole } = useAuth();
@@ -28,17 +27,17 @@ export function ClientLayout() {
     return <Navigate to="/dashboard" replace />;
   }
 
-  const initials = user.email?.substring(0, 2).toUpperCase() || "U";
+  const initials = user.email?.substring(0, 2).toUpperCase() || "C";
 
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
         <ClientSidebar />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 border-b bg-card/80 backdrop-blur-sm flex items-center justify-between px-4 shrink-0 sticky top-0 z-30">
+          <header className="h-14 glass-header flex items-center justify-between px-5 shrink-0 sticky top-0 z-30">
             <div className="flex items-center gap-2">
               <SidebarTrigger>
-                <Button variant="ghost" size="icon" className="rounded-lg">
+                <Button variant="ghost" size="icon" className="rounded-lg hover:bg-muted">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SidebarTrigger>
@@ -50,7 +49,7 @@ export function ClientLayout() {
             </div>
           </header>
           <main className="flex-1 overflow-auto p-6 custom-scrollbar">
-            <div className="animate-in">
+            <div className="animate-in max-w-[1600px] mx-auto">
               <Outlet />
             </div>
           </main>
