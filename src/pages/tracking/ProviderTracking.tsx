@@ -4,13 +4,22 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Navigation, Car, Phone, ExternalLink, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+  MapPin, Navigation, Car, Phone, ExternalLink, Loader2,
+  CheckCircle2, AlertCircle, Shield, Play,
+} from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
+import { toast } from "sonner";
 
 const serviceTypeMap: Record<string, string> = {
   tow_light: "Reboque Leve", tow_heavy: "Reboque Pesado", tow_motorcycle: "Reboque Moto",
   locksmith: "Chaveiro", tire_change: "Troca de Pneu", battery: "Bateria",
   fuel: "Combustível", lodging: "Hospedagem", collision: "Colisão", other: "Outro",
+};
+
+const statusLabels: Record<string, string> = {
+  pending: "Pendente", sent: "Enviado", accepted: "Aceito",
+  rejected: "Recusado", expired: "Expirado", cancelled: "Cancelado", completed: "Concluído",
 };
 
 export default function ProviderTracking() {
@@ -22,6 +31,8 @@ export default function ProviderTracking() {
   const [tracking, setTracking] = useState(false);
   const [lastSent, setLastSent] = useState<Date | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [accepting, setAccepting] = useState(false);
+  const [gpsReady, setGpsReady] = useState(false);
   const watchRef = useRef<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const latestPos = useRef<GeolocationPosition | null>(null);
@@ -78,13 +89,12 @@ export default function ProviderTracking() {
       return;
     }
 
-    setTracking(true);
     setGpsError(null);
 
-    // Watch position continuously
     watchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         latestPos.current = pos;
+        if (!gpsReady) setGpsReady(true);
       },
       (err) => {
         setGpsError(`Erro GPS: ${err.message}`);
@@ -103,12 +113,15 @@ export default function ProviderTracking() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         latestPos.current = pos;
+        setGpsReady(true);
         sendPosition(pos);
       },
       (err) => setGpsError(`Erro GPS: ${err.message}`),
       { enableHighAccuracy: true }
     );
-  }, [sendPosition]);
+
+    setTracking(true);
+  }, [sendPosition, gpsReady]);
 
   const stopTracking = useCallback(() => {
     if (watchRef.current !== null) {
@@ -120,6 +133,7 @@ export default function ProviderTracking() {
       intervalRef.current = null;
     }
     setTracking(false);
+    setGpsReady(false);
   }, []);
 
   useEffect(() => {
@@ -128,6 +142,87 @@ export default function ProviderTracking() {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
+
+  const handleAccept = useCallback(async () => {
+    if (!dispatch || !gpsReady || !latestPos.current) {
+      toast.error("Ative a localização antes de aceitar.");
+      return;
+    }
+
+    setAccepting(true);
+    const { error: err } = await supabase
+      .from("dispatches")
+      .update({
+        status: "accepted",
+        accepted_at: new Date().toISOString(),
+      })
+      .eq("id", dispatch.id);
+
+    if (err) {
+      toast.error("Erro ao aceitar acionamento", { description: err.message });
+      setAccepting(false);
+      return;
+    }
+
+    // Update service request status to in_progress
+    await supabase
+      .from("service_requests")
+      .update({ status: "in_progress" })
+      .eq("id", dispatch.service_request_id);
+
+    setDispatch({ ...dispatch, status: "accepted", accepted_at: new Date().toISOString() });
+    toast.success("Acionamento aceito!", { description: "Sua localização está sendo compartilhada." });
+    setAccepting(false);
+  }, [dispatch, gpsReady]);
+
+  const handleComplete = useCallback(async () => {
+    if (!dispatch) return;
+    setAccepting(true);
+
+    const { error: err } = await supabase
+      .from("dispatches")
+      .update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", dispatch.id);
+
+    if (err) {
+      toast.error("Erro ao finalizar", { description: err.message });
+      setAccepting(false);
+      return;
+    }
+
+    await supabase
+      .from("service_requests")
+      .update({ status: "completed", completed_at: new Date().toISOString() })
+      .eq("id", dispatch.service_request_id);
+
+    stopTracking();
+    setDispatch({ ...dispatch, status: "completed", completed_at: new Date().toISOString() });
+    toast.success("Atendimento finalizado!");
+    setAccepting(false);
+  }, [dispatch, stopTracking]);
+
+  const handleReject = useCallback(async () => {
+    if (!dispatch) return;
+    setAccepting(true);
+
+    await supabase
+      .from("dispatches")
+      .update({ status: "rejected" })
+      .eq("id", dispatch.id);
+
+    stopTracking();
+    setDispatch({ ...dispatch, status: "rejected" });
+    toast.info("Acionamento recusado.");
+    setAccepting(false);
+  }, [dispatch, stopTracking]);
+
+  const isAccepted = dispatch?.status === "accepted";
+  const isCompleted = dispatch?.status === "completed";
+  const isRejected = dispatch?.status === "rejected";
+  const isPending = dispatch?.status === "sent" || dispatch?.status === "pending";
 
   const originGoogleUrl = request?.origin_lat
     ? `https://www.google.com/maps/dir/?api=1&destination=${request.origin_lat},${request.origin_lng}&travelmode=driving`
@@ -153,15 +248,63 @@ export default function ProviderTracking() {
     );
   }
 
+  if (isCompleted) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="bg-primary text-primary-foreground p-4">
+          <div className="max-w-lg mx-auto flex items-center gap-3">
+            <img src={logoTrilho} alt="Logo" className="h-8 w-8 rounded" />
+            <div>
+              <h1 className="text-lg font-bold">Atendimento Finalizado</h1>
+              <p className="text-xs opacity-80">{request?.protocol}</p>
+            </div>
+          </div>
+        </div>
+        <div className="max-w-lg mx-auto p-4 flex flex-col items-center gap-4 mt-12">
+          <CheckCircle2 className="h-16 w-16 text-green-500" />
+          <h2 className="text-xl font-bold">Atendimento concluído!</h2>
+          <p className="text-muted-foreground text-center">
+            Obrigado pelo serviço. O pagamento será processado no próximo fechamento.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isRejected) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="bg-primary text-primary-foreground p-4">
+          <div className="max-w-lg mx-auto flex items-center gap-3">
+            <img src={logoTrilho} alt="Logo" className="h-8 w-8 rounded" />
+            <div>
+              <h1 className="text-lg font-bold">Acionamento Recusado</h1>
+              <p className="text-xs opacity-80">{request?.protocol}</p>
+            </div>
+          </div>
+        </div>
+        <div className="max-w-lg mx-auto p-4 flex flex-col items-center gap-4 mt-12">
+          <AlertCircle className="h-16 w-16 text-muted-foreground" />
+          <p className="text-muted-foreground text-center">Você recusou este acionamento.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="bg-primary text-primary-foreground p-4">
         <div className="max-w-lg mx-auto flex items-center gap-3">
           <img src={logoTrilho} alt="Logo" className="h-8 w-8 rounded" />
           <div>
-            <h1 className="text-lg font-bold">Rastreamento</h1>
+            <h1 className="text-lg font-bold">
+              {isPending ? "Novo Acionamento" : "Em Atendimento"}
+            </h1>
             <p className="text-xs opacity-80">{request?.protocol}</p>
           </div>
+          <Badge variant="secondary" className="ml-auto">
+            {statusLabels[dispatch?.status] || dispatch?.status}
+          </Badge>
         </div>
       </div>
 
@@ -187,11 +330,109 @@ export default function ProviderTracking() {
                 </a>
               </div>
             )}
+            {request?.origin_address && (
+              <div className="flex items-center gap-2 text-sm">
+                <MapPin className="h-4 w-4 text-muted-foreground" />
+                <span>{request.origin_address}</span>
+              </div>
+            )}
+            {request?.notes && (
+              <p className="text-sm text-muted-foreground border-l-2 border-muted pl-3">{request.notes}</p>
+            )}
+            {dispatch?.quoted_amount && (
+              <p className="text-sm font-medium">
+                Valor: R$ {Number(dispatch.quoted_amount).toFixed(2)}
+              </p>
+            )}
           </CardContent>
         </Card>
 
-        {/* Navigation to origin */}
-        {request?.origin_lat && (
+        {/* Step 1: GPS - Required before acceptance */}
+        <Card className={tracking ? "border-green-500 border-2" : "border-amber-500 border-2"}>
+          <CardContent className="pt-4 space-y-3">
+            <h3 className="font-semibold text-sm flex items-center gap-2">
+              {tracking ? (
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+              ) : (
+                <Shield className="h-4 w-4 text-amber-500" />
+              )}
+              {isPending ? "1. Ative sua localização" : "Localização em tempo real"}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {isPending
+                ? "Obrigatório: compartilhe sua localização para aceitar o acionamento."
+                : "Sua localização está sendo compartilhada com o cliente e a central."}
+            </p>
+
+            {!tracking ? (
+              <Button onClick={startTracking} className="w-full gap-2" variant="default">
+                <Navigation className="h-4 w-4" />
+                Ativar localização
+              </Button>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>Localização ativa</span>
+                  {lastSent && (
+                    <span className="text-xs text-muted-foreground ml-auto">
+                      Último: {lastSent.toLocaleTimeString("pt-BR")}
+                    </span>
+                  )}
+                </div>
+                {isAccepted && (
+                  <Button onClick={stopTracking} variant="outline" size="sm" className="w-full">
+                    Parar compartilhamento
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {gpsError && (
+              <p className="text-xs text-destructive">{gpsError}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Step 2: Accept / Reject - only if pending */}
+        {isPending && (
+          <Card>
+            <CardContent className="pt-4 space-y-3">
+              <h3 className="font-semibold text-sm flex items-center gap-2">
+                <Play className="h-4 w-4" />
+                2. Aceitar acionamento
+              </h3>
+
+              {!gpsReady && (
+                <p className="text-xs text-amber-600">
+                  ⚠️ Ative sua localização primeiro para aceitar.
+                </p>
+              )}
+
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleAccept}
+                  disabled={!gpsReady || accepting}
+                  className="flex-1 gap-2"
+                >
+                  {accepting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  Aceitar
+                </Button>
+                <Button
+                  onClick={handleReject}
+                  disabled={accepting}
+                  variant="destructive"
+                  className="flex-1"
+                >
+                  Recusar
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Navigation to origin - show after acceptance */}
+        {isAccepted && request?.origin_lat && (
           <Card>
             <CardContent className="pt-4 space-y-3">
               <h3 className="font-semibold text-sm flex items-center gap-2">
@@ -217,44 +458,52 @@ export default function ProviderTracking() {
           </Card>
         )}
 
-        {/* GPS Tracking */}
-        <Card className={tracking ? "border-green-500 border-2" : ""}>
-          <CardContent className="pt-4 space-y-3">
-            <h3 className="font-semibold text-sm flex items-center gap-2">
-              <MapPin className="h-4 w-4" />
-              Compartilhar localização
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Ative para que o cliente e a central acompanhem sua posição em tempo real.
-            </p>
-
-            {!tracking ? (
-              <Button onClick={startTracking} className="w-full gap-2">
-                <Navigation className="h-4 w-4" />
-                Iniciar rastreamento
-              </Button>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-green-600">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>Rastreamento ativo</span>
-                  {lastSent && (
-                    <span className="text-xs text-muted-foreground ml-auto">
-                      Último envio: {lastSent.toLocaleTimeString("pt-BR")}
-                    </span>
-                  )}
-                </div>
-                <Button onClick={stopTracking} variant="destructive" className="w-full gap-2">
-                  Parar rastreamento
+        {/* Destination navigation */}
+        {isAccepted && request?.destination_lat && (
+          <Card>
+            <CardContent className="pt-4 space-y-3">
+              <h3 className="font-semibold text-sm flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-red-500" />
+                Levar ao destino
+              </h3>
+              {request.destination_address && (
+                <p className="text-sm text-muted-foreground">{request.destination_address}</p>
+              )}
+              <div className="flex gap-2">
+                <Button size="sm" className="flex-1" asChild>
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${request.destination_lat},${request.destination_lng}&travelmode=driving`}
+                    target="_blank" rel="noopener noreferrer" className="gap-2"
+                  >
+                    <Navigation className="h-4 w-4" /> Google Maps
+                  </a>
+                </Button>
+                <Button size="sm" variant="secondary" className="flex-1" asChild>
+                  <a
+                    href={`https://www.waze.com/ul?ll=${request.destination_lat},${request.destination_lng}&navigate=yes`}
+                    target="_blank" rel="noopener noreferrer" className="gap-2"
+                  >
+                    <MapPin className="h-4 w-4" /> Waze
+                  </a>
                 </Button>
               </div>
-            )}
+            </CardContent>
+          </Card>
+        )}
 
-            {gpsError && (
-              <p className="text-xs text-destructive">{gpsError}</p>
-            )}
-          </CardContent>
-        </Card>
+        {/* Complete button */}
+        {isAccepted && (
+          <Button
+            onClick={handleComplete}
+            disabled={accepting}
+            className="w-full gap-2"
+            variant="default"
+            size="lg"
+          >
+            {accepting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            Finalizar atendimento
+          </Button>
+        )}
       </div>
     </div>
   );
