@@ -208,7 +208,7 @@ export default function Billing() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Faturamento</h1>
-          <p className="text-sm text-muted-foreground">Faturas para clientes com markup</p>
+          <p className="text-sm text-muted-foreground">Faturas para clientes</p>
         </div>
         <Button className="gap-2" onClick={() => setShowCreate(true)}>
           <Plus className="h-4 w-4" />
@@ -282,7 +282,6 @@ export default function Billing() {
                   <TableHead>Período</TableHead>
                   <TableHead>Serviços</TableHead>
                   <TableHead>Valor Faturado</TableHead>
-                  <TableHead>Markup</TableHead>
                   <TableHead>Vencimento</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Ações</TableHead>
@@ -297,7 +296,6 @@ export default function Billing() {
                     </TableCell>
                     <TableCell>{inv.total_services}</TableCell>
                     <TableCell className="font-medium">{formatCurrency(inv.total_charged)}</TableCell>
-                    <TableCell className="text-green-600 font-medium">{formatCurrency(inv.markup_amount)}</TableCell>
                     <TableCell className="text-sm">{inv.due_date ? format(new Date(inv.due_date), "dd/MM/yyyy") : "—"}</TableCell>
                     <TableCell>
                       <Badge variant={statusVariant(inv.status)}>
@@ -412,12 +410,11 @@ export default function Billing() {
                   <Separator />
 
                   {/* Service section */}
-                  <div className="space-y-1">
+                   <div className="space-y-1">
                     <p className="font-medium text-muted-foreground">Serviços</p>
                     <p>Atendimentos: <strong>{clientRequests.length}</strong></p>
-                    <p>Custo prestadores: <strong>{formatCurrency(clientRequests.reduce((s: number, r: any) => s + Number(r.provider_cost || 0), 0))}</strong></p>
                     {billingModel === "plate_plus_service" ? (
-                      <p>Valor serviços cobrado: <strong>{formatCurrency(clientRequests.reduce((s: number, r: any) => s + Number(r.charged_amount || 0), 0))}</strong></p>
+                      <p>Valor serviços: <strong>{formatCurrency(clientRequests.reduce((s: number, r: any) => s + Number(r.charged_amount || 0), 0))}</strong></p>
                     ) : (
                       <p className="text-muted-foreground italic">Serviços inclusos no valor da placa</p>
                     )}
@@ -429,14 +426,9 @@ export default function Billing() {
                   <div className="space-y-1 pt-1">
                     {(() => {
                       const serviceCharged = billingModel === "plate_only" ? 0 : clientRequests.reduce((s: number, r: any) => s + Number(r.charged_amount || 0), 0);
-                      const totalProviderCost = clientRequests.reduce((s: number, r: any) => s + Number(r.provider_cost || 0), 0);
                       const total = totalPlateValue + serviceCharged;
-                      const markup = total - totalProviderCost;
                       return (
-                        <>
-                          <p className="font-semibold">Total faturado: <strong>{formatCurrency(total)}</strong></p>
-                          <p className="text-green-600">Markup: <strong>{formatCurrency(markup)}</strong></p>
-                        </>
+                        <p className="font-semibold">Total faturado: <strong>{formatCurrency(total)}</strong></p>
                       );
                     })()}
                   </div>
