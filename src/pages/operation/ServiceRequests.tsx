@@ -4,9 +4,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Clock, CheckCircle, AlertCircle, XCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Search, Clock, CheckCircle, AlertCircle, XCircle, ChevronLeft, ChevronRight, CalendarIcon, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
 
@@ -38,6 +43,8 @@ export default function ServiceRequests() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [serviceTypeFilter, setServiceTypeFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
+  const [dateFrom, setDateFrom] = useState<Date | undefined>();
+  const [dateTo, setDateTo] = useState<Date | undefined>();
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(25);
   const [totalCount, setTotalCount] = useState(0);
@@ -73,6 +80,15 @@ export default function ServiceRequests() {
       query = query.eq("service_type", serviceTypeFilter as any);
     }
 
+    if (dateFrom) {
+      query = query.gte("created_at", dateFrom.toISOString());
+    }
+    if (dateTo) {
+      const endOfDay = new Date(dateTo);
+      endOfDay.setHours(23, 59, 59, 999);
+      query = query.lte("created_at", endOfDay.toISOString());
+    }
+
     if (search) {
       query = query.or(
         `protocol.ilike.%${search}%,requester_name.ilike.%${search}%,vehicle_plate.ilike.%${search}%`
@@ -90,7 +106,7 @@ export default function ServiceRequests() {
       setTotalCount(count);
     }
     setLoading(false);
-  }, [page, pageSize, statusFilter, serviceTypeFilter, search]);
+  }, [page, pageSize, statusFilter, serviceTypeFilter, search, dateFrom, dateTo]);
 
   useEffect(() => {
     loadCounts();
@@ -111,7 +127,7 @@ export default function ServiceRequests() {
   // Reset page when filters change
   useEffect(() => {
     setPage(0);
-  }, [statusFilter, serviceTypeFilter, search]);
+  }, [statusFilter, serviceTypeFilter, search, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const allTotal = Object.values(statusCounts).reduce((a, b) => a + b, 0);
@@ -129,7 +145,7 @@ export default function ServiceRequests() {
         </Button>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -150,6 +166,48 @@ export default function ServiceRequests() {
             ))}
           </SelectContent>
         </Select>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className={cn("w-[150px] justify-start text-left font-normal", !dateFrom && "text-muted-foreground")}>
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {dateFrom ? format(dateFrom, "dd/MM/yyyy") : "Data início"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={dateFrom}
+              onSelect={setDateFrom}
+              initialFocus
+              locale={ptBR}
+              className={cn("p-3 pointer-events-auto")}
+            />
+          </PopoverContent>
+        </Popover>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className={cn("w-[150px] justify-start text-left font-normal", !dateTo && "text-muted-foreground")}>
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {dateTo ? format(dateTo, "dd/MM/yyyy") : "Data fim"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={dateTo}
+              onSelect={setDateTo}
+              initialFocus
+              locale={ptBR}
+              className={cn("p-3 pointer-events-auto")}
+            />
+          </PopoverContent>
+        </Popover>
+        {(dateFrom || dateTo) && (
+          <Button variant="ghost" size="sm" onClick={() => { setDateFrom(undefined); setDateTo(undefined); }} className="gap-1">
+            <X className="h-4 w-4" />
+            Limpar datas
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
