@@ -158,6 +158,7 @@ export default function ServiceRequestDetail() {
   const [providers, setProviders] = useState<any[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState("");
   const [quotedAmount, setQuotedAmount] = useState("");
+  const [chargedAmount, setChargedAmount] = useState("");
   const [dispatchNotes, setDispatchNotes] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [noteText, setNoteText] = useState("");
@@ -309,6 +310,10 @@ export default function ServiceRequestDetail() {
 
   const handleDispatch = async () => {
     if (!selectedProviderId || !id) return;
+    if (!quotedAmount || !chargedAmount) {
+      toast.error("Preencha os valores obrigatórios", { description: "Valor do Prestador e Valor Cobrado são obrigatórios." });
+      return;
+    }
     setActionLoading(true);
 
     // Generate tokens
@@ -330,14 +335,16 @@ export default function ServiceRequestDetail() {
       return;
     }
 
-    // Update service request with beneficiary token
+    // Update service request with beneficiary token and financial values
     await supabase.from("service_requests").update({
       status: "dispatched",
       beneficiary_token: beneficiaryToken,
+      provider_cost: parseFloat(quotedAmount),
+      charged_amount: parseFloat(chargedAmount),
     }).eq("id", id);
 
     const providerName = providers.find(p => p.id === selectedProviderId)?.name || "Prestador";
-    await logEvent("dispatch", `Prestador acionado: ${providerName}${quotedAmount ? ` — Valor: R$ ${parseFloat(quotedAmount).toFixed(2)}` : ""}`, request.status, "dispatched");
+    await logEvent("dispatch", `Prestador acionado: ${providerName} — Valor Prestador: R$ ${parseFloat(quotedAmount).toFixed(2)} — Valor Cobrado: R$ ${parseFloat(chargedAmount).toFixed(2)}`, request.status, "dispatched");
 
     // Send WhatsApp tracking links (fire and forget)
     const baseUrl = window.location.origin;
@@ -368,7 +375,7 @@ export default function ServiceRequestDetail() {
     // Send dispatch preview label to client WhatsApp group
     sendServiceLabel(id, "dispatch_preview", {
       provider_id: selectedProviderId,
-      quoted_amount: quotedAmount ? parseFloat(quotedAmount) : undefined,
+      quoted_amount: parseFloat(chargedAmount),
     });
 
     setActionLoading(false);
@@ -376,6 +383,7 @@ export default function ServiceRequestDetail() {
     setDispatchDialogOpen(false);
     setSelectedProviderId("");
     setQuotedAmount("");
+    setChargedAmount("");
     setDispatchNotes("");
     loadData();
     loadEvents();
@@ -1055,7 +1063,7 @@ export default function ServiceRequestDetail() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Valor Orçado (R$)</Label>
+              <Label>Valor do Prestador (R$) *</Label>
               <Input
                 type="number"
                 step="0.01"
@@ -1063,6 +1071,18 @@ export default function ServiceRequestDetail() {
                 value={quotedAmount}
                 onChange={(e) => setQuotedAmount(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground">Valor cobrado pelo prestador</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Valor Cobrado (R$) *</Label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={chargedAmount}
+                onChange={(e) => setChargedAmount(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">Valor cobrado do cliente</p>
             </div>
             <div className="space-y-2">
               <Label>Observações</Label>
@@ -1076,7 +1096,7 @@ export default function ServiceRequestDetail() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDispatchDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleDispatch} disabled={!selectedProviderId || actionLoading}>
+            <Button onClick={handleDispatch} disabled={!selectedProviderId || !quotedAmount || !chargedAmount || actionLoading}>
               {actionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Acionar
             </Button>

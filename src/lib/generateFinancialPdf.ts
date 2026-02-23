@@ -139,15 +139,11 @@ export function generateFinancialPdf(data: InvoicePdfData) {
         <div style="font-size:28px;font-weight:800;">${formatCurrency(data.totalCharged)}</div>
       </div>
     </div>
-    ${isInvoice ? `
+    ${!isInvoice ? `
     <div style="border-top:1px solid rgba(255,255,255,0.2);padding-top:12px;display:flex;justify-content:space-between;">
       <div>
-        <span style="font-size:11px;opacity:0.7;">Custo Prestadores: </span>
+        <span style="font-size:11px;opacity:0.7;">Valor por Serviço: </span>
         <span style="font-size:13px;font-weight:600;">${formatCurrency(data.totalProviderCost)}</span>
-      </div>
-      <div>
-        <span style="font-size:11px;opacity:0.7;">Margem: </span>
-        <span style="font-size:13px;font-weight:600;color:#86efac;">${formatCurrency(data.markupAmount)}</span>
       </div>
     </div>` : ""}
   </div>
