@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Headphones, Briefcase, Users, DollarSign,
   FileText, Settings, Link2, BarChart3, ChevronDown, Plus, List,
-  Building2, UserCheck, Award, Network, Receipt, FileCheck, LogOut, Shield, MessageSquare
+  Building2, UserCheck, Award, Network, Receipt, FileCheck, LogOut, Shield, MessageSquare, Zap
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -88,6 +88,7 @@ const menuSections: MenuSection[] = [
     items: [
       { title: "Usuários", url: "/settings/users", icon: Users },
       { title: "Permissões", url: "/settings/permissions", icon: Shield },
+      { title: "Respostas Rápidas", url: "/settings/quick-replies", icon: Zap },
       { title: "Configurações", url: "/settings", icon: Settings },
       { title: "Integrações", url: "/integrations", icon: Link2 },
     ],
