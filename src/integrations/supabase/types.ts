@@ -1075,6 +1075,7 @@ export type Database = {
       }
       whatsapp_conversations: {
         Row: {
+          assigned_to: string | null
           beneficiary_id: string | null
           contact_name: string | null
           created_at: string
@@ -1093,6 +1094,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          assigned_to?: string | null
           beneficiary_id?: string | null
           contact_name?: string | null
           created_at?: string
@@ -1111,6 +1113,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          assigned_to?: string | null
           beneficiary_id?: string | null
           contact_name?: string | null
           created_at?: string

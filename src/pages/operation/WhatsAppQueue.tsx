@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Phone, User, Clock, Plus, Search, ArrowRight, X, Send } from "lucide-react";
+import { MessageSquare, Phone, User, Clock, Plus, Search, X, Send, UserCheck } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -29,12 +29,16 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function WhatsAppQueue() {
+  const { user } = useAuth();
   const { data: tenantId } = useTenantId();
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [replyText, setReplyText] = useState("");
+  const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ["whatsapp-conversations", tenantId],
@@ -67,6 +71,11 @@ export default function WhatsAppQueue() {
     refetchInterval: 3000,
   });
 
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   // Realtime subscription
   useEffect(() => {
     if (!tenantId) return;
@@ -82,6 +91,22 @@ export default function WhatsAppQueue() {
     return () => { supabase.removeChannel(channel); };
   }, [tenantId, queryClient]);
 
+  // Fetch operator names for assigned_to display
+  const { data: operators = [] } = useQuery({
+    queryKey: ["operators-profiles", tenantId],
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("user_id, full_name");
+      return data ?? [];
+    },
+    enabled: !!tenantId,
+  });
+
+  const getOperatorName = (userId: string | null) => {
+    if (!userId) return null;
+    const op = operators.find((o: any) => o.user_id === userId);
+    return op?.full_name || "Atendente";
+  };
+
   const selectedConv = conversations.find((c: any) => c.id === selectedConversation);
 
   const filteredConversations = conversations.filter((c: any) => {
@@ -94,6 +119,46 @@ export default function WhatsAppQueue() {
     );
   });
 
+  const handleSendReply = async () => {
+    if (!replyText.trim() || !selectedConv || sending) return;
+    setSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-whatsapp", {
+        body: {
+          phone: selectedConv.phone,
+          message: replyText.trim(),
+          conversation_id: selectedConv.id,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      setReplyText("");
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-messages"] });
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-conversations"] });
+    } catch (err: any) {
+      console.error("Send error:", err);
+      toast({
+        title: "Erro ao enviar mensagem",
+        description: err.message || "Verifique se as credenciais do WhatsApp estão configuradas.",
+        variant: "destructive",
+      });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleAssignToMe = async () => {
+    if (!selectedConv || !user) return;
+    await supabase
+      .from("whatsapp_conversations")
+      .update({ assigned_to: user.id })
+      .eq("id", selectedConv.id);
+    queryClient.invalidateQueries({ queryKey: ["whatsapp-conversations"] });
+    toast({ title: "Conversa atribuída a você" });
+  };
+
   const handleCreateService = () => {
     if (!selectedConv) return;
     const b = selectedConv.beneficiaries as any;
@@ -101,7 +166,6 @@ export default function WhatsAppQueue() {
     params.set("phone", selectedConv.phone || "");
     params.set("name", selectedConv.contact_name || (selectedConv as any).detected_beneficiary_name || b?.name || "");
     
-    // Use detected plate or beneficiary plate
     const plate = (selectedConv as any).detected_plate || b?.vehicle_plate;
     if (plate) params.set("plate", plate);
     
@@ -111,14 +175,12 @@ export default function WhatsAppQueue() {
     const year = (selectedConv as any).detected_vehicle_year || b?.vehicle_year;
     if (year) params.set("year", String(year));
     
-    // Use stored GPS location as origin
     const lat = (selectedConv as any).origin_lat;
     const lng = (selectedConv as any).origin_lng;
     if (lat && lng) params.set("origin_coords", `${lat},${lng}`);
     
     params.set("conversation_id", selectedConv.id);
 
-    // Collect last text messages as notes
     const lastMsgs = messages
       .filter((m: any) => m.direction === "inbound" && m.content)
       .slice(-5)
@@ -174,6 +236,7 @@ export default function WhatsAppQueue() {
                 <div className="divide-y divide-border">
                   {filteredConversations.map((conv: any) => {
                     const b = conv.beneficiaries as any;
+                    const assignedName = getOperatorName(conv.assigned_to);
                     return (
                       <button
                         key={conv.id}
@@ -194,6 +257,12 @@ export default function WhatsAppQueue() {
                             {b?.vehicle_plate && (
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 🚗 {b.vehicle_plate} - {b.vehicle_model}
+                              </p>
+                            )}
+                            {assignedName && (
+                              <p className="text-xs text-primary flex items-center gap-1 mt-0.5">
+                                <UserCheck className="h-3 w-3" />
+                                {assignedName}
                               </p>
                             )}
                           </div>
@@ -240,8 +309,19 @@ export default function WhatsAppQueue() {
                           ` · ${(selectedConv.beneficiaries as any).clients.name}`}
                       </p>
                     )}
+                    {getOperatorName((selectedConv as any).assigned_to) && (
+                      <p className="text-xs text-primary mt-0.5 flex items-center gap-1">
+                        <UserCheck className="h-3 w-3" />
+                        Atendente: {getOperatorName((selectedConv as any).assigned_to)}
+                      </p>
+                    )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap justify-end">
+                    {(selectedConv as any).assigned_to !== user?.id && (
+                      <Button size="sm" variant="outline" onClick={handleAssignToMe}>
+                        <UserCheck className="h-4 w-4 mr-1" /> Assumir
+                      </Button>
+                    )}
                     <Button size="sm" variant="outline" onClick={() => handleCloseConversation(selectedConv.id)}>
                       <X className="h-4 w-4 mr-1" /> Encerrar
                     </Button>
@@ -251,6 +331,8 @@ export default function WhatsAppQueue() {
                   </div>
                 </div>
               </CardHeader>
+
+              {/* Messages */}
               <CardContent className="flex-1 p-0 overflow-hidden">
                 <ScrollArea className="h-full p-4">
                   <div className="space-y-3">
@@ -291,9 +373,32 @@ export default function WhatsAppQueue() {
                         </div>
                       </div>
                     ))}
+                    <div ref={messagesEndRef} />
                   </div>
                 </ScrollArea>
               </CardContent>
+
+              {/* Reply input */}
+              <div className="border-t p-3">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSendReply();
+                  }}
+                  className="flex gap-2"
+                >
+                  <Input
+                    placeholder="Digite sua mensagem..."
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    disabled={sending}
+                    className="flex-1"
+                  />
+                  <Button type="submit" size="sm" disabled={sending || !replyText.trim()}>
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </form>
+              </div>
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
