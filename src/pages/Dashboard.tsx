@@ -118,22 +118,20 @@ export default function Dashboard() {
     const completedReqs = requests.filter((r) => r.status === "completed" && r.completed_at);
     let avgServiceTimeMin = 0;
     if (completedReqs.length > 0) {
-      const totalMin = completedReqs.reduce((s, r) => {
-        const diff = (new Date(r.completed_at).getTime() - new Date(r.created_at).getTime()) / 60000;
-        return s + diff;
-      }, 0);
-      avgServiceTimeMin = totalMin / completedReqs.length;
+      const validTimes = completedReqs
+        .map((r) => (new Date(r.completed_at).getTime() - new Date(r.created_at).getTime()) / 60000)
+        .filter((d) => d > 0);
+      avgServiceTimeMin = validTimes.length > 0 ? validTimes.reduce((s, d) => s + d, 0) / validTimes.length : 0;
     }
 
     // Tempo médio de acionamento (dispatch created_at → accepted_at)
     const acceptedDisp = dispatches.filter((d) => d.accepted_at);
     let avgDispatchTimeMin = 0;
     if (acceptedDisp.length > 0) {
-      const totalMin = acceptedDisp.reduce((s, d) => {
-        const diff = (new Date(d.accepted_at).getTime() - new Date(d.created_at).getTime()) / 60000;
-        return s + diff;
-      }, 0);
-      avgDispatchTimeMin = totalMin / acceptedDisp.length;
+      const validTimes = acceptedDisp
+        .map((d) => (new Date(d.accepted_at).getTime() - new Date(d.created_at).getTime()) / 60000)
+        .filter((d) => d > 0);
+      avgDispatchTimeMin = validTimes.length > 0 ? validTimes.reduce((s, d) => s + d, 0) / validTimes.length : 0;
     }
 
     // Distância média
