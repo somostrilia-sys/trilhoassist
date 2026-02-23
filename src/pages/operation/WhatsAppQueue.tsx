@@ -8,12 +8,13 @@ import { useTenantId } from "@/hooks/useFinancialData";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Info, FileText } from "lucide-react";
+import { MessageSquare, Info, FileText, Plus } from "lucide-react";
 import { ConversationList } from "@/components/whatsapp/ConversationList";
 import { ChatArea } from "@/components/whatsapp/ChatArea";
 import { ContactInfoPanel } from "@/components/whatsapp/ContactInfoPanel";
 import { SendTemplateDialog } from "@/components/whatsapp/SendTemplateDialog";
 import { Button } from "@/components/ui/button";
+import { NewConversationDialog } from "@/components/whatsapp/NewConversationDialog";
 
 export default function WhatsAppQueue() {
   const { user } = useAuth();
@@ -28,6 +29,8 @@ export default function WhatsAppQueue() {
   const [sending, setSending] = useState(false);
   const [showInfo, setShowInfo] = useState(true);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const [showNewConversation, setShowNewConversation] = useState(false);
+  const [creatingConversation, setCreatingConversation] = useState(false);
   // Fetch all conversations (including closed for filter)
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ["whatsapp-conversations", tenantId],
@@ -336,6 +339,54 @@ export default function WhatsAppQueue() {
     navigate(`/operation/new?${params.toString()}`);
   };
 
+  const handleNewConversation = async (phone: string, contactName: string) => {
+    if (!tenantId || !user) return;
+    setCreatingConversation(true);
+    try {
+      let cleanPhone = phone.replace(/\D/g, "");
+      if (cleanPhone.length <= 11) cleanPhone = `55${cleanPhone}`;
+
+      // Check if conversation already exists
+      const { data: existing } = await supabase
+        .from("whatsapp_conversations")
+        .select("id")
+        .eq("phone", cleanPhone)
+        .eq("tenant_id", tenantId)
+        .neq("status", "closed")
+        .maybeSingle();
+
+      if (existing) {
+        setSelectedConversation(existing.id);
+        setShowNewConversation(false);
+        toast({ title: "Conversa já existe, abrindo..." });
+        return;
+      }
+
+      const { data: newConv, error } = await supabase
+        .from("whatsapp_conversations")
+        .insert({
+          phone: cleanPhone,
+          contact_name: contactName || null,
+          tenant_id: tenantId,
+          status: "open",
+          assigned_to: user.id,
+        })
+        .select("id")
+        .single();
+
+      if (error) throw error;
+
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-conversations"] });
+      setSelectedConversation(newConv.id);
+      setShowNewConversation(false);
+      toast({ title: "Conversa criada! Envie a primeira mensagem." });
+    } catch (err: any) {
+      toast({ title: "Erro ao criar conversa", description: err.message, variant: "destructive" });
+    } finally {
+      setCreatingConversation(false);
+    }
+  };
+
   const activeCount = conversations.filter((c: any) => c.status !== "closed").length;
 
   return (
@@ -351,6 +402,10 @@ export default function WhatsAppQueue() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="default" size="sm" onClick={() => setShowNewConversation(true)}>
+            <Plus className="h-4 w-4 mr-1" />
+            Nova Conversa
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setShowTemplateDialog(true)}>
             <FileText className="h-4 w-4 mr-1" />
             Enviar Template
@@ -446,6 +501,13 @@ export default function WhatsAppQueue() {
           queryClient.invalidateQueries({ queryKey: ["whatsapp-conversations"] });
           queryClient.invalidateQueries({ queryKey: ["whatsapp-messages"] });
         }}
+      />
+
+      <NewConversationDialog
+        open={showNewConversation}
+        onOpenChange={setShowNewConversation}
+        onStart={handleNewConversation}
+        loading={creatingConversation}
       />
     </div>
   );
