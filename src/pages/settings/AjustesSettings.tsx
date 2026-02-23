@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Settings2, Building2, Palette, Tag, Bell, Save, Upload, Siren } from "lucide-react";
+import { Settings2, Building2, Palette, Tag, Bell, Save, Upload, Siren, MessageSquare, RotateCcw } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 const DEFAULT_LABELS: Record<string, string> = {
   beneficiario: "Beneficiário",
@@ -25,6 +27,88 @@ const DEFAULT_NOTIFICATIONS = {
   email_request_completed: true,
   whatsapp_new_request: false,
   whatsapp_request_status: false,
+};
+
+// Auto-notify phase definitions
+const AUTO_NOTIFY_PHASES = [
+  {
+    key: "beneficiary_creation",
+    label: "Beneficiário — Atendimento Criado",
+    description: "Enviada ao beneficiário quando o atendimento é registrado",
+    icon: "📋",
+    defaultMessage: `Olá, {{beneficiary_name}}! 👋
+
+Seu atendimento foi registrado com sucesso pelo *{{tenant_name}}*.
+
+*Protocolo*: {{protocol}}
+*Serviço*: {{service_name}}
+
+Excelente! 👌 Encaminhei seus dados para o setor de acionamento. Agora estamos localizando o prestador mais próximo. Assim que tiver a previsão de chegada, retorno aqui com as informações.
+
+Aguarde, por favor! 🙏`,
+  },
+  {
+    key: "beneficiary_dispatch",
+    label: "Beneficiário — Prestador Acionado",
+    description: "Enviada ao beneficiário quando o prestador é despachado",
+    icon: "🚗",
+    defaultMessage: `Boa notícia! 😀
+
+O prestador já foi localizado e está a aproximadamente *{{estimated_arrival_min}} minutos* do local.
+
+*Prestador*: {{provider_name}}
+*Protocolo*: {{protocol}}
+
+📍 Segue o link pra você acompanhar o andamento e a chegada do prestador:
+{{beneficiary_tracking_url}}
+
+Por favor, *não se esqueça de marcar no seu link quando ele chegar*, isso ajuda a gente a acompanhar aqui. ✅`,
+  },
+  {
+    key: "beneficiary_completion",
+    label: "Beneficiário — Atendimento Finalizado (NPS)",
+    description: "Enviada ao beneficiário após finalização, com link de pesquisa NPS",
+    icon: "✅",
+    defaultMessage: `Olá, {{beneficiary_name}}! ✅
+
+Seu atendimento *{{protocol}}* foi *finalizado com sucesso*!
+
+Agradecemos por confiar no *{{tenant_name}}*. Esperamos que tenha tido uma boa experiência.
+
+Em breve você receberá uma pesquisa de satisfação. Sua opinião é muito importante para nós! ⭐
+
+Obrigado! 🙏`,
+  },
+  {
+    key: "provider_dispatch",
+    label: "Prestador — Acionamento",
+    description: "Enviada ao prestador com dados do serviço e link de rastreamento",
+    icon: "🔧",
+    defaultMessage: `🚗 *Novo Acionamento!*
+
+*{{tenant_name}}*
+
+*Protocolo*: {{protocol}}
+*Serviço*: {{service_name}}
+*Veículo*: {{vehicle_model}} {{vehicle_plate}}
+*Solicitante*: {{requester_name}}
+*Contato*: {{requester_phone}}
+
+*Origem*: {{origin_address}}
+*Destino*: {{destination_address}}
+
+📍 *Navegação e rastreamento*:
+{{provider_tracking_url}}
+
+Por favor, acesse o link acima para iniciar a navegação e compartilhar sua localização em tempo real.`,
+  },
+] as const;
+
+type AutoNotifySettings = {
+  [key: string]: {
+    enabled: boolean;
+    custom_message?: string;
+  };
 };
 
 export default function AjustesSettings() {
@@ -53,6 +137,7 @@ export default function AjustesSettings() {
   const [notifications, setNotifications] = useState(DEFAULT_NOTIFICATIONS);
   const [alertDispatchMin, setAlertDispatchMin] = useState(15);
   const [alertLateMin, setAlertLateMin] = useState(10);
+  const [autoNotifySettings, setAutoNotifySettings] = useState<AutoNotifySettings>({});
 
   const { data: tenant, isLoading } = useQuery({
     queryKey: ["tenant-settings", tenantId],
@@ -88,9 +173,20 @@ export default function AjustesSettings() {
       const labels = (tenant as any).custom_labels;
       setCustomLabels({ ...DEFAULT_LABELS, ...(labels && typeof labels === "object" ? labels : {}) });
       const notif = (tenant as any).notification_settings;
-      setNotifications({ ...DEFAULT_NOTIFICATIONS, ...(notif && typeof notif === "object" ? notif : {}) });
+      const parsedNotif = notif && typeof notif === "object" ? notif : {};
+      setNotifications({ ...DEFAULT_NOTIFICATIONS, ...parsedNotif });
       setAlertDispatchMin((tenant as any).alert_dispatch_minutes ?? 15);
       setAlertLateMin((tenant as any).alert_late_minutes ?? 10);
+      // Load auto-notify settings from notification_settings.auto_notify
+      const autoNotify = parsedNotif.auto_notify || {};
+      const loadedAutoNotify: AutoNotifySettings = {};
+      for (const phase of AUTO_NOTIFY_PHASES) {
+        loadedAutoNotify[phase.key] = {
+          enabled: autoNotify[phase.key]?.enabled !== false, // default enabled
+          custom_message: autoNotify[phase.key]?.custom_message || "",
+        };
+      }
+      setAutoNotifySettings(loadedAutoNotify);
     }
   }, [tenant]);
 
@@ -106,7 +202,7 @@ export default function AjustesSettings() {
       } else if (section === "labels") {
         payload = { custom_labels: customLabels };
       } else if (section === "notifications") {
-        payload = { notification_settings: notifications };
+        payload = { notification_settings: { ...notifications, auto_notify: autoNotifySettings } };
       } else if (section === "alerts") {
         payload = { alert_dispatch_minutes: alertDispatchMin, alert_late_minutes: alertLateMin };
       }
@@ -334,68 +430,101 @@ export default function AjustesSettings() {
           </Card>
         </TabsContent>
 
-        {/* Notificações */}
+        {/* Notificações Automáticas */}
         <TabsContent value="notifications">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Notificações</CardTitle>
-              <CardDescription>Configure quais notificações automáticas são enviadas</CardDescription>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" /> Notificações Automáticas via WhatsApp
+              </CardTitle>
+              <CardDescription>
+                Ative/desative e personalize as mensagens enviadas automaticamente em cada fase do atendimento.
+                Use variáveis entre {"{{"}chaves duplas{"}}"}  para dados dinâmicos.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-1">
-                <p className="text-sm font-medium">E-mail</p>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm">Novo atendimento aberto</p>
-                    <p className="text-xs text-muted-foreground">Enviar e-mail quando um novo atendimento for criado</p>
-                  </div>
-                  <Switch
-                    checked={notifications.email_new_request}
-                    onCheckedChange={(v) => setNotifications({ ...notifications, email_new_request: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm">Atendimento concluído</p>
-                    <p className="text-xs text-muted-foreground">Enviar e-mail quando um atendimento for finalizado</p>
-                  </div>
-                  <Switch
-                    checked={notifications.email_request_completed}
-                    onCheckedChange={(v) => setNotifications({ ...notifications, email_request_completed: v })}
-                  />
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border p-3 bg-muted/30">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Variáveis disponíveis</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "{{beneficiary_name}}", "{{tenant_name}}", "{{protocol}}", "{{service_name}}",
+                    "{{provider_name}}", "{{estimated_arrival_min}}", "{{beneficiary_tracking_url}}",
+                    "{{provider_tracking_url}}", "{{vehicle_model}}", "{{vehicle_plate}}",
+                    "{{requester_name}}", "{{requester_phone}}", "{{origin_address}}", "{{destination_address}}",
+                    "{{nps_link}}",
+                  ].map((v) => (
+                    <code key={v} className="text-[10px] bg-background border rounded px-1.5 py-0.5 text-foreground">{v}</code>
+                  ))}
                 </div>
               </div>
 
-              <div className="space-y-1 pt-2 border-t">
-                <p className="text-sm font-medium">WhatsApp</p>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm">Novo atendimento aberto</p>
-                    <p className="text-xs text-muted-foreground">Enviar template HSM ao beneficiário</p>
-                  </div>
-                  <Switch
-                    checked={notifications.whatsapp_new_request}
-                    onCheckedChange={(v) => setNotifications({ ...notifications, whatsapp_new_request: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm">Atualização de status</p>
-                    <p className="text-xs text-muted-foreground">Notificar beneficiário sobre mudanças de status</p>
-                  </div>
-                  <Switch
-                    checked={notifications.whatsapp_request_status}
-                    onCheckedChange={(v) => setNotifications({ ...notifications, whatsapp_request_status: v })}
-                  />
-                </div>
-              </div>
+              <Accordion type="multiple" className="w-full">
+                {AUTO_NOTIFY_PHASES.map((phase) => {
+                  const settings = autoNotifySettings[phase.key] || { enabled: true, custom_message: "" };
+                  return (
+                    <AccordionItem key={phase.key} value={phase.key}>
+                      <AccordionTrigger className="hover:no-underline">
+                        <div className="flex items-center gap-3 flex-1">
+                          <span className="text-lg">{phase.icon}</span>
+                          <div className="text-left flex-1">
+                            <p className="text-sm font-medium">{phase.label}</p>
+                            <p className="text-xs text-muted-foreground font-normal">{phase.description}</p>
+                          </div>
+                          <div className="mr-2" onClick={(e) => e.stopPropagation()}>
+                            <Switch
+                              checked={settings.enabled}
+                              onCheckedChange={(v) =>
+                                setAutoNotifySettings((prev) => ({
+                                  ...prev,
+                                  [phase.key]: { ...prev[phase.key], enabled: v },
+                                }))
+                              }
+                            />
+                          </div>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="space-y-3 pt-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs">Mensagem personalizada</Label>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs gap-1"
+                              onClick={() =>
+                                setAutoNotifySettings((prev) => ({
+                                  ...prev,
+                                  [phase.key]: { ...prev[phase.key], custom_message: "" },
+                                }))
+                              }
+                            >
+                              <RotateCcw className="h-3 w-3" /> Restaurar padrão
+                            </Button>
+                          </div>
+                          <Textarea
+                            rows={8}
+                            className="font-mono text-xs"
+                            placeholder={phase.defaultMessage}
+                            value={settings.custom_message || ""}
+                            onChange={(e) =>
+                              setAutoNotifySettings((prev) => ({
+                                ...prev,
+                                [phase.key]: { ...prev[phase.key], custom_message: e.target.value },
+                              }))
+                            }
+                          />
+                          <p className="text-[10px] text-muted-foreground">
+                            Deixe vazio para usar a mensagem padrão mostrada como placeholder acima.
+                          </p>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
+              </Accordion>
 
-              <Button onClick={() => handleSave("notifications")} disabled={saving}>
-                <Save className="h-4 w-4 mr-2" /> {saving ? "Salvando..." : "Salvar"}
+              <Button onClick={() => handleSave("notifications")} disabled={saving} className="mt-4">
+                <Save className="h-4 w-4 mr-2" /> {saving ? "Salvando..." : "Salvar Notificações"}
               </Button>
             </CardContent>
           </Card>
