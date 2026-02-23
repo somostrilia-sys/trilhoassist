@@ -303,12 +303,18 @@ export default function ServiceRequestDetail() {
   const handleDispatch = async () => {
     if (!selectedProviderId || !id) return;
     setActionLoading(true);
+
+    // Generate tokens
+    const providerToken = crypto.randomUUID();
+    const beneficiaryToken = crypto.randomUUID();
+
     const { data: newDispatch, error: dErr } = await supabase.from("dispatches").insert({
       service_request_id: id,
       provider_id: selectedProviderId,
       quoted_amount: quotedAmount ? parseFloat(quotedAmount) : null,
       notes: dispatchNotes || null,
       status: "sent",
+      provider_token: providerToken,
     }).select("id").single();
 
     if (dErr) {
@@ -317,12 +323,43 @@ export default function ServiceRequestDetail() {
       return;
     }
 
-    // Update request status to dispatched
-    await supabase.from("service_requests").update({ status: "dispatched" }).eq("id", id);
+    // Update service request with beneficiary token
+    await supabase.from("service_requests").update({
+      status: "dispatched",
+      beneficiary_token: beneficiaryToken,
+    }).eq("id", id);
+
     const providerName = providers.find(p => p.id === selectedProviderId)?.name || "Prestador";
     await logEvent("dispatch", `Prestador acionado: ${providerName}${quotedAmount ? ` — Valor: R$ ${parseFloat(quotedAmount).toFixed(2)}` : ""}`, request.status, "dispatched");
+
+    // Send WhatsApp tracking links (fire and forget)
+    const baseUrl = window.location.origin;
+    const providerTrackingUrl = `${baseUrl}/tracking/provider/${providerToken}`;
+    const beneficiaryTrackingUrl = `${baseUrl}/tracking/${beneficiaryToken}`;
+
+    // Send provider tracking link
+    const selectedProvider = providers.find(p => p.id === selectedProviderId);
+    if (selectedProvider?.phone) {
+      supabase.functions.invoke("send-whatsapp", {
+        body: {
+          phone: selectedProvider.phone,
+          message: `🚗 Novo acionamento!\n\nProtocolo: ${request.protocol}\nServiço: ${serviceTypeMap[request.service_type] || request.service_type}\nVeículo: ${request.vehicle_model || ""} ${request.vehicle_plate || ""}\n\n📍 Navegação e rastreamento:\n${providerTrackingUrl}`,
+        },
+      }).catch(console.error);
+    }
+
+    // Send beneficiary tracking link
+    if (request.requester_phone) {
+      supabase.functions.invoke("send-whatsapp", {
+        body: {
+          phone: request.requester_phone,
+          message: `✅ Seu atendimento foi acionado!\n\nProtocolo: ${request.protocol}\nPrestador: ${providerName}\n\n📍 Acompanhe a chegada em tempo real:\n${beneficiaryTrackingUrl}`,
+        },
+      }).catch(console.error);
+    }
+
     setActionLoading(false);
-    toast.success("Prestador acionado!", { description: "O acionamento foi registrado." });
+    toast.success("Prestador acionado!", { description: "Links de rastreamento enviados via WhatsApp." });
     setDispatchDialogOpen(false);
     setSelectedProviderId("");
     setQuotedAmount("");
