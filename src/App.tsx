@@ -43,6 +43,7 @@ import BeneficiariesList from "./pages/business/BeneficiariesList";
 import BeneficiaryForm from "./pages/business/BeneficiaryForm";
 import QuickRepliesSettings from "./pages/settings/QuickRepliesSettings";
 import TemplatesSettings from "./pages/settings/TemplatesSettings";
+import AjustesSettings from "./pages/settings/AjustesSettings";
 
 const queryClient = new QueryClient();
 
@@ -102,7 +103,8 @@ const App = () => (
               <Route path="/finance/reports" element={<FinancialReports />} />
               <Route path="/settings/users" element={<UsersManagement />} />
               <Route path="/settings/permissions" element={<PermissionsManagement />} />
-              <Route path="/settings" element={<Placeholder />} />
+              <Route path="/settings/ajustes" element={<AjustesSettings />} />
+              <Route path="/settings" element={<Navigate to="/settings/ajustes" replace />} />
               <Route path="/settings/quick-replies" element={<QuickRepliesSettings />} />
               <Route path="/settings/templates" element={<TemplatesSettings />} />
               <Route path="/integrations" element={<Placeholder />} />
