@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-import { User, Car, MapPin, AlertTriangle, Search, CheckCircle2, Loader2, XCircle, MapPinned, Share2 } from "lucide-react";
+import { User, Car, MapPin, AlertTriangle, Search, CheckCircle2, Loader2, XCircle, MapPinned, Share2, DollarSign } from "lucide-react";
 import CarVerification, { defaultCarVerification } from "@/components/service-request/CarVerification";
 import MotorcycleVerification, { defaultMotorcycleVerification } from "@/components/service-request/MotorcycleVerification";
 import TruckVerification, { defaultTruckVerification } from "@/components/service-request/TruckVerification";
@@ -91,6 +91,8 @@ export default function NewServiceRequest() {
     destination_number: "",
     destination_complement: "",
     notes: searchParams.get("notes") || "",
+    payment_method: "",
+    payment_term: "",
   });
 
   const [carVerification, setCarVerification] = useState(defaultCarVerification);
@@ -295,6 +297,8 @@ export default function NewServiceRequest() {
       destination_lat: destGeo?.lat || null,
       destination_lng: destGeo?.lng || null,
       notes: form.notes || null,
+      payment_method: form.payment_method || null,
+      payment_term: form.payment_term || null,
       operator_id: user?.id,
       tenant_id: tenantId,
       beneficiary_id: beneficiaryFound?.id || null,
@@ -616,6 +620,31 @@ export default function NewServiceRequest() {
                 <Label>Complemento Destino</Label>
                 <Input value={form.destination_complement} onChange={(e) => update("destination_complement", e.target.value)} placeholder="Apto, Bloco..." />
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Payment */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <DollarSign className="h-5 w-5" /> FINANCEIRO
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Forma de Pagamento</Label>
+              <Select value={form.payment_method} onValueChange={(v) => update("payment_method", v)}>
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">À Vista</SelectItem>
+                  <SelectItem value="invoiced">Faturado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Prazo de Pagamento</Label>
+              <Input value={form.payment_term} onChange={(e) => update("payment_term", e.target.value)} placeholder="Ex: 30 dias, à vista..." />
             </div>
           </CardContent>
         </Card>

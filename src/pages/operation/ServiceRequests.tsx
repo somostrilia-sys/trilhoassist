@@ -48,6 +48,7 @@ export default function ServiceRequests() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [serviceTypeFilter, setServiceTypeFilter] = useState<string>("all");
+  const [paymentFilter, setPaymentFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
@@ -104,6 +105,14 @@ export default function ServiceRequests() {
       query = query.eq("service_type", serviceTypeFilter as any);
     }
 
+    if (paymentFilter !== "all") {
+      if (paymentFilter === "pending") {
+        query = query.is("payment_method", null);
+      } else {
+        query = query.eq("payment_method", paymentFilter);
+      }
+    }
+
     if (dateFrom) {
       query = query.gte("created_at", dateFrom.toISOString());
     }
@@ -130,7 +139,7 @@ export default function ServiceRequests() {
       setTotalCount(count);
     }
     setLoading(false);
-  }, [page, pageSize, statusFilter, serviceTypeFilter, search, dateFrom, dateTo, sortField, sortDirection]);
+  }, [page, pageSize, statusFilter, serviceTypeFilter, paymentFilter, search, dateFrom, dateTo, sortField, sortDirection]);
 
   useEffect(() => {
     loadCounts();
@@ -151,7 +160,7 @@ export default function ServiceRequests() {
   // Reset page when filters change
   useEffect(() => {
     setPage(0);
-  }, [statusFilter, serviceTypeFilter, search, dateFrom, dateTo, sortField, sortDirection]);
+  }, [statusFilter, serviceTypeFilter, paymentFilter, search, dateFrom, dateTo, sortField, sortDirection]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const allTotal = Object.values(statusCounts).reduce((a, b) => a + b, 0);
@@ -163,6 +172,10 @@ export default function ServiceRequests() {
       .order("created_at", { ascending: false });
     if (statusFilter !== "all") query = query.eq("status", statusFilter as any);
     if (serviceTypeFilter !== "all") query = query.eq("service_type", serviceTypeFilter as any);
+    if (paymentFilter !== "all") {
+      if (paymentFilter === "pending") query = query.is("payment_method", null);
+      else query = query.eq("payment_method", paymentFilter);
+    }
     if (dateFrom) query = query.gte("created_at", dateFrom.toISOString());
     if (dateTo) {
       const endOfDay = new Date(dateTo);
@@ -185,6 +198,8 @@ export default function ServiceRequests() {
       Destino: r.destination_address || "",
       "Valor Cobrado": r.charged_amount ?? 0,
       "Custo Prestador": r.provider_cost ?? 0,
+      "Forma Pagamento": r.payment_method === "cash" ? "À Vista" : r.payment_method === "invoiced" ? "Faturado" : "",
+      "Prazo Pagamento": r.payment_term || "",
       "KM Estimado": r.estimated_km ?? "",
       "Criado em": new Date(r.created_at).toLocaleString("pt-BR"),
     }));
@@ -262,6 +277,17 @@ export default function ServiceRequests() {
             {Object.entries(serviceTypeMap).map(([key, label]) => (
               <SelectItem key={key} value={key}>{label}</SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Pagamento" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos pagamentos</SelectItem>
+            <SelectItem value="cash">À Vista</SelectItem>
+            <SelectItem value="invoiced">Faturado</SelectItem>
+            <SelectItem value="pending">Sem definição</SelectItem>
           </SelectContent>
         </Select>
         <Popover>
@@ -377,6 +403,11 @@ export default function ServiceRequests() {
                           <span>{new Date(req.created_at).toLocaleDateString("pt-BR")} {new Date(req.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
                           <span>{serviceTypeMap[req.service_type] || req.service_type}</span>
                           {req.charged_amount > 0 && <span>R$ {Number(req.charged_amount).toFixed(2)}</span>}
+                          {req.payment_method && (
+                            <Badge variant="outline" className="text-xs">
+                              {req.payment_method === "cash" ? "À Vista" : "Faturado"}
+                            </Badge>
+                          )}
                           <span>{req.requester_name}</span>
                         </div>
                       </div>
