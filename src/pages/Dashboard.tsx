@@ -58,7 +58,10 @@ export default function Dashboard() {
     totalRequests: 0, totalDispatches: 0, totalRevenue: 0,
     avgCost: 0, openRequests: 0, inProgressRequests: 0,
   });
-  const [requests, setRequests] = useState<any[]>([]);
+  const [allRequests, setAllRequests] = useState<any[]>([]);
+  const [allDispatches, setAllDispatches] = useState<any[]>([]);
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+  const [clientFilter, setClientFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [periodDays, setPeriodDays] = useState("30");
 
@@ -73,26 +76,42 @@ export default function Dashboard() {
   }, []);
 
   const loadData = async () => {
-    const [reqRes, dispRes] = await Promise.all([
+    const [reqRes, dispRes, clientRes] = await Promise.all([
       supabase.from("service_requests").select("*"),
       supabase.from("dispatches").select("*"),
+      supabase.from("clients").select("id, name").order("name"),
     ]);
 
-    const reqs = reqRes.data || [];
-    const dispatches = dispRes.data || [];
-    const totalRevenue = reqs.reduce((sum, r) => sum + Number(r.charged_amount || 0), 0);
-
-    setRequests(reqs);
-    setStats({
-      totalRequests: reqs.length,
-      totalDispatches: dispatches.length,
-      totalRevenue,
-      avgCost: reqs.length > 0 ? totalRevenue / reqs.length : 0,
-      openRequests: reqs.filter((r) => r.status === "open" || r.status === "awaiting_dispatch").length,
-      inProgressRequests: reqs.filter((r) => r.status === "dispatched" || r.status === "in_progress").length,
-    });
+    setAllRequests(reqRes.data || []);
+    setAllDispatches(dispRes.data || []);
+    setClients(clientRes.data || []);
     setLoading(false);
   };
+
+  // Filter requests and dispatches by client
+  const requests = useMemo(() => {
+    if (clientFilter === "all") return allRequests;
+    return allRequests.filter((r) => r.client_id === clientFilter);
+  }, [allRequests, clientFilter]);
+
+  const dispatches = useMemo(() => {
+    if (clientFilter === "all") return allDispatches;
+    const reqIds = new Set(requests.map((r) => r.id));
+    return allDispatches.filter((d) => reqIds.has(d.service_request_id));
+  }, [allDispatches, clientFilter, requests]);
+
+  // Compute stats from filtered data
+  useEffect(() => {
+    const totalRevenue = requests.reduce((sum, r) => sum + Number(r.charged_amount || 0), 0);
+    setStats({
+      totalRequests: requests.length,
+      totalDispatches: dispatches.length,
+      totalRevenue,
+      avgCost: requests.length > 0 ? totalRevenue / requests.length : 0,
+      openRequests: requests.filter((r) => r.status === "open" || r.status === "awaiting_dispatch").length,
+      inProgressRequests: requests.filter((r) => r.status === "dispatched" || r.status === "in_progress").length,
+    });
+  }, [requests, dispatches]);
 
   const days = Number(periodDays);
 
@@ -182,18 +201,31 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
           <p className="text-muted-foreground text-sm">Visão geral das operações em tempo real</p>
         </div>
-        <Select value={periodDays} onValueChange={setPeriodDays}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="7">Últimos 7 dias</SelectItem>
-            <SelectItem value="14">Últimos 14 dias</SelectItem>
-            <SelectItem value="30">Últimos 30 dias</SelectItem>
-            <SelectItem value="60">Últimos 60 dias</SelectItem>
-            <SelectItem value="90">Últimos 90 dias</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={clientFilter} onValueChange={setClientFilter}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Todos os clientes" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os clientes</SelectItem>
+              {clients.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={periodDays} onValueChange={setPeriodDays}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">Últimos 7 dias</SelectItem>
+              <SelectItem value="14">Últimos 14 dias</SelectItem>
+              <SelectItem value="30">Últimos 30 dias</SelectItem>
+              <SelectItem value="60">Últimos 60 dias</SelectItem>
+              <SelectItem value="90">Últimos 90 dias</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* KPIs */}
