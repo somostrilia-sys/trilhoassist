@@ -802,6 +802,9 @@ export type Database = {
           origin_address: string | null
           origin_lat: number | null
           origin_lng: number | null
+          payment_method: string | null
+          payment_received_at: string | null
+          payment_term: string | null
           plan_id: string | null
           protocol: string
           provider_cost: number | null
@@ -840,6 +843,9 @@ export type Database = {
           origin_address?: string | null
           origin_lat?: number | null
           origin_lng?: number | null
+          payment_method?: string | null
+          payment_received_at?: string | null
+          payment_term?: string | null
           plan_id?: string | null
           protocol: string
           provider_cost?: number | null
@@ -878,6 +884,9 @@ export type Database = {
           origin_address?: string | null
           origin_lat?: number | null
           origin_lng?: number | null
+          payment_method?: string | null
+          payment_received_at?: string | null
+          payment_term?: string | null
           plan_id?: string | null
           protocol?: string
           provider_cost?: number | null
