@@ -632,6 +632,54 @@ export type Database = {
           },
         ]
       }
+      plan_usage_exceptions: {
+        Row: {
+          beneficiary_id: string
+          created_at: string
+          granted_by: string
+          id: string
+          justification: string
+          service_request_id: string | null
+          service_type: string
+          used_at: string | null
+        }
+        Insert: {
+          beneficiary_id: string
+          created_at?: string
+          granted_by: string
+          id?: string
+          justification: string
+          service_request_id?: string | null
+          service_type: string
+          used_at?: string | null
+        }
+        Update: {
+          beneficiary_id?: string
+          created_at?: string
+          granted_by?: string
+          id?: string
+          justification?: string
+          service_request_id?: string | null
+          service_type?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_usage_exceptions_beneficiary_id_fkey"
+            columns: ["beneficiary_id"]
+            isOneToOne: false
+            referencedRelation: "beneficiaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_usage_exceptions_service_request_id_fkey"
+            columns: ["service_request_id"]
+            isOneToOne: false
+            referencedRelation: "service_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plans: {
         Row: {
           active: boolean
@@ -1498,6 +1546,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_beneficiary_usage: {
+        Args: { _beneficiary_id: string; _service_type: string }
+        Returns: Json
+      }
       get_user_tenant_ids: { Args: { _user_id: string }; Returns: string[] }
       has_role: {
         Args: {
