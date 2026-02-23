@@ -4,9 +4,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Clock, CheckCircle, AlertCircle, XCircle, ChevronLeft, ChevronRight, CalendarIcon, X } from "lucide-react";
+import { Plus, Search, Clock, CheckCircle, AlertCircle, XCircle, ChevronLeft, ChevronRight, CalendarIcon, X, Download } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import * as XLSX from "xlsx";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -132,6 +134,66 @@ export default function ServiceRequests() {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const allTotal = Object.values(statusCounts).reduce((a, b) => a + b, 0);
 
+  const buildExportQuery = async () => {
+    let query = supabase
+      .from("service_requests")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (statusFilter !== "all") query = query.eq("status", statusFilter as any);
+    if (serviceTypeFilter !== "all") query = query.eq("service_type", serviceTypeFilter as any);
+    if (dateFrom) query = query.gte("created_at", dateFrom.toISOString());
+    if (dateTo) {
+      const endOfDay = new Date(dateTo);
+      endOfDay.setHours(23, 59, 59, 999);
+      query = query.lte("created_at", endOfDay.toISOString());
+    }
+    if (search) {
+      query = query.or(`protocol.ilike.%${search}%,requester_name.ilike.%${search}%,vehicle_plate.ilike.%${search}%`);
+    }
+    const { data } = await query;
+    return (data || []).map((r) => ({
+      Protocolo: r.protocol,
+      Status: statusMap[r.status]?.label || r.status,
+      "Tipo Serviço": serviceTypeMap[r.service_type] || r.service_type,
+      Solicitante: r.requester_name,
+      Telefone: r.requester_phone,
+      Placa: r.vehicle_plate || "",
+      Veículo: r.vehicle_model || "",
+      Origem: r.origin_address || "",
+      Destino: r.destination_address || "",
+      "Valor Cobrado": r.charged_amount ?? 0,
+      "Custo Prestador": r.provider_cost ?? 0,
+      "KM Estimado": r.estimated_km ?? "",
+      "Criado em": new Date(r.created_at).toLocaleString("pt-BR"),
+    }));
+  };
+
+  const exportCSV = async () => {
+    const rows = await buildExportQuery();
+    if (!rows.length) return;
+    const headers = Object.keys(rows[0]);
+    const csvContent = [
+      headers.join(";"),
+      ...rows.map((r) => headers.map((h) => `"${String((r as any)[h]).replace(/"/g, '""')}"`).join(";")),
+    ].join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `atendimentos_${format(new Date(), "yyyyMMdd_HHmm")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportExcel = async () => {
+    const rows = await buildExportQuery();
+    if (!rows.length) return;
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Atendimentos");
+    XLSX.writeFile(wb, `atendimentos_${format(new Date(), "yyyyMMdd_HHmm")}.xlsx`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -139,10 +201,24 @@ export default function ServiceRequests() {
           <h1 className="text-2xl font-bold">Atendimentos</h1>
           <p className="text-sm text-muted-foreground">Visualize e acompanhe todos os atendimentos</p>
         </div>
-        <Button onClick={() => navigate("/operation/new")} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Novo Atendimento
-        </Button>
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Download className="h-4 w-4" />
+                Exportar
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={exportCSV}>Exportar CSV</DropdownMenuItem>
+              <DropdownMenuItem onClick={exportExcel}>Exportar Excel</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button onClick={() => navigate("/operation/new")} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Novo Atendimento
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
