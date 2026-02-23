@@ -3,7 +3,8 @@ import { format, subMonths, startOfMonth, endOfMonth, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale";
 import {
   BarChart3, TrendingUp, DollarSign, FileText, Calendar, Car, Phone,
-  User, Search, Download, Filter, Users, Building2,
+  User, Search, Download, Filter, Users, Building2, CheckCircle2, Clock,
+  Banknote, Receipt,
 } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -55,6 +56,11 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   other: "Outro",
 };
 
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash: "À vista",
+  invoiced: "Faturado",
+};
+
 function usePeriodRange(months: number) {
   return useMemo(() => {
     const end = endOfMonth(new Date());
@@ -88,6 +94,7 @@ function useDetailedRequests(tenantId: string | null | undefined, period: { star
         .select(`
           id, protocol, service_type, event_type, status,
           provider_cost, charged_amount, financial_status,
+          payment_method, payment_term, payment_received_at,
           created_at, completed_at,
           requester_name, requester_phone, requester_phone_secondary, requester_email,
           vehicle_plate, vehicle_model, vehicle_year,
@@ -342,6 +349,7 @@ export default function FinancialReports() {
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList className="flex-wrap">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+          <TabsTrigger value="payments">Recebimentos</TabsTrigger>
           <TabsTrigger value="requests">Atendimentos</TabsTrigger>
           <TabsTrigger value="beneficiaries">Beneficiários / Placas</TabsTrigger>
           <TabsTrigger value="clients">Por Cliente</TabsTrigger>
@@ -445,7 +453,17 @@ export default function FinancialReports() {
           </div>
         </TabsContent>
 
-        {/* ===== REQUESTS (DETAILED) TAB ===== */}
+        {/* ===== PAYMENTS / RECEBIMENTOS TAB ===== */}
+        <TabsContent value="payments" className="space-y-4">
+          <PaymentsTab
+            requests={requests}
+            clients={clients}
+            period={period}
+            loading={loadingReq}
+          />
+        </TabsContent>
+
+
         <TabsContent value="requests" className="space-y-4">
           <div className="flex flex-wrap gap-3 items-center">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -824,6 +842,314 @@ export default function FinancialReports() {
           </Card>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function PaymentsTab({ requests, clients, period, loading }: {
+  requests: any[];
+  clients: any[];
+  period: { startStr: string; endStr: string };
+  loading: boolean;
+}) {
+  const [paymentFilter, setPaymentFilter] = useState("all");
+  const [searchPayments, setSearchPayments] = useState("");
+
+  const completed = useMemo(() => requests.filter((r) => r.status === "completed"), [requests]);
+
+  const filtered = useMemo(() => {
+    return completed.filter((r) => {
+      if (paymentFilter !== "all" && (r.payment_method || "") !== paymentFilter) return false;
+      if (searchPayments) {
+        const q = searchPayments.toLowerCase();
+        return (
+          r.protocol?.toLowerCase().includes(q) ||
+          r.requester_name?.toLowerCase().includes(q) ||
+          r.vehicle_plate?.toLowerCase().includes(q) ||
+          (r.clients as any)?.name?.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [completed, paymentFilter, searchPayments]);
+
+  const kpis = useMemo(() => {
+    const total = completed.reduce((s, r) => s + (Number(r.charged_amount) || 0), 0);
+    const received = completed
+      .filter((r) => r.payment_received_at)
+      .reduce((s, r) => s + (Number(r.charged_amount) || 0), 0);
+    const pending = total - received;
+    const cashTotal = completed
+      .filter((r) => r.payment_method === "cash")
+      .reduce((s, r) => s + (Number(r.charged_amount) || 0), 0);
+    const invoicedTotal = completed
+      .filter((r) => r.payment_method === "invoiced")
+      .reduce((s, r) => s + (Number(r.charged_amount) || 0), 0);
+    const noMethod = completed
+      .filter((r) => !r.payment_method)
+      .reduce((s, r) => s + (Number(r.charged_amount) || 0), 0);
+    return { total, received, pending, cashTotal, invoicedTotal, noMethod };
+  }, [completed]);
+
+  // Monthly received data
+  const monthlyReceived = useMemo(() => {
+    const map = new Map<string, { month: string; recebido: number; pendente: number; aVista: number; faturado: number }>();
+    completed.forEach((r) => {
+      const m = format(parseISO(r.created_at), "MMM/yy", { locale: ptBR });
+      const entry = map.get(m) || { month: m, recebido: 0, pendente: 0, aVista: 0, faturado: 0 };
+      const amt = Number(r.charged_amount) || 0;
+      if (r.payment_received_at) {
+        entry.recebido += amt;
+      } else {
+        entry.pendente += amt;
+      }
+      if (r.payment_method === "cash") entry.aVista += amt;
+      if (r.payment_method === "invoiced") entry.faturado += amt;
+      map.set(m, entry);
+    });
+    return Array.from(map.values());
+  }, [completed]);
+
+  // Pie data for payment method
+  const methodPieData = useMemo(() => {
+    const items: { name: string; value: number }[] = [];
+    if (kpis.cashTotal > 0) items.push({ name: "À vista", value: kpis.cashTotal });
+    if (kpis.invoicedTotal > 0) items.push({ name: "Faturado", value: kpis.invoicedTotal });
+    if (kpis.noMethod > 0) items.push({ name: "Não definido", value: kpis.noMethod });
+    return items;
+  }, [kpis]);
+
+  // Pie data for received status
+  const receivedPieData = useMemo(() => {
+    const items: { name: string; value: number }[] = [];
+    if (kpis.received > 0) items.push({ name: "Recebido", value: kpis.received });
+    if (kpis.pending > 0) items.push({ name: "Pendente", value: kpis.pending });
+    return items;
+  }, [kpis]);
+
+  return (
+    <div className="space-y-4">
+      {/* KPIs */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Total Cobrado</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent><div className="text-2xl font-bold">{formatCurrency(kpis.total)}</div></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Recebido</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent><div className="text-2xl font-bold text-primary">{formatCurrency(kpis.received)}</div></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Pendente</CardTitle>
+            <Clock className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent><div className="text-2xl font-bold text-destructive">{formatCurrency(kpis.pending)}</div></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground">À Vista</CardTitle>
+            <Banknote className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent><div className="text-2xl font-bold">{formatCurrency(kpis.cashTotal)}</div></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Faturado</CardTitle>
+            <Receipt className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent><div className="text-2xl font-bold">{formatCurrency(kpis.invoicedTotal)}</div></CardContent>
+        </Card>
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Recebimentos por Mês</CardTitle>
+            <CardDescription>Comparativo recebido vs pendente</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              {monthlyReceived.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={monthlyReceived}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="month" tick={{ fill: "hsl(215, 10%, 52%)", fontSize: 12 }} />
+                    <YAxis tick={{ fill: "hsl(215, 10%, 52%)", fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend />
+                    <Bar dataKey="recebido" name="Recebido" fill="hsl(142, 60%, 45%)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="pendente" name="Pendente" fill="hsl(354, 82%, 42%)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <EmptyChart />}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-rows-2 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Por Forma de Pagamento</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[120px]">
+                {methodPieData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={methodPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={50} innerRadius={25}
+                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`} labelLine={false}>
+                        {methodPieData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : <EmptyChart />}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Recebido vs Pendente</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[120px]">
+                {receivedPieData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={receivedPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={50} innerRadius={25}
+                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`} labelLine={false}>
+                        <Cell fill="hsl(142, 60%, 45%)" />
+                        <Cell fill="hsl(354, 82%, 42%)" />
+                      </Pie>
+                      <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : <EmptyChart />}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Filters + Table */}
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Protocolo, nome, placa, cliente..." value={searchPayments}
+            onChange={(e) => setSearchPayments(e.target.value)} className="pl-9" />
+        </div>
+        <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Forma de pagamento" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as formas</SelectItem>
+            <SelectItem value="cash">À vista</SelectItem>
+            <SelectItem value="invoiced">Faturado</SelectItem>
+          </SelectContent>
+        </Select>
+        <Badge variant="outline" className="text-xs">{filtered.length} registros</Badge>
+        <Button variant="outline" size="sm" className="gap-2" onClick={() => {
+          const headers = ["Protocolo", "Data", "Cliente", "Solicitante", "Placa", "Serviço", "Cobrado", "Forma Pgto", "Prazo", "Dt Recebimento", "Status Pgto"];
+          const rows = filtered.map((r) => [
+            r.protocol,
+            format(parseISO(r.created_at), "dd/MM/yyyy"),
+            (r.clients as any)?.name || "",
+            r.requester_name,
+            r.vehicle_plate || "",
+            SERVICE_TYPE_LABELS[r.service_type] || r.service_type,
+            String(Number(r.charged_amount) || 0),
+            PAYMENT_METHOD_LABELS[r.payment_method] || "Não definido",
+            r.payment_term || "",
+            r.payment_received_at ? format(parseISO(r.payment_received_at), "dd/MM/yyyy") : "",
+            r.payment_received_at ? "Recebido" : "Pendente",
+          ]);
+          exportToCsv("recebimentos", headers, rows);
+        }}>
+          <Download className="h-4 w-4" /> Exportar CSV
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="p-8 text-center text-muted-foreground">Carregando...</div>
+          ) : filtered.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">Nenhum atendimento concluído no período.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Protocolo</TableHead>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Solicitante</TableHead>
+                    <TableHead>Placa</TableHead>
+                    <TableHead>Serviço</TableHead>
+                    <TableHead className="text-right">Cobrado</TableHead>
+                    <TableHead>Forma Pgto</TableHead>
+                    <TableHead>Prazo</TableHead>
+                    <TableHead>Dt Recebimento</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-mono text-xs font-medium whitespace-nowrap">{r.protocol}</TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">{format(parseISO(r.created_at), "dd/MM/yy")}</TableCell>
+                      <TableCell className="text-sm whitespace-nowrap">{(r.clients as any)?.name || "—"}</TableCell>
+                      <TableCell className="text-sm whitespace-nowrap">{r.requester_name}</TableCell>
+                      <TableCell>
+                        {r.vehicle_plate ? (
+                          <Badge variant="outline" className="font-mono text-xs gap-1">
+                            <Car className="h-3 w-3" />{r.vehicle_plate}
+                          </Badge>
+                        ) : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                          {SERVICE_TYPE_LABELS[r.service_type] || r.service_type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm text-primary whitespace-nowrap">
+                        {formatCurrency(Number(r.charged_amount) || 0)}
+                      </TableCell>
+                      <TableCell>
+                        {r.payment_method ? (
+                          <Badge variant={r.payment_method === "cash" ? "default" : "secondary"} className="text-xs">
+                            {PAYMENT_METHOD_LABELS[r.payment_method]}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{r.payment_term || "—"}</TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">
+                        {r.payment_received_at ? format(parseISO(r.payment_received_at), "dd/MM/yy") : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={r.payment_received_at ? "default" : "destructive"} className="text-xs">
+                          {r.payment_received_at ? "Recebido" : "Pendente"}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
