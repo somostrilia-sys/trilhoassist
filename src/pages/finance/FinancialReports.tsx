@@ -451,6 +451,36 @@ export default function FinancialReports() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Ganho Mensal Chart - full width */}
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4" style={{ color: "hsl(142, 60%, 45%)" }} />
+                  Evolução do Ganho Mensal
+                </CardTitle>
+                <CardDescription>Lucro (cobrado − custo) mês a mês</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[320px]">
+                  {monthlyData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={monthlyData}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                        <XAxis dataKey="month" tick={{ fill: "hsl(215, 10%, 52%)", fontSize: 12 }} />
+                        <YAxis tick={{ fill: "hsl(215, 10%, 52%)", fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Bar dataKey="markup" name="Ganho" radius={[4, 4, 0, 0]}>
+                          {monthlyData.map((entry, i) => (
+                            <Cell key={i} fill={entry.markup >= 0 ? "hsl(142, 60%, 45%)" : "hsl(354, 82%, 42%)"} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : <EmptyChart />}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
