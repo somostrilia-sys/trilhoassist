@@ -6,8 +6,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const META_API_URL = "https://graph.facebook.com/v21.0";
-
 const serviceTypeMap: Record<string, string> = {
   tow_light: "REBOQUE LEVE",
   tow_heavy: "REBOQUE PESADO",
@@ -32,7 +30,6 @@ const eventTypeMap: Record<string, string> = {
   other: "OUTRO",
 };
 
-// Calculate route distance using OSRM
 async function calculateRouteKm(
   originLat: number, originLng: number,
   destLat: number, destLng: number
@@ -64,7 +61,6 @@ function formatCurrency(value: number | null): string {
 }
 
 function extractNeighborhood(address: string): string {
-  // Try to extract neighborhood from address format "Street, Neighborhood, City - State"
   const parts = address.split(",").map(p => p.trim());
   if (parts.length >= 2) return parts[1];
   return address;
@@ -77,7 +73,8 @@ function extractCity(address: string): string {
   return address;
 }
 
-// Build the label message based on trigger type
+// ========== LABEL BUILDERS (unchanged logic) ==========
+
 function buildCreationLabel(sr: any, client: any, beneficiary: any, tenant: any, operator: any, estimatedKm: number | null, kmMargin: number): string {
   const totalKm = estimatedKm ? estimatedKm + kmMargin : null;
   const benName = beneficiary?.name || sr.requester_name;
@@ -151,6 +148,34 @@ function buildCancellationLabel(sr: any, client: any, reason: string): string {
 *CANCELADO EM*: ${formatDate(new Date().toISOString())}`;
 }
 
+// ========== SEND VIA EVOLUTION API ==========
+async function sendViaEvolution(groupId: string, message: string): Promise<{ ok: boolean; result: any }> {
+  const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
+  const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
+  const EVOLUTION_INSTANCE = Deno.env.get("EVOLUTION_INSTANCE") || "default";
+
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+    return { ok: false, result: { error: "Evolution API not configured" } };
+  }
+
+  const baseUrl = EVOLUTION_API_URL.replace(/\/$/, "");
+
+  const response = await fetch(`${baseUrl}/message/sendText/${EVOLUTION_INSTANCE}`, {
+    method: "POST",
+    headers: {
+      apikey: EVOLUTION_API_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      number: groupId,
+      text: message,
+    }),
+  });
+
+  const result = await response.json();
+  return { ok: response.ok, result };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -196,7 +221,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Fetch service request with client
     const { data: sr, error: srErr } = await adminSupabase
       .from("service_requests")
       .select("*, clients(name, whatsapp_group_id, km_margin)")
@@ -216,16 +240,6 @@ Deno.serve(async (req) => {
     if (!groupId) {
       return new Response(JSON.stringify({ success: false, reason: "no_group_id", message: "Client has no WhatsApp group configured" }), {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const WHATSAPP_TOKEN = Deno.env.get("WHATSAPP_TOKEN");
-    const WHATSAPP_PHONE_ID = Deno.env.get("WHATSAPP_PHONE_ID");
-
-    if (!WHATSAPP_TOKEN || !WHATSAPP_PHONE_ID) {
-      return new Response(JSON.stringify({ error: "WhatsApp API not configured" }), {
-        status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -253,12 +267,10 @@ Deno.serve(async (req) => {
       beneficiary = ben;
     }
 
-    // Fetch provider data if dispatch-related
     let providerData = null;
     let dispatchData = null;
     if (trigger === "dispatch_preview" || trigger === "completion") {
-      const pid = provider_id || null;
-      const dispatchQuery = adminSupabase
+      const { data: dispatch } = await adminSupabase
         .from("dispatches")
         .select("*, providers(name, phone, city, state)")
         .eq("service_request_id", service_request_id)
@@ -266,7 +278,6 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
-      const { data: dispatch } = await dispatchQuery;
       if (dispatch) {
         dispatchData = dispatch;
         providerData = (dispatch as any).providers;
@@ -286,18 +297,15 @@ Deno.serve(async (req) => {
         message = buildCreationLabel(sr, client, beneficiary, tenant, operator, estimatedKm, kmMargin);
         break;
       }
-      case "dispatch_preview": {
+      case "dispatch_preview":
         message = buildDispatchPreviewLabel(sr, providerData, quoted_amount || dispatchData?.quoted_amount, client);
         break;
-      }
-      case "completion": {
+      case "completion":
         message = buildCompletionLabel(sr, client, providerData, dispatchData?.final_amount);
         break;
-      }
-      case "cancellation": {
+      case "cancellation":
         message = buildCancellationLabel(sr, client, cancel_reason || "");
         break;
-      }
       default:
         return new Response(JSON.stringify({ error: `Unknown trigger: ${trigger}` }), {
           status: 400,
@@ -305,31 +313,14 @@ Deno.serve(async (req) => {
         });
     }
 
-    // Send to WhatsApp group
-    const metaBody = {
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: groupId,
-      type: "text",
-      text: { body: message },
-    };
+    // Send via Evolution API
+    const { ok, result } = await sendViaEvolution(groupId, message);
 
-    const response = await fetch(`${META_API_URL}/${WHATSAPP_PHONE_ID}/messages`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${WHATSAPP_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(metaBody),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      console.error("Meta API error:", result);
+    if (!ok) {
+      console.error("Evolution API error:", result);
       return new Response(
         JSON.stringify({ error: "Failed to send label", details: result }),
-        { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 

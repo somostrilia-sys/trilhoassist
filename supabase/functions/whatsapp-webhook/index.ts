@@ -23,21 +23,9 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const tenantSlug = url.searchParams.get("tenant");
 
-  // ========== META WEBHOOK VERIFICATION (GET) ==========
+  // ========== EVOLUTION API WEBHOOK VERIFICATION (GET) ==========
   if (req.method === "GET") {
-    const mode = url.searchParams.get("hub.mode");
-    const token = url.searchParams.get("hub.verify_token");
-    const challenge = url.searchParams.get("hub.challenge");
-
-    const VERIFY_TOKEN = Deno.env.get("WHATSAPP_VERIFY_TOKEN");
-
-    if (mode === "subscribe" && token === VERIFY_TOKEN) {
-      console.log("Webhook verified successfully");
-      return new Response(challenge, { status: 200 });
-    }
-
-    // Fallback for other GET requests
-    return new Response(challenge || "ok", { status: 200, headers: corsHeaders });
+    return new Response("ok", { status: 200, headers: corsHeaders });
   }
 
   try {
@@ -48,12 +36,12 @@ Deno.serve(async (req) => {
 
     const payload = await req.json();
 
-    // ========== META CLOUD API STATUS UPDATES ==========
-    // Meta sends status updates (sent, delivered, read) — acknowledge them
-    const entry = payload.entry?.[0];
-    const changes = entry?.changes?.[0]?.value;
-    if (changes?.statuses && !changes?.messages) {
-      return new Response(JSON.stringify({ success: true, type: "status_update" }), {
+    // ========== EVOLUTION API EVENT ROUTING ==========
+    const event = payload.event;
+
+    // Ignore non-message events (connection updates, qrcode, etc.)
+    if (event && event !== "messages.upsert" && event !== "send.message") {
+      return new Response(JSON.stringify({ success: true, type: "ignored_event", event }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -90,12 +78,30 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Skip group messages (they end with @g.us)
+    if (normalized.isGroup) {
+      return new Response(JSON.stringify({ success: true, type: "group_message_skipped" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Skip outbound messages sent by us (avoid echo)
+    if (normalized.fromMe) {
+      return new Response(JSON.stringify({ success: true, type: "outbound_skipped" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const cleanPhone = normalized.phone.replace(/\D/g, "");
 
-    // ========== DOWNLOAD MEDIA FROM META (if applicable) ==========
+    // ========== DOWNLOAD MEDIA FROM EVOLUTION (if applicable) ==========
     let mediaUrl = normalized.media_url;
-    if (normalized.media_id && !mediaUrl) {
-      mediaUrl = await downloadMetaMedia(normalized.media_id);
+    if (normalized.media_base64 && !mediaUrl) {
+      // Evolution can send base64 media — for now store as data URI or skip
+      // Full storage integration can upload to Supabase Storage later
+      mediaUrl = undefined;
     }
 
     // Find or create conversation
@@ -209,43 +215,103 @@ Deno.serve(async (req) => {
   }
 });
 
-// ========== Download media from Meta Cloud API ==========
-async function downloadMetaMedia(mediaId: string): Promise<string | undefined> {
-  try {
-    const token = Deno.env.get("WHATSAPP_TOKEN");
-    if (!token) return undefined;
-
-    // Step 1: Get media URL
-    const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const metaData = await metaRes.json();
-    if (!metaData.url) return undefined;
-
-    // Step 2: Download the actual file
-    // Note: The actual download URL requires the same token
-    // For now, return the meta media ID as reference — full storage integration can be added later
-    return `meta://media/${mediaId}`;
-  } catch (e) {
-    console.error("Failed to download media:", e);
-    return undefined;
-  }
-}
-
 interface NormalizedMessage {
   phone: string;
   name?: string;
   message?: string;
   message_type?: string;
   media_url?: string;
-  media_id?: string;
+  media_base64?: string;
   latitude?: number;
   longitude?: number;
   external_id?: string;
+  isGroup?: boolean;
+  fromMe?: boolean;
 }
 
 function normalizePayload(payload: any): NormalizedMessage {
-  // Direct/generic format (for testing)
+  // ========== EVOLUTION API v2 FORMAT ==========
+  // Event: messages.upsert
+  if (payload.data?.key?.remoteJid) {
+    const data = payload.data;
+    const remoteJid = data.key.remoteJid;
+    const isGroup = remoteJid.endsWith("@g.us");
+    const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@g.us", "");
+    const fromMe = data.key.fromMe === true;
+
+    // Extract message content from different types
+    const msg = data.message || {};
+    let content = "";
+    let messageType = "text";
+    let mediaUrl: string | undefined;
+    let latitude: number | undefined;
+    let longitude: number | undefined;
+
+    if (msg.conversation) {
+      content = msg.conversation;
+    } else if (msg.extendedTextMessage?.text) {
+      content = msg.extendedTextMessage.text;
+    } else if (msg.imageMessage) {
+      content = msg.imageMessage.caption || "";
+      messageType = "image";
+      mediaUrl = msg.imageMessage.url;
+    } else if (msg.videoMessage) {
+      content = msg.videoMessage.caption || "";
+      messageType = "video";
+      mediaUrl = msg.videoMessage.url;
+    } else if (msg.audioMessage) {
+      messageType = "audio";
+      mediaUrl = msg.audioMessage.url;
+    } else if (msg.documentMessage) {
+      content = msg.documentMessage.fileName || "";
+      messageType = "document";
+      mediaUrl = msg.documentMessage.url;
+    } else if (msg.locationMessage) {
+      messageType = "location";
+      latitude = msg.locationMessage.degreesLatitude;
+      longitude = msg.locationMessage.degreesLongitude;
+    } else if (msg.contactMessage || msg.contactsArrayMessage) {
+      messageType = "contacts";
+      content = JSON.stringify(msg.contactMessage || msg.contactsArrayMessage);
+    } else if (msg.stickerMessage) {
+      messageType = "sticker";
+    }
+
+    return {
+      phone,
+      name: data.pushName,
+      message: content,
+      message_type: messageType,
+      media_url: mediaUrl,
+      latitude,
+      longitude,
+      external_id: data.key.id,
+      isGroup,
+      fromMe,
+    };
+  }
+
+  // ========== EVOLUTION API v1 ALTERNATIVE FORMAT ==========
+  if (payload.key?.remoteJid) {
+    const remoteJid = payload.key.remoteJid;
+    const isGroup = remoteJid.endsWith("@g.us");
+    const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@g.us", "");
+    const fromMe = payload.key.fromMe === true;
+    const msg = payload.message || {};
+
+    return {
+      phone,
+      name: payload.pushName,
+      message: msg.conversation || msg.extendedTextMessage?.text || payload.body || "",
+      message_type: payload.messageType || "text",
+      media_url: undefined,
+      external_id: payload.key.id,
+      isGroup,
+      fromMe,
+    };
+  }
+
+  // ========== DIRECT/GENERIC FORMAT (for testing) ==========
   if (payload.phone) {
     return {
       phone: payload.phone,
@@ -256,80 +322,8 @@ function normalizePayload(payload: any): NormalizedMessage {
       latitude: payload.latitude || payload.lat,
       longitude: payload.longitude || payload.lng,
       external_id: payload.external_id || payload.id || payload.messageId,
-    };
-  }
-
-  // ========== META CLOUD API FORMAT ==========
-  if (payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
-    const change = payload.entry[0].changes[0].value;
-    const msg = change.messages[0];
-    const contact = change.contacts?.[0];
-
-    let messageType = msg.type || "text";
-    let content = "";
-    let mediaId: string | undefined;
-
-    switch (msg.type) {
-      case "text":
-        content = msg.text?.body || "";
-        break;
-      case "image":
-        content = msg.image?.caption || "";
-        mediaId = msg.image?.id;
-        messageType = "image";
-        break;
-      case "video":
-        content = msg.video?.caption || "";
-        mediaId = msg.video?.id;
-        messageType = "video";
-        break;
-      case "audio":
-        mediaId = msg.audio?.id;
-        messageType = "audio";
-        break;
-      case "document":
-        content = msg.document?.caption || msg.document?.filename || "";
-        mediaId = msg.document?.id;
-        messageType = "document";
-        break;
-      case "location":
-        messageType = "location";
-        break;
-      case "contacts":
-        content = JSON.stringify(msg.contacts);
-        messageType = "contacts";
-        break;
-      case "interactive":
-        content = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || "";
-        break;
-      default:
-        content = "";
-    }
-
-    return {
-      phone: msg.from,
-      name: contact?.profile?.name,
-      message: content,
-      message_type: messageType,
-      media_url: undefined,
-      media_id: mediaId,
-      latitude: msg.location?.latitude,
-      longitude: msg.location?.longitude,
-      external_id: msg.id,
-    };
-  }
-
-  // Evolution API format (fallback)
-  if (payload.data?.key?.remoteJid) {
-    const data = payload.data;
-    const phone = data.key.remoteJid.replace("@s.whatsapp.net", "").replace("@g.us", "");
-    return {
-      phone,
-      name: data.pushName,
-      message: data.message?.conversation || data.message?.extendedTextMessage?.text || "",
-      message_type: data.messageType || "text",
-      media_url: undefined,
-      external_id: data.key.id,
+      isGroup: false,
+      fromMe: false,
     };
   }
 
