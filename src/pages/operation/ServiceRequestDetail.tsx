@@ -27,6 +27,8 @@ import { toast } from "sonner";
 import CollisionMediaUpload from "@/components/collision/CollisionMediaUpload";
 import { sendServiceLabel } from "@/lib/serviceLabel";
 import { sendAutoNotify } from "@/lib/autoNotify";
+import { maskPhone, maskCPF, maskCNPJ, maskCEP, unmask } from "@/lib/masks";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   open: { label: "Aberto", variant: "default" },
@@ -161,6 +163,11 @@ export default function ServiceRequestDetail() {
   const [quotedAmount, setQuotedAmount] = useState("");
   const [chargedAmount, setChargedAmount] = useState("");
   const [dispatchNotes, setDispatchNotes] = useState("");
+  const [dispatchMode, setDispatchMode] = useState<"existing" | "quick">("existing");
+  const [quickProvider, setQuickProvider] = useState({
+    name: "", document: "", phone: "", cep: "", street: "", address_number: "",
+    neighborhood: "", city: "", state: "",
+  });
   const [actionLoading, setActionLoading] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteLoading, setNoteLoading] = useState(false);
@@ -315,12 +322,61 @@ export default function ServiceRequestDetail() {
   };
 
   const handleDispatch = async () => {
-    if (!selectedProviderId || !id) return;
+    if (dispatchMode === "existing" && !selectedProviderId) return;
+    if (dispatchMode === "quick" && (!quickProvider.name.trim() || !quickProvider.phone.trim())) {
+      toast.error("Preencha os campos obrigatórios", { description: "Razão Social e Telefone são obrigatórios para cadastro rápido." });
+      return;
+    }
     if (!quotedAmount || !chargedAmount) {
       toast.error("Preencha os valores obrigatórios", { description: "Valor do Prestador e Valor Cobrado são obrigatórios." });
       return;
     }
     setActionLoading(true);
+
+    let finalProviderId = selectedProviderId;
+    let finalProviderName = providers.find(p => p.id === selectedProviderId)?.name || "Prestador";
+    let finalProviderPhone = providers.find(p => p.id === selectedProviderId)?.phone || "";
+
+    // Quick registration flow
+    if (dispatchMode === "quick") {
+      // Geocode address if provided
+      let lat: number | null = null;
+      let lng: number | null = null;
+      if (quickProvider.street && quickProvider.city) {
+        try {
+          const addr = `${quickProvider.street} ${quickProvider.address_number}, ${quickProvider.neighborhood}, ${quickProvider.city}, ${quickProvider.state}, Brazil`;
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}&limit=1`);
+          const geo = await res.json();
+          if (geo?.[0]) { lat = parseFloat(geo[0].lat); lng = parseFloat(geo[0].lon); }
+        } catch { /* ignore geocoding errors */ }
+      }
+
+      const doc = unmask(quickProvider.document);
+      const { data: newProv, error: provErr } = await supabase.from("providers").insert({
+        name: quickProvider.name.trim(),
+        cnpj: doc || null,
+        phone: unmask(quickProvider.phone),
+        street: quickProvider.street || null,
+        address_number: quickProvider.address_number || null,
+        neighborhood: quickProvider.neighborhood || null,
+        city: quickProvider.city || null,
+        state: quickProvider.state || null,
+        zip_code: unmask(quickProvider.cep) || null,
+        latitude: lat,
+        longitude: lng,
+        tenant_id: request.tenant_id,
+        active: true,
+      }).select("id").single();
+
+      if (provErr) {
+        setActionLoading(false);
+        toast.error("Erro ao cadastrar prestador", { description: provErr.message });
+        return;
+      }
+      finalProviderId = newProv.id;
+      finalProviderName = quickProvider.name.trim();
+      finalProviderPhone = unmask(quickProvider.phone);
+    }
 
     // Generate tokens
     const providerToken = crypto.randomUUID();
@@ -328,7 +384,7 @@ export default function ServiceRequestDetail() {
 
     const { data: newDispatch, error: dErr } = await supabase.from("dispatches").insert({
       service_request_id: id,
-      provider_id: selectedProviderId,
+      provider_id: finalProviderId,
       quoted_amount: quotedAmount ? parseFloat(quotedAmount) : null,
       notes: dispatchNotes || null,
       status: "sent",
@@ -349,45 +405,44 @@ export default function ServiceRequestDetail() {
       charged_amount: parseFloat(chargedAmount),
     }).eq("id", id);
 
-    const providerName = providers.find(p => p.id === selectedProviderId)?.name || "Prestador";
-    await logEvent("dispatch", `Prestador acionado: ${providerName} — Valor Prestador: R$ ${parseFloat(quotedAmount).toFixed(2)} — Valor Cobrado: R$ ${parseFloat(chargedAmount).toFixed(2)}`, request.status, "dispatched");
+    await logEvent("dispatch", `Prestador acionado: ${finalProviderName} — Valor Prestador: R$ ${parseFloat(quotedAmount).toFixed(2)} — Valor Cobrado: R$ ${parseFloat(chargedAmount).toFixed(2)}${dispatchMode === "quick" ? " (cadastro rápido)" : ""}`, request.status, "dispatched");
 
     // Send WhatsApp tracking links via auto-notify (fire and forget)
     const baseUrl = window.location.origin;
     const providerTrackingUrl = `${baseUrl}/tracking/provider/${providerToken}`;
     const beneficiaryTrackingUrl = `${baseUrl}/tracking/${beneficiaryToken}`;
 
-    const selectedProvider = providers.find(p => p.id === selectedProviderId);
-
     // Notify provider via WhatsApp with tracking link
-    if (selectedProvider?.phone) {
-      sendAutoNotify(id, "provider_dispatch", {
-        provider_name: selectedProvider.name || "Prestador",
-        provider_phone: selectedProvider.phone,
+    if (finalProviderPhone) {
+      sendAutoNotify(id!, "provider_dispatch", {
+        provider_name: finalProviderName,
+        provider_phone: finalProviderPhone,
         provider_tracking_url: providerTrackingUrl,
       });
     }
 
     // Notify beneficiary via WhatsApp: "prestador a caminho"
-    sendAutoNotify(id, "beneficiary_dispatch", {
-      provider_name: selectedProvider?.name || "Prestador",
-      estimated_arrival_min: undefined, // Can be set if dispatch includes ETA
+    sendAutoNotify(id!, "beneficiary_dispatch", {
+      provider_name: finalProviderName,
+      estimated_arrival_min: undefined,
       beneficiary_tracking_url: beneficiaryTrackingUrl,
     });
 
     // Send dispatch preview label to client WhatsApp group
-    sendServiceLabel(id, "dispatch_preview", {
-      provider_id: selectedProviderId,
+    sendServiceLabel(id!, "dispatch_preview", {
+      provider_id: finalProviderId,
       quoted_amount: parseFloat(chargedAmount),
     });
 
     setActionLoading(false);
-    toast.success("Prestador acionado!", { description: "Links de rastreamento enviados via WhatsApp." });
+    toast.success("Prestador acionado!", { description: dispatchMode === "quick" ? "Prestador cadastrado e acionado. Links enviados via WhatsApp." : "Links de rastreamento enviados via WhatsApp." });
     setDispatchDialogOpen(false);
     setSelectedProviderId("");
     setQuotedAmount("");
     setChargedAmount("");
     setDispatchNotes("");
+    setDispatchMode("existing");
+    setQuickProvider({ name: "", document: "", phone: "", cep: "", street: "", address_number: "", neighborhood: "", city: "", state: "" });
     loadData();
     loadEvents();
   };
@@ -1041,30 +1096,150 @@ export default function ServiceRequestDetail() {
       </Dialog>
 
       {/* Dispatch Dialog */}
-      <Dialog open={dispatchDialogOpen} onOpenChange={setDispatchDialogOpen}>
-        <DialogContent className="max-w-md">
+      <Dialog open={dispatchDialogOpen} onOpenChange={(open) => {
+        setDispatchDialogOpen(open);
+        if (!open) {
+          setDispatchMode("existing");
+          setQuickProvider({ name: "", document: "", phone: "", cep: "", street: "", address_number: "", neighborhood: "", city: "", state: "" });
+        }
+      }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Acionar Prestador</DialogTitle>
             <DialogDescription>
-              Selecione o prestador e informe os detalhes do acionamento.
+              Selecione um prestador cadastrado ou faça um cadastro rápido.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Prestador *</Label>
-              <Select value={selectedProviderId} onValueChange={setSelectedProviderId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o prestador" />
-                </SelectTrigger>
-                <SelectContent>
-                  {providers.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name} {p.city ? `— ${p.city}/${p.state}` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Tabs value={dispatchMode} onValueChange={(v) => setDispatchMode(v as "existing" | "quick")}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="existing">Selecionar Existente</TabsTrigger>
+                <TabsTrigger value="quick">Cadastro Rápido</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="existing" className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label>Prestador *</Label>
+                  <Select value={selectedProviderId} onValueChange={setSelectedProviderId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o prestador" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {providers.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name} {p.city ? `— ${p.city}/${p.state}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="quick" className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label>Razão Social / Nome *</Label>
+                  <Input
+                    placeholder="Nome ou razão social do prestador"
+                    value={quickProvider.name}
+                    onChange={(e) => setQuickProvider(p => ({ ...p, name: e.target.value }))}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>CPF ou CNPJ</Label>
+                    <Input
+                      placeholder="000.000.000-00"
+                      value={quickProvider.document}
+                      onChange={(e) => {
+                        const raw = unmask(e.target.value);
+                        const masked = raw.length <= 11 ? maskCPF(e.target.value) : maskCNPJ(e.target.value);
+                        setQuickProvider(p => ({ ...p, document: masked }));
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Telefone *</Label>
+                    <Input
+                      placeholder="(00) 00000-0000"
+                      value={quickProvider.phone}
+                      onChange={(e) => setQuickProvider(p => ({ ...p, phone: maskPhone(e.target.value) }))}
+                    />
+                  </div>
+                </div>
+                <Separator />
+                <p className="text-xs text-muted-foreground">
+                  Endereço <span className="font-medium">(opcional)</span> — para roteirização. Se não informado, será calculado origem → destino → origem + 10km.
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-2">
+                    <Label>CEP</Label>
+                    <Input
+                      placeholder="00000-000"
+                      value={quickProvider.cep}
+                      onChange={(e) => setQuickProvider(p => ({ ...p, cep: maskCEP(e.target.value) }))}
+                      onBlur={async () => {
+                        const cep = unmask(quickProvider.cep);
+                        if (cep.length !== 8) return;
+                        try {
+                          const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+                          const data = await res.json();
+                          if (!data.erro) {
+                            setQuickProvider(p => ({
+                              ...p,
+                              street: data.logradouro || p.street,
+                              neighborhood: data.bairro || p.neighborhood,
+                              city: data.localidade || p.city,
+                              state: data.uf || p.state,
+                            }));
+                          }
+                        } catch { /* ignore */ }
+                      }}
+                    />
+                  </div>
+                  <div className="col-span-2 space-y-2">
+                    <Label>Rua</Label>
+                    <Input
+                      value={quickProvider.street}
+                      onChange={(e) => setQuickProvider(p => ({ ...p, street: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="space-y-2">
+                    <Label>Nº</Label>
+                    <Input
+                      value={quickProvider.address_number}
+                      onChange={(e) => setQuickProvider(p => ({ ...p, address_number: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Bairro</Label>
+                    <Input
+                      value={quickProvider.neighborhood}
+                      onChange={(e) => setQuickProvider(p => ({ ...p, neighborhood: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Cidade</Label>
+                    <Input
+                      value={quickProvider.city}
+                      onChange={(e) => setQuickProvider(p => ({ ...p, city: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>UF</Label>
+                    <Input
+                      maxLength={2}
+                      value={quickProvider.state}
+                      onChange={(e) => setQuickProvider(p => ({ ...p, state: e.target.value.toUpperCase() }))}
+                    />
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+
+            <Separator />
+
             <div className="space-y-2">
               <Label>Valor do Prestador (R$) *</Label>
               <Input
@@ -1099,9 +1274,16 @@ export default function ServiceRequestDetail() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDispatchDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleDispatch} disabled={!selectedProviderId || !quotedAmount || !chargedAmount || actionLoading}>
+            <Button
+              onClick={handleDispatch}
+              disabled={
+                (dispatchMode === "existing" && !selectedProviderId) ||
+                (dispatchMode === "quick" && (!quickProvider.name.trim() || !quickProvider.phone.trim())) ||
+                !quotedAmount || !chargedAmount || actionLoading
+              }
+            >
               {actionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Acionar
+              {dispatchMode === "quick" ? "Cadastrar e Acionar" : "Acionar"}
             </Button>
           </DialogFooter>
         </DialogContent>
