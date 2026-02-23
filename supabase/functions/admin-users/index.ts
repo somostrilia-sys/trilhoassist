@@ -12,44 +12,56 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Não autorizado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const callerClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: { user: caller } } = await callerClient.auth.getUser();
-    if (!caller) {
-      return new Response(JSON.stringify({ error: "Não autorizado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { data: callerRoles } = await adminClient
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", caller.id);
+    // Check for bootstrap header (one-time setup)
+    const bootstrapKey = req.headers.get("x-bootstrap-key");
+    const isBootstrap = bootstrapKey === supabaseServiceKey;
 
-    const isSuperAdmin = callerRoles?.some((r) => r.role === "super_admin");
-    const isAdmin = callerRoles?.some((r) => r.role === "admin");
+    let caller: any = null;
+    let isSuperAdmin = false;
+    let isAdmin = false;
 
-    if (!isSuperAdmin && !isAdmin) {
-      return new Response(JSON.stringify({ error: "Apenas administradores podem gerenciar usuários" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    if (!isBootstrap) {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader) {
+        return new Response(JSON.stringify({ error: "Não autorizado" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const callerClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        global: { headers: { Authorization: authHeader } },
       });
+
+      const { data: { user: callerUser } } = await callerClient.auth.getUser();
+      if (!callerUser) {
+        return new Response(JSON.stringify({ error: "Não autorizado" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      caller = callerUser;
+
+      const { data: callerRoles } = await adminClient
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", caller.id);
+
+      isSuperAdmin = callerRoles?.some((r) => r.role === "super_admin") || false;
+      isAdmin = callerRoles?.some((r) => r.role === "admin") || false;
+
+      if (!isSuperAdmin && !isAdmin) {
+        return new Response(JSON.stringify({ error: "Apenas administradores podem gerenciar usuários" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    } else {
+      isSuperAdmin = true;
     }
 
     // Get caller's tenant_ids
