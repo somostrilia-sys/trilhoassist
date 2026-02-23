@@ -406,10 +406,10 @@ export default function FinancialClosing() {
                     <TableCell>
                       <div className="flex gap-1">
                         <Button size="sm" variant="outline" className="gap-1" onClick={async () => {
-                          // Fetch closing items
+                          // Fetch closing items with extra fields
                           const { data: items } = await supabase
                             .from("financial_closing_items")
-                            .select("service_request_id, provider_cost, service_requests (protocol, requester_name, vehicle_plate, service_type, completed_at)")
+                            .select("service_request_id, provider_cost, service_requests (protocol, requester_name, vehicle_plate, vehicle_model, service_type, completed_at, origin_address, destination_address, estimated_km)")
                             .eq("closing_id", closing.id);
                           generateFinancialPdf({
                             providerName: closing.providers?.name || "",
@@ -420,8 +420,13 @@ export default function FinancialClosing() {
                               date: it.service_requests?.completed_at ? format(new Date(it.service_requests.completed_at), "dd/MM/yyyy") : "",
                               requesterName: it.service_requests?.requester_name || "",
                               vehiclePlate: it.service_requests?.vehicle_plate || "",
+                              vehicleModel: it.service_requests?.vehicle_model || "",
                               serviceType: SERVICE_TYPE_LABELS[it.service_requests?.service_type] || it.service_requests?.service_type || "",
                               chargedAmount: Number(it.provider_cost || 0),
+                              originAddress: it.service_requests?.origin_address || "",
+                              destinationAddress: it.service_requests?.destination_address || "",
+                              estimatedKm: it.service_requests?.estimated_km ?? null,
+                              cooperativa: "",
                             })),
                             totalServices: closing.total_services,
                             totalCharged: Number(closing.total_provider_cost),

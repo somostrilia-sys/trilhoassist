@@ -305,33 +305,99 @@ export default function Billing() {
                     <TableCell>
                       <div className="flex gap-1">
                         <Button size="sm" variant="outline" className="gap-1" onClick={async () => {
-                          // Fetch invoice items
+                          // Fetch invoice items with extra fields
                           const { data: items } = await supabase
                             .from("invoice_items")
-                            .select("service_request_id, charged_amount, provider_cost, service_requests (protocol, requester_name, vehicle_plate, service_type, completed_at)")
+                            .select("service_request_id, charged_amount, provider_cost, service_requests (protocol, requester_name, vehicle_plate, vehicle_model, service_type, completed_at, origin_address, destination_address, estimated_km, beneficiary_id)")
                             .eq("invoice_id", inv.id);
+
+                          // Fetch beneficiaries for cooperativa info
+                          const beneficiaryIds = [...new Set((items || []).map((it: any) => it.service_requests?.beneficiary_id).filter(Boolean))];
+                          let beneficiaryMap: Record<string, string> = {};
+                          if (beneficiaryIds.length > 0) {
+                            const { data: benefs } = await supabase
+                              .from("beneficiaries")
+                              .select("id, cooperativa")
+                              .in("id", beneficiaryIds);
+                            beneficiaryMap = Object.fromEntries((benefs || []).map((b: any) => [b.id, b.cooperativa || "Sem Cooperativa"]));
+                          }
+
+                          // Fetch all beneficiaries for plates count per cooperativa
+                          const { data: allBenefs } = await supabase
+                            .from("beneficiaries")
+                            .select("id, cooperativa, plan_id")
+                            .eq("client_id", inv.client_id)
+                            .lte("created_at", inv.period_end + "T23:59:59");
+
+                          // Fetch plans for plate fees
+                          const { data: plans } = await supabase
+                            .from("plans")
+                            .select("id, plate_fee")
+                            .eq("client_id", inv.client_id);
+                          const feeMap = Object.fromEntries((plans || []).map((p: any) => [p.id, Number(p.plate_fee || 0)]));
+
+                          const billingModel = inv.notes?.includes("Somente Placa") ? "plate_only" : "plate_plus_service";
+
+                          const mappedItems = (items || []).map((it: any) => ({
+                            protocol: it.service_requests?.protocol || "",
+                            date: it.service_requests?.completed_at ? format(new Date(it.service_requests.completed_at), "dd/MM/yyyy") : "",
+                            requesterName: it.service_requests?.requester_name || "",
+                            vehiclePlate: it.service_requests?.vehicle_plate || "",
+                            vehicleModel: it.service_requests?.vehicle_model || "",
+                            serviceType: SERVICE_TYPE_LABELS[it.service_requests?.service_type] || it.service_requests?.service_type || "",
+                            chargedAmount: Number(it.charged_amount || 0),
+                            originAddress: it.service_requests?.origin_address || "",
+                            destinationAddress: it.service_requests?.destination_address || "",
+                            estimatedKm: it.service_requests?.estimated_km ?? null,
+                            cooperativa: beneficiaryMap[it.service_requests?.beneficiary_id] || "Sem Cooperativa",
+                          }));
+
+                          // Group by cooperativa
+                          const coopMap = new Map<string, { items: typeof mappedItems; plates: number; plateValue: number }>();
+                          // Initialize from all beneficiaries
+                          (allBenefs || []).forEach((b: any) => {
+                            const coop = b.cooperativa || "Sem Cooperativa";
+                            if (!coopMap.has(coop)) coopMap.set(coop, { items: [], plates: 0, plateValue: 0 });
+                            const g = coopMap.get(coop)!;
+                            g.plates += 1;
+                            g.plateValue += b.plan_id ? (feeMap[b.plan_id] || 0) : 0;
+                          });
+                          // Add service items
+                          mappedItems.forEach((item) => {
+                            const coop = item.cooperativa;
+                            if (!coopMap.has(coop)) coopMap.set(coop, { items: [], plates: 0, plateValue: 0 });
+                            coopMap.get(coop)!.items.push(item);
+                          });
+
+                          const cooperativaGroups = Array.from(coopMap.entries())
+                            .map(([cooperativa, data]) => ({
+                              cooperativa,
+                              plates: data.plates,
+                              plateValue: data.plateValue,
+                              items: data.items,
+                              totalCharged: data.plateValue + (billingModel === "plate_only" ? 0 : data.items.reduce((s, it) => s + it.chargedAmount, 0)),
+                            }))
+                            .sort((a, b) => a.cooperativa.localeCompare(b.cooperativa));
+
+                          const totalPlates = (allBenefs || []).length;
+                          const totalPlateValue = (allBenefs || []).reduce((s: number, b: any) => s + (b.plan_id ? (feeMap[b.plan_id] || 0) : 0), 0);
+
                           generateFinancialPdf({
                             clientName: inv.clients?.name || "",
-                            billingModel: inv.notes?.includes("Somente Placa") ? "plate_only" : "plate_plus_service",
+                            billingModel,
                             periodStart: inv.period_start,
                             periodEnd: inv.period_end,
                             dueDate: inv.due_date,
-                            totalPlates: parseInt(inv.notes?.match(/Placas: (\d+)/)?.[1] || "0"),
-                            totalPlateValue: parseFloat(inv.notes?.match(/R\$\s?([\d.,]+)/)?.[1]?.replace(".", "").replace(",", ".") || "0"),
-                            items: (items || []).map((it: any) => ({
-                              protocol: it.service_requests?.protocol || "",
-                              date: it.service_requests?.completed_at ? format(new Date(it.service_requests.completed_at), "dd/MM/yyyy") : "",
-                              requesterName: it.service_requests?.requester_name || "",
-                              vehiclePlate: it.service_requests?.vehicle_plate || "",
-                              serviceType: SERVICE_TYPE_LABELS[it.service_requests?.service_type] || it.service_requests?.service_type || "",
-                              chargedAmount: Number(it.charged_amount || 0),
-                            })),
+                            totalPlates,
+                            totalPlateValue,
+                            items: mappedItems,
                             totalServices: inv.total_services,
                             totalCharged: Number(inv.total_charged),
                             totalProviderCost: Number(inv.total_provider_cost),
                             markupAmount: Number(inv.markup_amount),
                             notes: inv.notes || undefined,
                             type: "invoice",
+                            cooperativaGroups,
                           });
                         }}>
                           <Download className="h-3 w-3" /> PDF
