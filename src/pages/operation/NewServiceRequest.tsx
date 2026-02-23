@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { maskPhone, maskCEP, unmask } from "@/lib/masks";
 import { useAuth } from "@/contexts/AuthContext";
 import { sendServiceLabel } from "@/lib/serviceLabel";
+import { sendAutoNotify } from "@/lib/autoNotify";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -378,6 +379,9 @@ export default function NewServiceRequest() {
 
       // Send automatic label to client WhatsApp group (fire and forget)
       sendServiceLabel(inserted.id, "creation");
+
+      // Send automated WhatsApp to beneficiary (fire and forget)
+      sendAutoNotify(inserted.id, "beneficiary_creation");
 
       if (conversationId) {
         await supabase
