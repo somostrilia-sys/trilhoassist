@@ -20,22 +20,44 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const url = new URL(req.url);
+  const tenantSlug = url.searchParams.get("tenant");
+
+  // ========== META WEBHOOK VERIFICATION (GET) ==========
+  if (req.method === "GET") {
+    const mode = url.searchParams.get("hub.mode");
+    const token = url.searchParams.get("hub.verify_token");
+    const challenge = url.searchParams.get("hub.challenge");
+
+    const VERIFY_TOKEN = Deno.env.get("WHATSAPP_VERIFY_TOKEN");
+
+    if (mode === "subscribe" && token === VERIFY_TOKEN) {
+      console.log("Webhook verified successfully");
+      return new Response(challenge, { status: 200 });
+    }
+
+    // Fallback for other GET requests
+    return new Response(challenge || "ok", { status: 200, headers: corsHeaders });
+  }
+
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const url = new URL(req.url);
-    const tenantSlug = url.searchParams.get("tenant");
-
-    // GET = webhook verification
-    if (req.method === "GET") {
-      const challenge = url.searchParams.get("hub.challenge") || url.searchParams.get("challenge") || "ok";
-      return new Response(challenge, { status: 200, headers: corsHeaders });
-    }
-
     const payload = await req.json();
+
+    // ========== META CLOUD API STATUS UPDATES ==========
+    // Meta sends status updates (sent, delivered, read) — acknowledge them
+    const entry = payload.entry?.[0];
+    const changes = entry?.changes?.[0]?.value;
+    if (changes?.statuses && !changes?.messages) {
+      return new Response(JSON.stringify({ success: true, type: "status_update" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (!tenantSlug) {
       return new Response(JSON.stringify({ error: "tenant query param required" }), {
@@ -69,6 +91,12 @@ Deno.serve(async (req) => {
     }
 
     const cleanPhone = normalized.phone.replace(/\D/g, "");
+
+    // ========== DOWNLOAD MEDIA FROM META (if applicable) ==========
+    let mediaUrl = normalized.media_url;
+    if (normalized.media_id && !mediaUrl) {
+      mediaUrl = await downloadMetaMedia(normalized.media_id);
+    }
 
     // Find or create conversation
     let { data: conversation } = await supabase
@@ -123,7 +151,6 @@ Deno.serve(async (req) => {
       if (plate) {
         updateFields.detected_plate = plate;
 
-        // 2) Search beneficiary by plate
         const { data: benByPlate } = await supabase
           .from("beneficiaries")
           .select("id, name, vehicle_plate, vehicle_model, vehicle_year, client_id")
@@ -142,7 +169,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3) Store location as origin if sent
+    // 2) Store location as origin if sent
     if (normalized.latitude && normalized.longitude && !conversation.origin_lat) {
       updateFields.origin_lat = normalized.latitude;
       updateFields.origin_lng = normalized.longitude;
@@ -154,7 +181,7 @@ Deno.serve(async (req) => {
       direction: "inbound",
       message_type: normalized.message_type || "text",
       content: normalized.message || null,
-      media_url: normalized.media_url || null,
+      media_url: mediaUrl || null,
       latitude: normalized.latitude || null,
       longitude: normalized.longitude || null,
       external_id: normalized.external_id || null,
@@ -182,19 +209,43 @@ Deno.serve(async (req) => {
   }
 });
 
+// ========== Download media from Meta Cloud API ==========
+async function downloadMetaMedia(mediaId: string): Promise<string | undefined> {
+  try {
+    const token = Deno.env.get("WHATSAPP_TOKEN");
+    if (!token) return undefined;
+
+    // Step 1: Get media URL
+    const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const metaData = await metaRes.json();
+    if (!metaData.url) return undefined;
+
+    // Step 2: Download the actual file
+    // Note: The actual download URL requires the same token
+    // For now, return the meta media ID as reference — full storage integration can be added later
+    return `meta://media/${mediaId}`;
+  } catch (e) {
+    console.error("Failed to download media:", e);
+    return undefined;
+  }
+}
+
 interface NormalizedMessage {
   phone: string;
   name?: string;
   message?: string;
   message_type?: string;
   media_url?: string;
+  media_id?: string;
   latitude?: number;
   longitude?: number;
   external_id?: string;
 }
 
 function normalizePayload(payload: any): NormalizedMessage {
-  // Direct/generic format
+  // Direct/generic format (for testing)
   if (payload.phone) {
     return {
       phone: payload.phone,
@@ -208,24 +259,67 @@ function normalizePayload(payload: any): NormalizedMessage {
     };
   }
 
-  // WhatsApp Cloud API format
+  // ========== META CLOUD API FORMAT ==========
   if (payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
     const change = payload.entry[0].changes[0].value;
     const msg = change.messages[0];
     const contact = change.contacts?.[0];
+
+    let messageType = msg.type || "text";
+    let content = "";
+    let mediaId: string | undefined;
+
+    switch (msg.type) {
+      case "text":
+        content = msg.text?.body || "";
+        break;
+      case "image":
+        content = msg.image?.caption || "";
+        mediaId = msg.image?.id;
+        messageType = "image";
+        break;
+      case "video":
+        content = msg.video?.caption || "";
+        mediaId = msg.video?.id;
+        messageType = "video";
+        break;
+      case "audio":
+        mediaId = msg.audio?.id;
+        messageType = "audio";
+        break;
+      case "document":
+        content = msg.document?.caption || msg.document?.filename || "";
+        mediaId = msg.document?.id;
+        messageType = "document";
+        break;
+      case "location":
+        messageType = "location";
+        break;
+      case "contacts":
+        content = JSON.stringify(msg.contacts);
+        messageType = "contacts";
+        break;
+      case "interactive":
+        content = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || "";
+        break;
+      default:
+        content = "";
+    }
+
     return {
       phone: msg.from,
       name: contact?.profile?.name,
-      message: msg.text?.body || msg.caption || "",
-      message_type: msg.type || "text",
+      message: content,
+      message_type: messageType,
       media_url: undefined,
+      media_id: mediaId,
       latitude: msg.location?.latitude,
       longitude: msg.location?.longitude,
       external_id: msg.id,
     };
   }
 
-  // Evolution API format
+  // Evolution API format (fallback)
   if (payload.data?.key?.remoteJid) {
     const data = payload.data;
     const phone = data.key.remoteJid.replace("@s.whatsapp.net", "").replace("@g.us", "");
