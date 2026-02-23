@@ -17,6 +17,7 @@ const serviceTypeMap: Record<string, string> = {
   battery: "Bateria",
   fuel: "Combustível",
   lodging: "Hospedagem",
+  collision: "Colisão",
   other: "Outro",
 };
 

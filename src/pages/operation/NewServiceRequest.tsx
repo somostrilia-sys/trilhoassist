@@ -12,10 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-import { User, Car, MapPin, AlertTriangle, Search, CheckCircle2, Loader2, XCircle, MapPinned } from "lucide-react";
+import { User, Car, MapPin, AlertTriangle, Search, CheckCircle2, Loader2, XCircle, MapPinned, Share2 } from "lucide-react";
 import CarVerification, { defaultCarVerification } from "@/components/service-request/CarVerification";
 import MotorcycleVerification, { defaultMotorcycleVerification } from "@/components/service-request/MotorcycleVerification";
 import TruckVerification, { defaultTruckVerification } from "@/components/service-request/TruckVerification";
+import CollisionMediaUpload from "@/components/collision/CollisionMediaUpload";
 
 async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
   if (!address.trim()) return null;
@@ -317,6 +318,20 @@ export default function NewServiceRequest() {
           .update({ status: "service_created", service_request_id: inserted.id })
           .eq("id", conversationId);
       }
+
+      // For collision type, get the share_token and show media upload
+      if (form.service_type === "collision") {
+        const { data: reqData } = await supabase
+          .from("service_requests")
+          .select("share_token")
+          .eq("id", inserted.id)
+          .single();
+        setCreatedRequestId(inserted.id);
+        setShareToken(reqData?.share_token || null);
+        setLoading(false);
+        toast({ title: "Registro de colisão criado!", description: "Agora anexe as mídias obrigatórias." });
+        return; // Don't navigate yet, show media upload
+      }
     }
 
     setLoading(false);
@@ -338,8 +353,13 @@ export default function NewServiceRequest() {
     { value: "battery", label: "Bateria" },
     { value: "fuel", label: "Combustível" },
     { value: "lodging", label: "Hospedagem" },
+    { value: "collision", label: "Colisão" },
     { value: "other", label: "Outro" },
   ];
+
+  const [createdRequestId, setCreatedRequestId] = useState<string | null>(null);
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const isCollision = form.service_type === "collision";
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -610,14 +630,55 @@ export default function NewServiceRequest() {
           </CardContent>
         </Card>
 
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="outline" onClick={() => navigate("/operation/requests")}>
-            Cancelar
-          </Button>
-          <Button type="submit" disabled={loading}>
-            {loading ? "Salvando..." : "Criar Atendimento"}
-          </Button>
-        </div>
+        {/* Collision Media Upload (shown after creation) */}
+        {isCollision && createdRequestId && (
+          <div className="space-y-4">
+            <CollisionMediaUpload serviceRequestId={createdRequestId} />
+            {shareToken && (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <Share2 className="h-5 w-5 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">Link público da colisão:</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {window.location.origin}/collision/{shareToken}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/collision/${shareToken}`);
+                        toast({ title: "Link copiado!" });
+                      }}
+                    >
+                      Copiar Link
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            <div className="flex justify-end">
+              <Button type="button" onClick={() => navigate("/operation/requests")}>
+                Finalizar e Voltar
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Submit buttons (hidden when collision media upload is showing) */}
+        {!createdRequestId && (
+          <div className="flex justify-end gap-3">
+            <Button type="button" variant="outline" onClick={() => navigate("/operation/requests")}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? "Salvando..." : isCollision ? "Criar Registro de Colisão" : "Criar Atendimento"}
+            </Button>
+          </div>
+        )}
       </form>
     </div>
   );

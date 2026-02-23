@@ -9,3 +9,6 @@ verify_jwt = false
 [functions.whatsapp-webhook]
 verify_jwt = false
 
+[functions.collision-public]
+verify_jwt = false
+

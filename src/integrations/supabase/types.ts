@@ -133,6 +133,47 @@ export type Database = {
           },
         ]
       }
+      collision_media: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_size: number | null
+          file_type: string
+          file_url: string
+          id: string
+          mime_type: string | null
+          service_request_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_size?: number | null
+          file_type: string
+          file_url: string
+          id?: string
+          mime_type?: string | null
+          service_request_id: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_size?: number | null
+          file_type?: string
+          file_url?: string
+          id?: string
+          mime_type?: string | null
+          service_request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collision_media_service_request_id_fkey"
+            columns: ["service_request_id"]
+            isOneToOne: false
+            referencedRelation: "service_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dispatches: {
         Row: {
           accepted_at: string | null
@@ -769,6 +810,7 @@ export type Database = {
           requester_phone: string
           requester_phone_secondary: string | null
           service_type: Database["public"]["Enums"]["service_type"]
+          share_token: string | null
           status: Database["public"]["Enums"]["request_status"]
           tenant_id: string | null
           updated_at: string
@@ -806,6 +848,7 @@ export type Database = {
           requester_phone: string
           requester_phone_secondary?: string | null
           service_type?: Database["public"]["Enums"]["service_type"]
+          share_token?: string | null
           status?: Database["public"]["Enums"]["request_status"]
           tenant_id?: string | null
           updated_at?: string
@@ -843,6 +886,7 @@ export type Database = {
           requester_phone?: string
           requester_phone_secondary?: string | null
           service_type?: Database["public"]["Enums"]["service_type"]
+          share_token?: string | null
           status?: Database["public"]["Enums"]["request_status"]
           tenant_id?: string | null
           updated_at?: string
@@ -1158,6 +1202,7 @@ export type Database = {
         | "fuel"
         | "lodging"
         | "other"
+        | "collision"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1324,6 +1369,7 @@ export const Constants = {
         "fuel",
         "lodging",
         "other",
+        "collision",
       ],
     },
   },
