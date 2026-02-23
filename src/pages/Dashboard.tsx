@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, lazy, Suspense } from "react";
+import { useEffect, useState, useMemo, lazy, Suspense, Component, type ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -48,6 +48,17 @@ const tooltipStyle = {
   border: "1px solid hsl(var(--border))",
   borderRadius: "8px",
 };
+
+class MapErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return <p className="text-muted-foreground text-center py-12">Mapa indisponível</p>;
+    }
+    return this.props.children;
+  }
+}
 
 function formatDuration(minutes: number): string {
   if (!minutes || !isFinite(minutes)) return "—";
