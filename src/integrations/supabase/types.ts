@@ -1105,47 +1105,74 @@ export type Database = {
         Row: {
           accent_color: string | null
           active: boolean
+          address_number: string | null
+          city: string | null
+          cnpj: string | null
           created_at: string
           custom_labels: Json | null
+          email: string | null
           favicon_url: string | null
           id: string
           logo_url: string | null
           name: string
+          neighborhood: string | null
           notification_settings: Json | null
+          phone: string | null
           primary_color: string | null
           secondary_color: string | null
           slug: string
+          state: string | null
+          street: string | null
           updated_at: string
+          zip_code: string | null
         }
         Insert: {
           accent_color?: string | null
           active?: boolean
+          address_number?: string | null
+          city?: string | null
+          cnpj?: string | null
           created_at?: string
           custom_labels?: Json | null
+          email?: string | null
           favicon_url?: string | null
           id?: string
           logo_url?: string | null
           name: string
+          neighborhood?: string | null
           notification_settings?: Json | null
+          phone?: string | null
           primary_color?: string | null
           secondary_color?: string | null
           slug: string
+          state?: string | null
+          street?: string | null
           updated_at?: string
+          zip_code?: string | null
         }
         Update: {
           accent_color?: string | null
           active?: boolean
+          address_number?: string | null
+          city?: string | null
+          cnpj?: string | null
           created_at?: string
           custom_labels?: Json | null
+          email?: string | null
           favicon_url?: string | null
           id?: string
           logo_url?: string | null
           name?: string
+          neighborhood?: string | null
           notification_settings?: Json | null
+          phone?: string | null
           primary_color?: string | null
           secondary_color?: string | null
           slug?: string
+          state?: string | null
+          street?: string | null
           updated_at?: string
+          zip_code?: string | null
         }
         Relationships: []
       }

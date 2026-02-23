@@ -35,6 +35,15 @@ export default function AjustesSettings() {
 
   // Tenant data
   const [name, setName] = useState("");
+  const [cnpj, setCnpj] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [street, setStreet] = useState("");
+  const [addressNumber, setAddressNumber] = useState("");
+  const [neighborhood, setNeighborhood] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [zipCode, setZipCode] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [faviconUrl, setFaviconUrl] = useState("");
   const [primaryColor, setPrimaryColor] = useState("#1a56db");
@@ -60,6 +69,15 @@ export default function AjustesSettings() {
   useEffect(() => {
     if (tenant) {
       setName(tenant.name || "");
+      setCnpj((tenant as any).cnpj || "");
+      setPhone((tenant as any).phone || "");
+      setEmail((tenant as any).email || "");
+      setStreet((tenant as any).street || "");
+      setAddressNumber((tenant as any).address_number || "");
+      setNeighborhood((tenant as any).neighborhood || "");
+      setCity((tenant as any).city || "");
+      setState((tenant as any).state || "");
+      setZipCode((tenant as any).zip_code || "");
       setLogoUrl(tenant.logo_url || "");
       setFaviconUrl(tenant.favicon_url || "");
       setPrimaryColor(tenant.primary_color || "#1a56db");
@@ -78,7 +96,7 @@ export default function AjustesSettings() {
     try {
       let payload: Record<string, any> = {};
       if (section === "company") {
-        payload = { name };
+        payload = { name, cnpj, phone, email, street, address_number: addressNumber, neighborhood, city, state, zip_code: zipCode };
       } else if (section === "visual") {
         payload = { logo_url: logoUrl, favicon_url: faviconUrl, primary_color: primaryColor, secondary_color: secondaryColor, accent_color: accentColor };
       } else if (section === "labels") {
@@ -153,11 +171,56 @@ export default function AjustesSettings() {
               <CardTitle className="text-lg">Dados da Empresa</CardTitle>
               <CardDescription>Informações gerais do seu tenant</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Nome da empresa</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da assistência" />
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nome da empresa</Label>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da assistência" />
+                </div>
+                <div className="space-y-2">
+                  <Label>CNPJ</Label>
+                  <Input value={cnpj} onChange={(e) => setCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Telefone</Label>
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000" />
+                </div>
+                <div className="space-y-2">
+                  <Label>E-mail</Label>
+                  <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="contato@empresa.com" />
+                </div>
               </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">Endereço</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>CEP</Label>
+                    <Input value={zipCode} onChange={(e) => setZipCode(e.target.value)} placeholder="00000-000" />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Rua</Label>
+                    <Input value={street} onChange={(e) => setStreet(e.target.value)} placeholder="Rua / Avenida" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Número</Label>
+                    <Input value={addressNumber} onChange={(e) => setAddressNumber(e.target.value)} placeholder="Nº" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Bairro</Label>
+                    <Input value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} placeholder="Bairro" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Cidade</Label>
+                    <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Cidade" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Estado</Label>
+                    <Input value={state} onChange={(e) => setState(e.target.value)} placeholder="UF" maxLength={2} />
+                  </div>
+                </div>
+              </div>
+
               <Button onClick={() => handleSave("company")} disabled={saving}>
                 <Save className="h-4 w-4 mr-2" /> {saving ? "Salvando..." : "Salvar"}
               </Button>
