@@ -48,9 +48,10 @@ export default function FinancialClosing() {
         .from("dispatches")
         .select(`
           id, final_amount, quoted_amount, provider_id,
-          service_requests!inner (
+            service_requests!inner (
             id, protocol, requester_name, vehicle_plate, service_type,
-            provider_cost, completed_at, financial_status, tenant_id, status
+            provider_cost, completed_at, financial_status, tenant_id, status,
+            payment_method, payment_term
           )
         `)
         .eq("provider_id", newClosing.provider_id)
@@ -350,6 +351,21 @@ export default function FinancialClosing() {
                 <CardContent className="text-sm space-y-1">
                   <p>Atendimentos encontrados: <strong>{providerRequests.length}</strong></p>
                   <p>Valor total: <strong>{formatCurrency(providerRequests.reduce((sum: number, d: any) => sum + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0), 0))}</strong></p>
+                  {(() => {
+                    const methods = providerRequests.reduce((acc: Record<string, number>, d: any) => {
+                      const m = d.service_requests?.payment_method || "undefined";
+                      acc[m] = (acc[m] || 0) + 1;
+                      return acc;
+                    }, {});
+                    const labels: Record<string, string> = { cash: "À Vista", invoiced: "Faturado", undefined: "Sem definição" };
+                    return (
+                      <div className="flex gap-2 flex-wrap mt-1">
+                        {Object.entries(methods).map(([k, v]) => (
+                          <Badge key={k} variant="outline" className="text-xs">{labels[k] || k}: {v}</Badge>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             )}
