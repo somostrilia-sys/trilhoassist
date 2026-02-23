@@ -232,6 +232,12 @@ export default function Dashboard() {
     { label: "Custo Total Prestadores", value: formatCurrency(kpiData.totalCost), icon: Banknote, color: "text-destructive" },
   ];
 
+  const requestClientMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    allRequests.forEach((r) => { if (r.client_id) map[r.id] = r.client_id; });
+    return map;
+  }, [allRequests]);
+
   const RADIAN = Math.PI / 180;
   const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
     if (percent < 0.05) return null;
@@ -474,7 +480,11 @@ export default function Dashboard() {
 
       {/* NPS Panel */}
       <Suspense fallback={<div className="text-muted-foreground text-center py-8">Carregando NPS…</div>}>
-        <NpsPanel />
+        <NpsPanel
+          clientFilter={clientFilter}
+          periodDays={days}
+          requestClientMap={requestClientMap}
+        />
       </Suspense>
     </div>
   );
