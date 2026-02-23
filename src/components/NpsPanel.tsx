@@ -30,10 +30,18 @@ type NpsResponse = {
   comment: string | null;
   created_at: string;
   beneficiary_token: string;
+  service_request_id: string;
 };
 
-export default function NpsPanel() {
-  const [responses, setResponses] = useState<NpsResponse[]>([]);
+interface NpsPanelProps {
+  clientFilter?: string;
+  periodDays?: number;
+  /** Map of service_request_id → client_id, used to filter by client */
+  requestClientMap?: Record<string, string>;
+}
+
+export default function NpsPanel({ clientFilter = "all", periodDays = 30, requestClientMap }: NpsPanelProps) {
+  const [allResponses, setAllResponses] = useState<NpsResponse[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -43,12 +51,32 @@ export default function NpsPanel() {
   const loadNps = async () => {
     const { data } = await supabase
       .from("nps_responses")
-      .select("id, score, comment, created_at, beneficiary_token")
+      .select("id, score, comment, created_at, beneficiary_token, service_request_id")
       .order("created_at", { ascending: false })
       .limit(500);
-    setResponses(data || []);
+    setAllResponses(data || []);
     setLoading(false);
   };
+
+  // Apply filters
+  const responses = useMemo(() => {
+    let filtered = allResponses;
+
+    // Period filter
+    if (periodDays > 0) {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - periodDays);
+      cutoff.setHours(0, 0, 0, 0);
+      filtered = filtered.filter((r) => new Date(r.created_at) >= cutoff);
+    }
+
+    // Client filter via requestClientMap
+    if (clientFilter !== "all" && requestClientMap) {
+      filtered = filtered.filter((r) => requestClientMap[r.service_request_id] === clientFilter);
+    }
+
+    return filtered;
+  }, [allResponses, clientFilter, periodDays, requestClientMap]);
 
   const stats = useMemo(() => {
     if (responses.length === 0) return null;
@@ -60,7 +88,6 @@ export default function NpsPanel() {
     const detractors = responses.filter((r) => r.score <= 6).length;
     const npsScore = Math.round(((promoters - detractors) / total) * 100);
 
-    // Distribution 0-10
     const dist = Array.from({ length: 11 }, (_, i) => ({
       score: String(i),
       quantidade: responses.filter((r) => r.score === i).length,
@@ -94,7 +121,7 @@ export default function NpsPanel() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground text-center py-8">Nenhuma resposta NPS registrada</p>
+          <p className="text-muted-foreground text-center py-8">Nenhuma resposta NPS no período selecionado</p>
         </CardContent>
       </Card>
     );
