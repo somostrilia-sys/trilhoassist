@@ -1381,10 +1381,17 @@ export type Database = {
           beneficiary_id: string | null
           contact_name: string | null
           created_at: string
+          destination_address: string | null
+          destination_lat: number | null
+          destination_lng: number | null
           detected_beneficiary_name: string | null
+          detected_event_type: string | null
           detected_plate: string | null
+          detected_service_type: string | null
+          detected_vehicle_category: string | null
           detected_vehicle_model: string | null
           detected_vehicle_year: number | null
+          detected_verification_answers: Json | null
           id: string
           last_message_at: string | null
           origin_lat: number | null
@@ -1402,10 +1409,17 @@ export type Database = {
           beneficiary_id?: string | null
           contact_name?: string | null
           created_at?: string
+          destination_address?: string | null
+          destination_lat?: number | null
+          destination_lng?: number | null
           detected_beneficiary_name?: string | null
+          detected_event_type?: string | null
           detected_plate?: string | null
+          detected_service_type?: string | null
+          detected_vehicle_category?: string | null
           detected_vehicle_model?: string | null
           detected_vehicle_year?: number | null
+          detected_verification_answers?: Json | null
           id?: string
           last_message_at?: string | null
           origin_lat?: number | null
@@ -1423,10 +1437,17 @@ export type Database = {
           beneficiary_id?: string | null
           contact_name?: string | null
           created_at?: string
+          destination_address?: string | null
+          destination_lat?: number | null
+          destination_lng?: number | null
           detected_beneficiary_name?: string | null
+          detected_event_type?: string | null
           detected_plate?: string | null
+          detected_service_type?: string | null
+          detected_vehicle_category?: string | null
           detected_vehicle_model?: string | null
           detected_vehicle_year?: number | null
+          detected_verification_answers?: Json | null
           id?: string
           last_message_at?: string | null
           origin_lat?: number | null

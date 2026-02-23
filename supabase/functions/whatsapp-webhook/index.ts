@@ -99,8 +99,6 @@ Deno.serve(async (req) => {
     // ========== DOWNLOAD MEDIA FROM EVOLUTION (if applicable) ==========
     let mediaUrl = normalized.media_url;
     if (normalized.media_base64 && !mediaUrl) {
-      // Evolution can send base64 media — for now store as data URI or skip
-      // Full storage integration can upload to Supabase Storage later
       mediaUrl = undefined;
     }
 
@@ -175,10 +173,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 2) Store location as origin if sent
-    if (normalized.latitude && normalized.longitude && !conversation.origin_lat) {
-      updateFields.origin_lat = normalized.latitude;
-      updateFields.origin_lng = normalized.longitude;
+    // 2) Store location — first as origin, second as destination
+    if (normalized.latitude && normalized.longitude) {
+      if (!conversation.origin_lat) {
+        updateFields.origin_lat = normalized.latitude;
+        updateFields.origin_lng = normalized.longitude;
+      } else if (!conversation.destination_lat) {
+        updateFields.destination_lat = normalized.latitude;
+        updateFields.destination_lng = normalized.longitude;
+      }
     }
 
     // Insert message
@@ -231,7 +234,6 @@ interface NormalizedMessage {
 
 function normalizePayload(payload: any): NormalizedMessage {
   // ========== EVOLUTION API v2 FORMAT ==========
-  // Event: messages.upsert
   if (payload.data?.key?.remoteJid) {
     const data = payload.data;
     const remoteJid = data.key.remoteJid;
@@ -239,7 +241,6 @@ function normalizePayload(payload: any): NormalizedMessage {
     const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@g.us", "");
     const fromMe = data.key.fromMe === true;
 
-    // Extract message content from different types
     const msg = data.message || {};
     let content = "";
     let messageType = "text";

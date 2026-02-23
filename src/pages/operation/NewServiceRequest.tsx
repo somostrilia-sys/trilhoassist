@@ -71,7 +71,13 @@ export default function NewServiceRequest() {
 
   const originCoords = searchParams.get("origin_coords");
   const originFromCoords = originCoords ? `Lat: ${originCoords.split(",")[0]}, Lng: ${originCoords.split(",")[1]}` : "";
-  const initialCategory: VehicleCategory = searchParams.get("service_type") === "tow_motorcycle" ? "motorcycle" : "car";
+  const destinationCoords = searchParams.get("destination_coords");
+  const destinationFromCoords = destinationCoords ? `Lat: ${destinationCoords.split(",")[0]}, Lng: ${destinationCoords.split(",")[1]}` : "";
+
+  // Detect vehicle category from params
+  const paramCategory = searchParams.get("vehicle_category") as VehicleCategory | null;
+  const paramServiceType = searchParams.get("service_type");
+  const initialCategory: VehicleCategory = paramCategory || (paramServiceType === "tow_motorcycle" ? "motorcycle" : paramServiceType === "tow_heavy" ? "truck" : "car");
 
   const [vehicleCategory, setVehicleCategory] = useState<VehicleCategory>(initialCategory);
 
@@ -83,16 +89,16 @@ export default function NewServiceRequest() {
     vehicle_plate: searchParams.get("plate") || "",
     vehicle_model: searchParams.get("model") || "",
     vehicle_year: searchParams.get("year") || "",
-    vehicle_lowered: false,
-    difficult_access: false,
-    service_type: "tow_light" as string,
-    event_type: "mechanical_failure" as string,
+    vehicle_lowered: searchParams.get("vehicle_lowered") === "true",
+    difficult_access: searchParams.get("difficult_access") === "true",
+    service_type: paramServiceType || (initialCategory === "motorcycle" ? "tow_motorcycle" : initialCategory === "truck" ? "tow_heavy" : "tow_light"),
+    event_type: searchParams.get("event_type") || "mechanical_failure",
     origin_cep: "",
     origin_address: originFromCoords,
     origin_number: "",
     origin_complement: "",
     destination_cep: "",
-    destination_address: "",
+    destination_address: destinationFromCoords,
     destination_number: "",
     destination_complement: "",
     notes: searchParams.get("notes") || "",
@@ -102,9 +108,34 @@ export default function NewServiceRequest() {
     charged_amount: "",
   });
 
-  const [carVerification, setCarVerification] = useState(defaultCarVerification);
-  const [motoVerification, setMotoVerification] = useState(defaultMotorcycleVerification);
-  const [truckVerification, setTruckVerification] = useState(defaultTruckVerification);
+  // Parse verification answers from URL params
+  const [carVerification, setCarVerification] = useState(() => {
+    const raw = searchParams.get("car_verification");
+    if (!raw) return defaultCarVerification;
+    try {
+      return { ...defaultCarVerification, ...JSON.parse(raw) };
+    } catch {
+      return defaultCarVerification;
+    }
+  });
+  const [motoVerification, setMotoVerification] = useState(() => {
+    const raw = searchParams.get("moto_verification");
+    if (!raw) return defaultMotorcycleVerification;
+    try {
+      return { ...defaultMotorcycleVerification, ...JSON.parse(raw) };
+    } catch {
+      return defaultMotorcycleVerification;
+    }
+  });
+  const [truckVerification, setTruckVerification] = useState(() => {
+    const raw = searchParams.get("truck_verification");
+    if (!raw) return defaultTruckVerification;
+    try {
+      return { ...defaultTruckVerification, ...JSON.parse(raw) };
+    } catch {
+      return defaultTruckVerification;
+    }
+  });
 
   // Usage control state
   const [usageCheck, setUsageCheck] = useState<{
@@ -124,8 +155,14 @@ export default function NewServiceRequest() {
   } | null>(null);
   const [plateSearching, setPlateSearching] = useState(false);
   const [cepLoading, setCepLoading] = useState<{ origin: boolean; destination: boolean }>({ origin: false, destination: false });
-  const [geoStatus, setGeoStatus] = useState<{ origin: "idle" | "loading" | "success" | "error"; destination: "idle" | "loading" | "success" | "error" }>({ origin: "idle", destination: "idle" });
-  const [geoCoords, setGeoCoords] = useState<{ origin: { lat: number; lng: number } | null; destination: { lat: number; lng: number } | null }>({ origin: null, destination: null });
+  const [geoStatus, setGeoStatus] = useState<{ origin: "idle" | "loading" | "success" | "error"; destination: "idle" | "loading" | "success" | "error" }>({
+    origin: originCoords ? "success" : "idle",
+    destination: destinationCoords ? "success" : "idle",
+  });
+  const [geoCoords, setGeoCoords] = useState<{ origin: { lat: number; lng: number } | null; destination: { lat: number; lng: number } | null }>({
+    origin: originCoords ? { lat: parseFloat(originCoords.split(",")[0]), lng: parseFloat(originCoords.split(",")[1]) } : null,
+    destination: destinationCoords ? { lat: parseFloat(destinationCoords.split(",")[0]), lng: parseFloat(destinationCoords.split(",")[1]) } : null,
+  });
   const plateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cepDebounceRef = useRef<{ origin: ReturnType<typeof setTimeout> | null; destination: ReturnType<typeof setTimeout> | null }>({ origin: null, destination: null });
   const geoDebounceRef = useRef<{ origin: ReturnType<typeof setTimeout> | null; destination: ReturnType<typeof setTimeout> | null }>({ origin: null, destination: null });
