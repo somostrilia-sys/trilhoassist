@@ -164,13 +164,19 @@ export default function ServiceRequestDetail() {
   const [quotedAmount, setQuotedAmount] = useState("");
   const [chargedAmount, setChargedAmount] = useState("");
   const [dispatchNotes, setDispatchNotes] = useState("");
-  const [dispatchMode, setDispatchMode] = useState<"existing" | "quick">("existing");
+  const [dispatchMode, setDispatchMode] = useState<"existing" | "quick" | "external">("existing");
   const [quickProvider, setQuickProvider] = useState({
     name: "", document: "", phone: "", cep: "", street: "", address_number: "",
     neighborhood: "", city: "", state: "",
   });
   const [providerSearch, setProviderSearch] = useState("");
   const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
+  // Google Places external search
+  const [externalSearchKeyword, setExternalSearchKeyword] = useState("guincho reboque auto socorro");
+  const [externalSearchRadius, setExternalSearchRadius] = useState("30");
+  const [externalResults, setExternalResults] = useState<any[]>([]);
+  const [externalLoading, setExternalLoading] = useState(false);
+  const [externalError, setExternalError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteLoading, setNoteLoading] = useState(false);
@@ -1122,19 +1128,22 @@ export default function ServiceRequestDetail() {
         if (!open) {
           setDispatchMode("existing");
           setQuickProvider({ name: "", document: "", phone: "", cep: "", street: "", address_number: "", neighborhood: "", city: "", state: "" });
+          setExternalResults([]);
+          setExternalError("");
         }
       }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Acionar Prestador</DialogTitle>
             <DialogDescription>
-              Selecione um prestador cadastrado ou faça um cadastro rápido.
+              Selecione um prestador cadastrado, busque externamente ou faça um cadastro rápido.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <Tabs value={dispatchMode} onValueChange={(v) => setDispatchMode(v as "existing" | "quick")}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="existing">Selecionar Existente</TabsTrigger>
+            <Tabs value={dispatchMode} onValueChange={(v) => setDispatchMode(v as "existing" | "quick" | "external")}>
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="existing">Cadastrados</TabsTrigger>
+                <TabsTrigger value="external">Buscar Externos</TabsTrigger>
                 <TabsTrigger value="quick">Cadastro Rápido</TabsTrigger>
               </TabsList>
 
@@ -1187,6 +1196,125 @@ export default function ServiceRequestDetail() {
                     </PopoverContent>
                   </Popover>
                 </div>
+              </TabsContent>
+
+              <TabsContent value="external" className="space-y-4 mt-4">
+                {!(request?.origin_lat && request?.origin_lng) ? (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Este atendimento não possui coordenadas de origem. Informe o endereço de origem com GPS para buscar prestadores externos por proximidade.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Palavras-chave</Label>
+                      <Input
+                        placeholder="guincho reboque auto socorro"
+                        value={externalSearchKeyword}
+                        onChange={(e) => setExternalSearchKeyword(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex gap-3 items-end">
+                      <div className="space-y-2 flex-1">
+                        <Label>Raio (km)</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="50"
+                          value={externalSearchRadius}
+                          onChange={(e) => setExternalSearchRadius(e.target.value)}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={async () => {
+                          setExternalLoading(true);
+                          setExternalError("");
+                          setExternalResults([]);
+                          try {
+                            const { data, error } = await supabase.functions.invoke("google-places", {
+                              body: {
+                                latitude: request.origin_lat,
+                                longitude: request.origin_lng,
+                                radius: Number(externalSearchRadius) * 1000,
+                                keyword: externalSearchKeyword,
+                              },
+                            });
+                            if (error) throw error;
+                            if (!data.success) {
+                              setExternalError(data.error || "Erro ao buscar.");
+                            } else {
+                              setExternalResults(data.results || []);
+                              if ((data.results || []).length === 0) {
+                                setExternalError("Nenhum resultado encontrado nesse raio.");
+                              }
+                            }
+                          } catch (err: any) {
+                            setExternalError(err.message || "Erro na busca externa.");
+                          } finally {
+                            setExternalLoading(false);
+                          }
+                        }}
+                        disabled={externalLoading || !externalSearchKeyword.trim()}
+                      >
+                        {externalLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
+                        Buscar
+                      </Button>
+                    </div>
+
+                    {externalError && (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{externalError}</AlertDescription>
+                      </Alert>
+                    )}
+
+                    {externalResults.length > 0 && (
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        <p className="text-xs text-muted-foreground">{externalResults.length} resultado(s) — clique para usar no cadastro rápido</p>
+                        {externalResults.map((place) => (
+                          <div
+                            key={place.place_id}
+                            className="border rounded-md p-3 cursor-pointer hover:bg-accent/50 transition-colors"
+                            onClick={() => {
+                              setQuickProvider(prev => ({
+                                ...prev,
+                                name: place.name,
+                                street: place.address || "",
+                                city: "",
+                                state: "",
+                              }));
+                              setDispatchMode("quick");
+                              toast.info("Dados preenchidos no cadastro rápido", { description: "Complete telefone e outros dados para acionar." });
+                            }}
+                          >
+                            <div className="flex justify-between items-start gap-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">{place.name}</p>
+                                <p className="text-xs text-muted-foreground truncate">{place.address}</p>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <Badge variant="outline" className="text-xs">
+                                  {place.distance_km.toFixed(1)} km
+                                </Badge>
+                                {place.rating && (
+                                  <p className="text-xs text-muted-foreground mt-1">⭐ {place.rating} ({place.user_ratings_total})</p>
+                                )}
+                              </div>
+                            </div>
+                            {place.open_now != null && (
+                              <p className={`text-xs mt-1 ${place.open_now ? "text-green-600" : "text-red-500"}`}>
+                                {place.open_now ? "Aberto agora" : "Fechado"}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </TabsContent>
 
               <TabsContent value="quick" className="space-y-4 mt-4">
