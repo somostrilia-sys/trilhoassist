@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { maskPhone, maskCEP, maskCNPJ, unmask } from "@/lib/masks";
+import { maskPhone, maskCEP, unmask } from "@/lib/masks";
 import { useAuth } from "@/contexts/AuthContext";
 import { sendServiceLabel } from "@/lib/serviceLabel";
 import { sendAutoNotify } from "@/lib/autoNotify";
@@ -14,12 +14,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
 import {
-  User, Car, MapPin, AlertTriangle, Search, CheckCircle2, Loader2,
-  XCircle, MapPinned, Share2, DollarSign, ShieldAlert, Truck, UserPlus, Building2
+  User, Car, MapPin, AlertTriangle, CheckCircle2, Loader2,
+  XCircle, MapPinned, Share2, DollarSign, ShieldAlert,
 } from "lucide-react";
 import CarVerification, { defaultCarVerification } from "@/components/service-request/CarVerification";
 import MotorcycleVerification, { defaultMotorcycleVerification } from "@/components/service-request/MotorcycleVerification";
@@ -132,37 +130,6 @@ export default function NewServiceRequest() {
   const cepDebounceRef = useRef<{ origin: ReturnType<typeof setTimeout> | null; destination: ReturnType<typeof setTimeout> | null }>({ origin: null, destination: null });
   const geoDebounceRef = useRef<{ origin: ReturnType<typeof setTimeout> | null; destination: ReturnType<typeof setTimeout> | null }>({ origin: null, destination: null });
 
-  // ── Provider selection state ──
-  const [providerMode, setProviderMode] = useState<"existing" | "new">("existing");
-  const [providerSearch, setProviderSearch] = useState("");
-  const [providers, setProviders] = useState<any[]>([]);
-  const [providersLoading, setProvidersLoading] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<any | null>(null);
-  const [newProvider, setNewProvider] = useState({
-    name: "", cnpj: "", phone: "", email: "",
-    street: "", address_number: "", neighborhood: "", city: "", state: "", zip_code: "",
-  });
-
-  // Fetch providers when tenant is available
-  useEffect(() => {
-    if (!tenantId) return;
-    setProvidersLoading(true);
-    supabase
-      .from("providers")
-      .select("id, name, phone, cnpj, city, state, services, latitude, longitude")
-      .eq("tenant_id", tenantId)
-      .eq("active", true)
-      .order("name")
-      .then(({ data }) => {
-        setProviders(data ?? []);
-        setProvidersLoading(false);
-      });
-  }, [tenantId]);
-
-  const filteredProviders = providers.filter((p) => {
-    const q = providerSearch.toLowerCase();
-    return p.name.toLowerCase().includes(q) || (p.cnpj || "").includes(q) || (p.city || "").toLowerCase().includes(q);
-  });
 
   const searchBeneficiaryByPlate = useCallback(async (plate: string) => {
     const cleanPlate = plate.replace(/[^A-Z0-9]/g, "");
@@ -327,12 +294,6 @@ export default function NewServiceRequest() {
     if (!form.requester_phone.trim()) errs.requester_phone = "Telefone do solicitante é obrigatório";
     if (!form.origin_address.trim()) errs.origin_address = "Endereço de origem é obrigatório";
     if (!form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório";
-    // Provider required
-    if (!selectedProvider && providerMode === "existing") errs.provider = "Selecione um prestador";
-    if (providerMode === "new") {
-      if (!newProvider.name.trim()) errs.provider_name = "Razão social é obrigatória";
-      if (!newProvider.phone.trim()) errs.provider_phone = "Telefone do prestador é obrigatório";
-    }
     return errs;
   };
 
@@ -341,52 +302,11 @@ export default function NewServiceRequest() {
     const validationErrors = validate();
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) {
-      // Switch to tab with errors
-      if (validationErrors.requester_name || validationErrors.requester_phone || validationErrors.origin_address || validationErrors.destination_address) {
-        setActiveTab("atendimento");
-      } else if (validationErrors.provider || validationErrors.provider_name || validationErrors.provider_phone) {
-        setActiveTab("prestador");
-      }
+      setActiveTab("atendimento");
       toast({ title: "Preencha os campos obrigatórios", description: "Verifique os campos destacados em vermelho.", variant: "destructive" });
       return;
     }
     setLoading(true);
-
-    // If new provider, create it first
-    let providerId = selectedProvider?.id || null;
-    if (providerMode === "new") {
-      // Geocode provider address
-      const provAddr = [newProvider.street, newProvider.address_number, newProvider.neighborhood, newProvider.city, newProvider.state].filter(Boolean).join(", ");
-      const provGeo = await geocodeAddress(provAddr);
-
-      const { data: createdProvider, error: provError } = await supabase
-        .from("providers")
-        .insert({
-          name: newProvider.name.trim(),
-          cnpj: unmask(newProvider.cnpj) || null,
-          phone: unmask(newProvider.phone),
-          email: newProvider.email || null,
-          street: newProvider.street || null,
-          address_number: newProvider.address_number || null,
-          neighborhood: newProvider.neighborhood || null,
-          city: newProvider.city || null,
-          state: newProvider.state || null,
-          zip_code: unmask(newProvider.zip_code) || null,
-          tenant_id: tenantId,
-          latitude: provGeo?.lat || null,
-          longitude: provGeo?.lng || null,
-          services: [form.service_type],
-        })
-        .select("id")
-        .single();
-
-      if (provError) {
-        toast({ title: "Erro ao cadastrar prestador", description: provError.message, variant: "destructive" });
-        setLoading(false);
-        return;
-      }
-      providerId = createdProvider.id;
-    }
 
     // Geocode service addresses
     const fullOrigin = [form.origin_address, form.origin_number].filter(Boolean).join(", ");
@@ -431,26 +351,11 @@ export default function NewServiceRequest() {
     }).select("id").single();
 
     if (!error && inserted) {
-      // Create dispatch for the selected/created provider
-      if (providerId) {
-        await supabase.from("dispatches").insert({
-          service_request_id: inserted.id,
-          provider_id: providerId,
-          status: "sent",
-          quoted_amount: providerCostNum || null,
-        });
-
-        // Update service request status to dispatched
-        await supabase.from("service_requests")
-          .update({ status: "dispatched" as any })
-          .eq("id", inserted.id);
-      }
-
       // Log creation event
       await supabase.from("service_request_events").insert({
         service_request_id: inserted.id,
         event_type: "creation",
-        description: "Atendimento criado" + (providerId ? " com prestador vinculado" : ""),
+        description: "Atendimento criado — aguardando acionamento de prestador",
         user_id: user?.id || null,
       });
 
@@ -514,21 +419,16 @@ export default function NewServiceRequest() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="atendimento" className="gap-2">
               <Car className="h-4 w-4" />
               <span className="hidden sm:inline">Atendimento</span>
               <span className="sm:hidden">1</span>
             </TabsTrigger>
-            <TabsTrigger value="prestador" className="gap-2">
-              <Truck className="h-4 w-4" />
-              <span className="hidden sm:inline">Prestador</span>
-              <span className="sm:hidden">2</span>
-            </TabsTrigger>
             <TabsTrigger value="valores" className="gap-2">
               <DollarSign className="h-4 w-4" />
               <span className="hidden sm:inline">Valores</span>
-              <span className="sm:hidden">3</span>
+              <span className="sm:hidden">2</span>
             </TabsTrigger>
           </TabsList>
 
@@ -813,185 +713,6 @@ export default function NewServiceRequest() {
             </Card>
 
             <div className="flex justify-end">
-              <Button type="button" onClick={() => setActiveTab("prestador")}>
-                Próximo: Prestador →
-              </Button>
-            </div>
-          </TabsContent>
-
-          {/* ═══════════════════════ TAB 2 - PRESTADOR ═══════════════════════ */}
-          <TabsContent value="prestador" className="space-y-6 mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Truck className="h-5 w-5" /> SELEÇÃO DO PRESTADOR
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <Button type="button" variant={providerMode === "existing" ? "default" : "outline"} onClick={() => setProviderMode("existing")} className="flex-1 gap-2">
-                    <Search className="h-4 w-4" /> Prestador Cadastrado
-                  </Button>
-                  <Button type="button" variant={providerMode === "new" ? "default" : "outline"} onClick={() => { setProviderMode("new"); setSelectedProvider(null); }} className="flex-1 gap-2">
-                    <UserPlus className="h-4 w-4" /> Cadastrar Novo
-                  </Button>
-                </div>
-
-                {providerMode === "existing" && (
-                  <div className="space-y-3">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input placeholder="Buscar por nome, CNPJ ou cidade..." value={providerSearch} onChange={(e) => setProviderSearch(e.target.value)} className="pl-9" />
-                    </div>
-                    {errors.provider && <p className="text-xs text-destructive">{errors.provider}</p>}
-
-                    {selectedProvider && (
-                      <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm space-y-1">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 font-medium text-green-800">
-                            <CheckCircle2 className="h-4 w-4" /> {selectedProvider.name}
-                          </div>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedProvider(null)} className="h-7 text-xs">
-                            Alterar
-                          </Button>
-                        </div>
-                        <p className="text-green-700 text-xs">
-                          {selectedProvider.phone && `Tel: ${maskPhone(selectedProvider.phone)}`}
-                          {selectedProvider.city && ` • ${selectedProvider.city}/${selectedProvider.state}`}
-                        </p>
-                      </div>
-                    )}
-
-                    {!selectedProvider && (
-                      <div className="max-h-64 overflow-y-auto space-y-1 border rounded-md p-1">
-                        {providersLoading ? (
-                          <div className="p-4 text-center text-muted-foreground text-sm">
-                            <Loader2 className="h-4 w-4 animate-spin inline mr-2" /> Carregando prestadores...
-                          </div>
-                        ) : filteredProviders.length === 0 ? (
-                          <div className="p-4 text-center text-muted-foreground text-sm">
-                            Nenhum prestador encontrado.
-                          </div>
-                        ) : (
-                          filteredProviders.map((p) => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              className="w-full text-left p-3 rounded-md hover:bg-accent/50 transition-colors border-b last:border-0"
-                              onClick={() => { setSelectedProvider(p); setErrors(prev => ({ ...prev, provider: "" })); }}
-                            >
-                              <div className="font-medium text-sm">{p.name}</div>
-                              <div className="text-xs text-muted-foreground flex gap-3 mt-0.5">
-                                {p.phone && <span>Tel: {maskPhone(p.phone)}</span>}
-                                {p.cnpj && <span>CNPJ: {maskCNPJ(p.cnpj)}</span>}
-                                {p.city && <span>{p.city}/{p.state}</span>}
-                              </div>
-                              {p.services && p.services.length > 0 && (
-                                <div className="flex gap-1 mt-1 flex-wrap">
-                                  {p.services.slice(0, 3).map((s: string) => (
-                                    <Badge key={s} variant="outline" className="text-[10px] px-1.5 py-0">
-                                      {allServiceTypeOptions.find(o => o.value === s)?.label || s}
-                                    </Badge>
-                                  ))}
-                                  {p.services.length > 3 && <Badge variant="outline" className="text-[10px] px-1.5 py-0">+{p.services.length - 3}</Badge>}
-                                </div>
-                              )}
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {providerMode === "new" && (
-                  <div className="space-y-4 pt-2">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Building2 className="h-4 w-4" />
-                      Cadastro rápido — o prestador será adicionado à sua rede automaticamente.
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Razão Social / Nome *</Label>
-                        <Input value={newProvider.name} onChange={(e) => setNewProvider(p => ({ ...p, name: e.target.value }))} placeholder="Nome PF ou PJ" className={errors.provider_name ? "border-destructive" : ""} />
-                        {errors.provider_name && <p className="text-xs text-destructive">{errors.provider_name}</p>}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>CNPJ / CPF</Label>
-                        <Input value={newProvider.cnpj} onChange={(e) => setNewProvider(p => ({ ...p, cnpj: maskCNPJ(e.target.value) }))} placeholder="00.000.000/0000-00" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Telefone *</Label>
-                        <Input value={newProvider.phone} onChange={(e) => setNewProvider(p => ({ ...p, phone: maskPhone(e.target.value) }))} placeholder="(00) 00000-0000" className={errors.provider_phone ? "border-destructive" : ""} />
-                        {errors.provider_phone && <p className="text-xs text-destructive">{errors.provider_phone}</p>}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Email</Label>
-                        <Input type="email" value={newProvider.email} onChange={(e) => setNewProvider(p => ({ ...p, email: e.target.value }))} />
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-muted-foreground">Endereço (para roteirização)</Label>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>CEP</Label>
-                        <Input value={newProvider.zip_code} onChange={(e) => {
-                          const masked = maskCEP(e.target.value);
-                          setNewProvider(p => ({ ...p, zip_code: masked }));
-                          const digits = unmask(masked);
-                          if (digits.length === 8) {
-                            fetch(`https://viacep.com.br/ws/${digits}/json/`)
-                              .then(r => r.json())
-                              .then(data => {
-                                if (!data.erro) {
-                                  setNewProvider(p => ({
-                                    ...p,
-                                    street: data.logradouro || p.street,
-                                    neighborhood: data.bairro || p.neighborhood,
-                                    city: data.localidade || p.city,
-                                    state: data.uf || p.state,
-                                  }));
-                                }
-                              })
-                              .catch(() => {});
-                          }
-                        }} placeholder="00000-000" maxLength={9} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Rua</Label>
-                        <Input value={newProvider.street} onChange={(e) => setNewProvider(p => ({ ...p, street: e.target.value }))} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Número</Label>
-                        <Input value={newProvider.address_number} onChange={(e) => setNewProvider(p => ({ ...p, address_number: e.target.value }))} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Bairro</Label>
-                        <Input value={newProvider.neighborhood} onChange={(e) => setNewProvider(p => ({ ...p, neighborhood: e.target.value }))} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Cidade</Label>
-                        <Input value={newProvider.city} onChange={(e) => setNewProvider(p => ({ ...p, city: e.target.value }))} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Estado</Label>
-                        <Input value={newProvider.state} onChange={(e) => setNewProvider(p => ({ ...p, state: e.target.value }))} maxLength={2} placeholder="UF" />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <div className="flex justify-between">
-              <Button type="button" variant="outline" onClick={() => setActiveTab("atendimento")}>
-                ← Voltar
-              </Button>
               <Button type="button" onClick={() => setActiveTab("valores")}>
                 Próximo: Valores →
               </Button>
@@ -1094,7 +815,7 @@ export default function NewServiceRequest() {
                       <span>Solicitante:</span><span className="font-medium text-foreground">{form.requester_name || "—"}</span>
                       <span>Veículo:</span><span className="font-medium text-foreground">{form.vehicle_plate || "—"} {form.vehicle_model}</span>
                       <span>Serviço:</span><span className="font-medium text-foreground">{allServiceTypeOptions.find(o => o.value === form.service_type)?.label || "—"}</span>
-                      <span>Prestador:</span><span className="font-medium text-foreground">{selectedProvider?.name || (providerMode === "new" && newProvider.name) || "—"}</span>
+                      <span>Status:</span><span className="font-medium text-foreground">Aguardando acionamento</span>
                       {form.provider_cost && <><span>Custo prestador:</span><span className="font-medium text-foreground">R$ {parseFloat(form.provider_cost).toFixed(2)}</span></>}
                       {form.charged_amount && <><span>Valor cobrado:</span><span className="font-medium text-foreground">R$ {parseFloat(form.charged_amount).toFixed(2)}</span></>}
                     </div>
@@ -1105,7 +826,7 @@ export default function NewServiceRequest() {
 
             {!createdRequestId && (
               <div className="flex justify-between">
-                <Button type="button" variant="outline" onClick={() => setActiveTab("prestador")}>
+                <Button type="button" variant="outline" onClick={() => setActiveTab("atendimento")}>
                   ← Voltar
                 </Button>
                 <div className="flex gap-3">
