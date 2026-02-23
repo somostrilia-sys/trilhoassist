@@ -24,3 +24,6 @@ verify_jwt = false
 [functions.auto-notify]
 verify_jwt = false
 
+[functions.nps-submit]
+verify_jwt = false
+

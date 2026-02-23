@@ -279,8 +279,11 @@ export default function ServiceRequestDetail() {
       // Send completion label to group
       if (newStatus === "completed") {
         sendServiceLabel(id, "completion");
-        // Send NPS/completion message to beneficiary
-        sendAutoNotify(id, "beneficiary_completion");
+        // Send NPS/completion message to beneficiary with NPS link
+        const npsUrl = request.beneficiary_token
+          ? `${window.location.origin}/nps/${request.beneficiary_token}`
+          : undefined;
+        sendAutoNotify(id, "beneficiary_completion", { nps_link: npsUrl });
       }
       toast.success("Status alterado!", { description: `Novo status: ${statusMap[newStatus]?.label || newStatus}` });
       setStatusDialogOpen(false);

@@ -585,6 +585,51 @@ export type Database = {
           },
         ]
       }
+      nps_responses: {
+        Row: {
+          beneficiary_token: string
+          comment: string | null
+          created_at: string
+          id: string
+          score: number
+          service_request_id: string
+          tenant_id: string
+        }
+        Insert: {
+          beneficiary_token: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          score: number
+          service_request_id: string
+          tenant_id: string
+        }
+        Update: {
+          beneficiary_token?: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          score?: number
+          service_request_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nps_responses_service_request_id_fkey"
+            columns: ["service_request_id"]
+            isOneToOne: false
+            referencedRelation: "service_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nps_responses_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plan_coverages: {
         Row: {
           active: boolean
