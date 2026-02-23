@@ -242,7 +242,7 @@ export default function WhatsAppQueue() {
             WhatsApp CRM
           </h1>
           <p className="text-sm text-muted-foreground">
-            {activeCount} conversa(s) ativa(s) · API Oficial Meta
+            {activeCount} conversa(s) ativa(s) · Evolution API
           </p>
         </div>
         <div className="flex gap-2">
