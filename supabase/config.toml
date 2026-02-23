@@ -30,3 +30,6 @@ verify_jwt = false
 [functions.google-places]
 verify_jwt = false
 
+[functions.auto-followup]
+verify_jwt = false
+

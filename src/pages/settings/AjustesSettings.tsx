@@ -137,6 +137,8 @@ export default function AjustesSettings() {
   const [notifications, setNotifications] = useState(DEFAULT_NOTIFICATIONS);
   const [alertDispatchMin, setAlertDispatchMin] = useState(15);
   const [alertLateMin, setAlertLateMin] = useState(10);
+  const [followupTimeoutMin, setFollowupTimeoutMin] = useState(3);
+  const [followupMaxRetries, setFollowupMaxRetries] = useState(3);
   const [autoNotifySettings, setAutoNotifySettings] = useState<AutoNotifySettings>({});
 
   const { data: tenant, isLoading } = useQuery({
@@ -177,6 +179,8 @@ export default function AjustesSettings() {
       setNotifications({ ...DEFAULT_NOTIFICATIONS, ...parsedNotif });
       setAlertDispatchMin((tenant as any).alert_dispatch_minutes ?? 15);
       setAlertLateMin((tenant as any).alert_late_minutes ?? 10);
+      setFollowupTimeoutMin((tenant as any).followup_timeout_minutes ?? 3);
+      setFollowupMaxRetries((tenant as any).followup_max_retries ?? 3);
       // Load auto-notify settings from notification_settings.auto_notify
       const autoNotify = parsedNotif.auto_notify || {};
       const loadedAutoNotify: AutoNotifySettings = {};
@@ -204,7 +208,7 @@ export default function AjustesSettings() {
       } else if (section === "notifications") {
         payload = { notification_settings: { ...notifications, auto_notify: autoNotifySettings } };
       } else if (section === "alerts") {
-        payload = { alert_dispatch_minutes: alertDispatchMin, alert_late_minutes: alertLateMin };
+        payload = { alert_dispatch_minutes: alertDispatchMin, alert_late_minutes: alertLateMin, followup_timeout_minutes: followupTimeoutMin, followup_max_retries: followupMaxRetries };
       }
 
       const { error } = await supabase
@@ -561,9 +565,46 @@ export default function AjustesSettings() {
                     value={alertLateMin}
                     onChange={(e) => setAlertLateMin(Number(e.target.value))}
                   />
-                  <p className="text-xs text-muted-foreground">
+                   <p className="text-xs text-muted-foreground">
                     Sirene quando o prestador ultrapassar o ETA previsto por esse tempo adicional
                   </p>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t">
+                <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4" /> Follow-up Automático no WhatsApp
+                </h3>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Envia lembretes automáticos quando o beneficiário não responde uma pergunta no WhatsApp dentro do tempo configurado.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label>Tempo sem resposta (minutos)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={30}
+                      value={followupTimeoutMin}
+                      onChange={(e) => setFollowupTimeoutMin(Number(e.target.value))}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Após esse tempo sem resposta do beneficiário, um lembrete é enviado automaticamente
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Máximo de lembretes</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={5}
+                      value={followupMaxRetries}
+                      onChange={(e) => setFollowupMaxRetries(Number(e.target.value))}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Quantidade máxima de lembretes antes de parar de cobrar resposta
+                    </p>
+                  </div>
                 </div>
               </div>
               <Button onClick={() => handleSave("alerts")} disabled={saving}>

@@ -1221,6 +1221,8 @@ export type Database = {
           evolution_api_key: string | null
           evolution_api_url: string | null
           favicon_url: string | null
+          followup_max_retries: number
+          followup_timeout_minutes: number
           google_api_key: string | null
           id: string
           logo_url: string | null
@@ -1250,6 +1252,8 @@ export type Database = {
           evolution_api_key?: string | null
           evolution_api_url?: string | null
           favicon_url?: string | null
+          followup_max_retries?: number
+          followup_timeout_minutes?: number
           google_api_key?: string | null
           id?: string
           logo_url?: string | null
@@ -1279,6 +1283,8 @@ export type Database = {
           evolution_api_key?: string | null
           evolution_api_url?: string | null
           favicon_url?: string | null
+          followup_max_retries?: number
+          followup_timeout_minutes?: number
           google_api_key?: string | null
           id?: string
           logo_url?: string | null
@@ -1392,7 +1398,9 @@ export type Database = {
           detected_vehicle_model: string | null
           detected_vehicle_year: number | null
           detected_verification_answers: Json | null
+          followup_count: number
           id: string
+          last_followup_at: string | null
           last_message_at: string | null
           origin_lat: number | null
           origin_lng: number | null
@@ -1420,7 +1428,9 @@ export type Database = {
           detected_vehicle_model?: string | null
           detected_vehicle_year?: number | null
           detected_verification_answers?: Json | null
+          followup_count?: number
           id?: string
+          last_followup_at?: string | null
           last_message_at?: string | null
           origin_lat?: number | null
           origin_lng?: number | null
@@ -1448,7 +1458,9 @@ export type Database = {
           detected_vehicle_model?: string | null
           detected_vehicle_year?: number | null
           detected_verification_answers?: Json | null
+          followup_count?: number
           id?: string
+          last_followup_at?: string | null
           last_message_at?: string | null
           origin_lat?: number | null
           origin_lng?: number | null
