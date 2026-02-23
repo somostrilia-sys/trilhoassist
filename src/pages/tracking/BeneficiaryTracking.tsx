@@ -1,9 +1,10 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Car, Loader2, AlertCircle, Clock, Bell } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { MapPin, Car, Loader2, AlertCircle, Clock, Bell, CheckCircle2 } from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -51,6 +52,7 @@ export default function BeneficiaryTracking() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [isNearby, setIsNearby] = useState(false);
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
+  const [beneficiaryArrived, setBeneficiaryArrived] = useState(false);
   const notifiedRef = useRef(false);
 
   const mapRef = useRef<HTMLDivElement>(null);
@@ -209,6 +211,20 @@ export default function BeneficiaryTracking() {
     }
   }, [providerPos, request?.origin_lat, request?.origin_lng]);
 
+  // Set arrived state from dispatch data
+  useEffect(() => {
+    if (dispatch?.beneficiary_arrived_at) setBeneficiaryArrived(true);
+  }, [dispatch?.beneficiary_arrived_at]);
+
+  const handleBeneficiaryArrival = useCallback(async () => {
+    if (!dispatch) return;
+    await supabase
+      .from("dispatches")
+      .update({ beneficiary_arrived_at: new Date().toISOString() })
+      .eq("id", dispatch.id);
+    setBeneficiaryArrived(true);
+  }, [dispatch]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -326,6 +342,20 @@ export default function BeneficiaryTracking() {
             )}
           </CardContent>
         </Card>
+
+        {/* Beneficiary arrival confirmation */}
+        {dispatch && !beneficiaryArrived && (
+          <Button onClick={handleBeneficiaryArrival} className="w-full gap-2" size="lg">
+            <CheckCircle2 className="h-4 w-4" />
+            Confirmar que o prestador chegou
+          </Button>
+        )}
+        {beneficiaryArrived && (
+          <div className="flex items-center justify-center gap-2 text-sm text-success font-medium py-2">
+            <CheckCircle2 className="h-5 w-5" />
+            Chegada do prestador confirmada
+          </div>
+        )}
       </div>
     </div>
   );

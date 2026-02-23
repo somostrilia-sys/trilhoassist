@@ -189,6 +189,7 @@ export type Database = {
       dispatches: {
         Row: {
           accepted_at: string | null
+          beneficiary_arrived_at: string | null
           completed_at: string | null
           created_at: string
           distance_km: number | null
@@ -196,6 +197,7 @@ export type Database = {
           final_amount: number | null
           id: string
           notes: string | null
+          provider_arrived_at: string | null
           provider_id: string | null
           provider_token: string | null
           quoted_amount: number | null
@@ -205,6 +207,7 @@ export type Database = {
         }
         Insert: {
           accepted_at?: string | null
+          beneficiary_arrived_at?: string | null
           completed_at?: string | null
           created_at?: string
           distance_km?: number | null
@@ -212,6 +215,7 @@ export type Database = {
           final_amount?: number | null
           id?: string
           notes?: string | null
+          provider_arrived_at?: string | null
           provider_id?: string | null
           provider_token?: string | null
           quoted_amount?: number | null
@@ -221,6 +225,7 @@ export type Database = {
         }
         Update: {
           accepted_at?: string | null
+          beneficiary_arrived_at?: string | null
           completed_at?: string | null
           created_at?: string
           distance_km?: number | null
@@ -228,6 +233,7 @@ export type Database = {
           final_amount?: number | null
           id?: string
           notes?: string | null
+          provider_arrived_at?: string | null
           provider_id?: string | null
           provider_token?: string | null
           quoted_amount?: number | null
@@ -1160,6 +1166,8 @@ export type Database = {
           accent_color: string | null
           active: boolean
           address_number: string | null
+          alert_dispatch_minutes: number
+          alert_late_minutes: number
           city: string | null
           cnpj: string | null
           created_at: string
@@ -1184,6 +1192,8 @@ export type Database = {
           accent_color?: string | null
           active?: boolean
           address_number?: string | null
+          alert_dispatch_minutes?: number
+          alert_late_minutes?: number
           city?: string | null
           cnpj?: string | null
           created_at?: string
@@ -1208,6 +1218,8 @@ export type Database = {
           accent_color?: string | null
           active?: boolean
           address_number?: string | null
+          alert_dispatch_minutes?: number
+          alert_late_minutes?: number
           city?: string | null
           cnpj?: string | null
           created_at?: string

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Settings2, Building2, Palette, Tag, Bell, Save, Upload } from "lucide-react";
+import { Settings2, Building2, Palette, Tag, Bell, Save, Upload, Siren } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const DEFAULT_LABELS: Record<string, string> = {
@@ -51,6 +51,8 @@ export default function AjustesSettings() {
   const [accentColor, setAccentColor] = useState("#f59e0b");
   const [customLabels, setCustomLabels] = useState<Record<string, string>>(DEFAULT_LABELS);
   const [notifications, setNotifications] = useState(DEFAULT_NOTIFICATIONS);
+  const [alertDispatchMin, setAlertDispatchMin] = useState(15);
+  const [alertLateMin, setAlertLateMin] = useState(10);
 
   const { data: tenant, isLoading } = useQuery({
     queryKey: ["tenant-settings", tenantId],
@@ -87,6 +89,8 @@ export default function AjustesSettings() {
       setCustomLabels({ ...DEFAULT_LABELS, ...(labels && typeof labels === "object" ? labels : {}) });
       const notif = (tenant as any).notification_settings;
       setNotifications({ ...DEFAULT_NOTIFICATIONS, ...(notif && typeof notif === "object" ? notif : {}) });
+      setAlertDispatchMin((tenant as any).alert_dispatch_minutes ?? 15);
+      setAlertLateMin((tenant as any).alert_late_minutes ?? 10);
     }
   }, [tenant]);
 
@@ -103,6 +107,8 @@ export default function AjustesSettings() {
         payload = { custom_labels: customLabels };
       } else if (section === "notifications") {
         payload = { notification_settings: notifications };
+      } else if (section === "alerts") {
+        payload = { alert_dispatch_minutes: alertDispatchMin, alert_late_minutes: alertLateMin };
       }
 
       const { error } = await supabase
@@ -149,7 +155,7 @@ export default function AjustesSettings() {
       </div>
 
       <Tabs defaultValue="company" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="company" className="flex items-center gap-1.5 text-xs">
             <Building2 className="h-3.5 w-3.5" /> Empresa
           </TabsTrigger>
@@ -161,6 +167,9 @@ export default function AjustesSettings() {
           </TabsTrigger>
           <TabsTrigger value="notifications" className="flex items-center gap-1.5 text-xs">
             <Bell className="h-3.5 w-3.5" /> Notificações
+          </TabsTrigger>
+          <TabsTrigger value="alerts" className="flex items-center gap-1.5 text-xs">
+            <Siren className="h-3.5 w-3.5" /> Alertas
           </TabsTrigger>
         </TabsList>
 
@@ -386,6 +395,49 @@ export default function AjustesSettings() {
               </div>
 
               <Button onClick={() => handleSave("notifications")} disabled={saving}>
+                <Save className="h-4 w-4 mr-2" /> {saving ? "Salvando..." : "Salvar"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Alertas do Painel */}
+        <TabsContent value="alerts">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Alertas do Painel de Acionamentos</CardTitle>
+              <CardDescription>Configure os tempos que disparam sirenes no painel operacional</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label>Tempo sem despacho (minutos)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={alertDispatchMin}
+                    onChange={(e) => setAlertDispatchMin(Number(e.target.value))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Sirene quando um atendimento ficar sem prestador acionado após esse tempo
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Tolerância de atraso (minutos)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={alertLateMin}
+                    onChange={(e) => setAlertLateMin(Number(e.target.value))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Sirene quando o prestador ultrapassar o ETA previsto por esse tempo adicional
+                  </p>
+                </div>
+              </div>
+              <Button onClick={() => handleSave("alerts")} disabled={saving}>
                 <Save className="h-4 w-4 mr-2" /> {saving ? "Salvando..." : "Salvar"}
               </Button>
             </CardContent>
