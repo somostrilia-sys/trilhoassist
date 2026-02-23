@@ -85,6 +85,7 @@ export type Database = {
           active: boolean
           api_endpoint: string | null
           api_key: string | null
+          auto_sync_enabled: boolean | null
           billing_model: string
           cnpj: string | null
           contact_email: string | null
@@ -92,6 +93,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          sync_interval_minutes: number | null
           tenant_id: string | null
           updated_at: string
         }
@@ -99,6 +101,7 @@ export type Database = {
           active?: boolean
           api_endpoint?: string | null
           api_key?: string | null
+          auto_sync_enabled?: boolean | null
           billing_model?: string
           cnpj?: string | null
           contact_email?: string | null
@@ -106,6 +109,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          sync_interval_minutes?: number | null
           tenant_id?: string | null
           updated_at?: string
         }
@@ -113,6 +117,7 @@ export type Database = {
           active?: boolean
           api_endpoint?: string | null
           api_key?: string | null
+          auto_sync_enabled?: boolean | null
           billing_model?: string
           cnpj?: string | null
           contact_email?: string | null
@@ -120,6 +125,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          sync_interval_minutes?: number | null
           tenant_id?: string | null
           updated_at?: string
         }
@@ -236,6 +242,117 @@ export type Database = {
             columns: ["service_request_id"]
             isOneToOne: false
             referencedRelation: "service_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      erp_field_mappings: {
+        Row: {
+          client_id: string
+          created_at: string
+          erp_value: string
+          field_type: string
+          id: string
+          tenant_id: string
+          trilho_id: string | null
+          trilho_value: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          erp_value: string
+          field_type: string
+          id?: string
+          tenant_id: string
+          trilho_id?: string | null
+          trilho_value?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          erp_value?: string
+          field_type?: string
+          id?: string
+          tenant_id?: string
+          trilho_id?: string | null
+          trilho_value?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "erp_field_mappings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "erp_field_mappings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      erp_sync_logs: {
+        Row: {
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          records_created: number | null
+          records_found: number | null
+          records_updated: number | null
+          started_at: string
+          status: string
+          sync_type: string
+          tenant_id: string
+        }
+        Insert: {
+          client_id: string
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          records_created?: number | null
+          records_found?: number | null
+          records_updated?: number | null
+          started_at?: string
+          status?: string
+          sync_type?: string
+          tenant_id: string
+        }
+        Update: {
+          client_id?: string
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          records_created?: number | null
+          records_found?: number | null
+          records_updated?: number | null
+          started_at?: string
+          status?: string
+          sync_type?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "erp_sync_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "erp_sync_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]

@@ -44,6 +44,7 @@ import BeneficiaryForm from "./pages/business/BeneficiaryForm";
 import QuickRepliesSettings from "./pages/settings/QuickRepliesSettings";
 import TemplatesSettings from "./pages/settings/TemplatesSettings";
 import AjustesSettings from "./pages/settings/AjustesSettings";
+import IntegrationsPage from "./pages/settings/IntegrationsPage";
 
 const queryClient = new QueryClient();
 
@@ -107,7 +108,7 @@ const App = () => (
               <Route path="/settings" element={<Navigate to="/settings/ajustes" replace />} />
               <Route path="/settings/quick-replies" element={<QuickRepliesSettings />} />
               <Route path="/settings/templates" element={<TemplatesSettings />} />
-              <Route path="/integrations" element={<Placeholder />} />
+              <Route path="/integrations" element={<IntegrationsPage />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />
