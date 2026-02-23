@@ -329,8 +329,10 @@ export default function NewServiceRequest() {
     const errs: Record<string, string> = {};
     if (!form.requester_name.trim()) errs.requester_name = "Nome do solicitante é obrigatório";
     if (!form.requester_phone.trim()) errs.requester_phone = "Telefone do solicitante é obrigatório";
-    if (!form.origin_address.trim()) errs.origin_address = "Endereço de origem é obrigatório";
-    if (!form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório";
+    if (form.service_type !== "collision") {
+      if (!form.origin_address.trim()) errs.origin_address = "Endereço de origem é obrigatório";
+      if (!form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório";
+    }
     return errs;
   };
 
