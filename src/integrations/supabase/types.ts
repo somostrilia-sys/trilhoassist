@@ -1281,6 +1281,62 @@ export type Database = {
           },
         ]
       }
+      whatsapp_templates: {
+        Row: {
+          active: boolean
+          body_text: string
+          category: string
+          created_at: string
+          footer_text: string | null
+          header_text: string | null
+          id: string
+          language: string
+          meta_template_name: string
+          name: string
+          tenant_id: string
+          updated_at: string
+          variables: Json | null
+        }
+        Insert: {
+          active?: boolean
+          body_text: string
+          category?: string
+          created_at?: string
+          footer_text?: string | null
+          header_text?: string | null
+          id?: string
+          language?: string
+          meta_template_name: string
+          name: string
+          tenant_id: string
+          updated_at?: string
+          variables?: Json | null
+        }
+        Update: {
+          active?: boolean
+          body_text?: string
+          category?: string
+          created_at?: string
+          footer_text?: string | null
+          header_text?: string | null
+          id?: string
+          language?: string
+          meta_template_name?: string
+          name?: string
+          tenant_id?: string
+          updated_at?: string
+          variables?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_templates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

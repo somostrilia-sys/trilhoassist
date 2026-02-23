@@ -40,10 +40,10 @@ Deno.serve(async (req) => {
 
     const userId = claimsData.claims.sub;
 
-    const { phone, message, conversation_id } = await req.json();
+    const { phone, message, conversation_id, template } = await req.json();
 
-    if (!phone || !message) {
-      return new Response(JSON.stringify({ error: "phone and message are required" }), {
+    if (!phone || (!message && !template)) {
+      return new Response(JSON.stringify({ error: "phone and (message or template) are required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -67,6 +67,38 @@ Deno.serve(async (req) => {
       cleanPhone = `55${cleanPhone}`;
     }
 
+    // Build request body based on message type (text vs template)
+    let metaBody: Record<string, unknown>;
+
+    if (template) {
+      // HSM Template message
+      const templateComponents = (template.components || []).map((comp: any) => ({
+        type: comp.type,
+        parameters: comp.parameters,
+      }));
+
+      metaBody = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: cleanPhone,
+        type: "template",
+        template: {
+          name: template.name,
+          language: { code: template.language || "pt_BR" },
+          ...(templateComponents.length > 0 ? { components: templateComponents } : {}),
+        },
+      };
+    } else {
+      // Regular text message
+      metaBody = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: cleanPhone,
+        type: "text",
+        text: { body: message },
+      };
+    }
+
     // ========== SEND VIA META CLOUD API ==========
     const response = await fetch(`${META_API_URL}/${WHATSAPP_PHONE_ID}/messages`, {
       method: "POST",
@@ -74,13 +106,7 @@ Deno.serve(async (req) => {
         Authorization: `Bearer ${WHATSAPP_TOKEN}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to: cleanPhone,
-        type: "text",
-        text: { body: message },
-      }),
+      body: JSON.stringify(metaBody),
     });
 
     const result = await response.json();
@@ -100,11 +126,15 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
       );
 
+      const messageContent = template
+        ? `[Template: ${template.name}]`
+        : message;
+
       await adminSupabase.from("whatsapp_messages").insert({
         conversation_id,
         direction: "outbound",
-        message_type: "text",
-        content: message,
+        message_type: template ? "template" : "text",
+        content: messageContent,
         external_id: result.messages?.[0]?.id || null,
       });
 

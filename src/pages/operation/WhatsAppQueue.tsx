@@ -6,10 +6,11 @@ import { useTenantId } from "@/hooks/useFinancialData";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Info } from "lucide-react";
+import { MessageSquare, Info, FileText } from "lucide-react";
 import { ConversationList } from "@/components/whatsapp/ConversationList";
 import { ChatArea } from "@/components/whatsapp/ChatArea";
 import { ContactInfoPanel } from "@/components/whatsapp/ContactInfoPanel";
+import { SendTemplateDialog } from "@/components/whatsapp/SendTemplateDialog";
 import { Button } from "@/components/ui/button";
 
 export default function WhatsAppQueue() {
@@ -24,7 +25,7 @@ export default function WhatsAppQueue() {
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
   const [showInfo, setShowInfo] = useState(true);
-
+  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   // Fetch all conversations (including closed for filter)
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ["whatsapp-conversations", tenantId],
@@ -244,17 +245,23 @@ export default function WhatsAppQueue() {
             {activeCount} conversa(s) ativa(s) · API Oficial Meta
           </p>
         </div>
-        {selectedConv && (
-          <Button
-            variant={showInfo ? "default" : "outline"}
-            size="sm"
-            onClick={() => setShowInfo(!showInfo)}
-            className="lg:flex hidden"
-          >
-            <Info className="h-4 w-4 mr-1" />
-            {showInfo ? "Ocultar Painel" : "Informações"}
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowTemplateDialog(true)}>
+            <FileText className="h-4 w-4 mr-1" />
+            Enviar Template
           </Button>
-        )}
+          {selectedConv && (
+            <Button
+              variant={showInfo ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowInfo(!showInfo)}
+              className="lg:flex hidden"
+            >
+              <Info className="h-4 w-4 mr-1" />
+              {showInfo ? "Ocultar Painel" : "Informações"}
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className={`grid gap-4 h-[calc(100%-4rem)] ${
@@ -321,6 +328,17 @@ export default function WhatsAppQueue() {
           </Card>
         )}
       </div>
+
+      <SendTemplateDialog
+        open={showTemplateDialog}
+        onOpenChange={setShowTemplateDialog}
+        defaultPhone={selectedConv?.phone || ""}
+        conversationId={selectedConv?.id}
+        onSent={() => {
+          queryClient.invalidateQueries({ queryKey: ["whatsapp-conversations"] });
+          queryClient.invalidateQueries({ queryKey: ["whatsapp-messages"] });
+        }}
+      />
     </div>
   );
 }
