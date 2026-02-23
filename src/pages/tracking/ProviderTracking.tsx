@@ -17,6 +17,14 @@ const serviceTypeMap: Record<string, string> = {
   fuel: "Combustível", lodging: "Hospedagem", collision: "Colisão", other: "Outro",
 };
 
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000; // meters
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 const statusLabels: Record<string, string> = {
   pending: "Pendente", sent: "Enviado", accepted: "Aceito",
   rejected: "Recusado", expired: "Expirado", cancelled: "Cancelado", completed: "Concluído",
@@ -33,9 +41,11 @@ export default function ProviderTracking() {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [accepting, setAccepting] = useState(false);
   const [gpsReady, setGpsReady] = useState(false);
+  const [arrivedOrigin, setArrivedOrigin] = useState(false);
   const watchRef = useRef<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const latestPos = useRef<GeolocationPosition | null>(null);
+  const autoArrivalRef = useRef(false);
 
   useEffect(() => {
     if (!token) return;
@@ -218,6 +228,44 @@ export default function ProviderTracking() {
     toast.info("Acionamento recusado.");
     setAccepting(false);
   }, [dispatch, stopTracking]);
+
+  const handleMarkArrival = useCallback(async () => {
+    if (!dispatch) return;
+    const { error: err } = await supabase
+      .from("dispatches")
+      .update({ provider_arrived_at: new Date().toISOString() })
+      .eq("id", dispatch.id);
+    if (err) {
+      toast.error("Erro ao registrar chegada");
+      return;
+    }
+    setArrivedOrigin(true);
+    setDispatch({ ...dispatch, provider_arrived_at: new Date().toISOString() });
+    toast.success("Chegada registrada!");
+  }, [dispatch]);
+
+  // Auto-detect arrival at origin (100m radius)
+  useEffect(() => {
+    if (!request?.origin_lat || !request?.origin_lng || !tracking || arrivedOrigin || autoArrivalRef.current) return;
+    if (!latestPos.current) return;
+
+    const dist = haversineDistance(
+      latestPos.current.coords.latitude,
+      latestPos.current.coords.longitude,
+      request.origin_lat,
+      request.origin_lng
+    );
+
+    if (dist <= 100) {
+      autoArrivalRef.current = true;
+      handleMarkArrival();
+    }
+  });
+
+  // Set arrived state from dispatch data
+  useEffect(() => {
+    if (dispatch?.provider_arrived_at) setArrivedOrigin(true);
+  }, [dispatch?.provider_arrived_at]);
 
   const isAccepted = dispatch?.status === "accepted";
   const isCompleted = dispatch?.status === "completed";
@@ -456,6 +504,25 @@ export default function ProviderTracking() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Mark Arrival button */}
+        {isAccepted && !arrivedOrigin && (
+          <Button
+            onClick={handleMarkArrival}
+            className="w-full gap-2"
+            variant="default"
+            size="lg"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            Marcar Chegada na Origem
+          </Button>
+        )}
+        {isAccepted && arrivedOrigin && (
+          <div className="flex items-center justify-center gap-2 text-sm text-success font-medium py-2">
+            <CheckCircle2 className="h-5 w-5" />
+            Chegada registrada
+          </div>
         )}
 
         {/* Destination navigation */}
