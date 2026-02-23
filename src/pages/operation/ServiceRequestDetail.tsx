@@ -14,8 +14,9 @@ import {
   ArrowLeft, User, Car, MapPin, AlertTriangle, ClipboardCheck, FileText,
   Share2, Truck, XCircle, PlayCircle, CheckCircle2, Loader2, Clock, History,
   FilePlus2, RotateCcw, Send, Camera, Mic, Video, File, Link as LinkIcon,
-  DollarSign, CalendarIcon, AlertCircle,
+  DollarSign, CalendarIcon, AlertCircle, Search, ChevronsUpDown, Check,
 } from "lucide-react";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandItem, CommandGroup } from "@/components/ui/command";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
@@ -168,6 +169,8 @@ export default function ServiceRequestDetail() {
     name: "", document: "", phone: "", cep: "", street: "", address_number: "",
     neighborhood: "", city: "", state: "",
   });
+  const [providerSearch, setProviderSearch] = useState("");
+  const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteLoading, setNoteLoading] = useState(false);
@@ -1120,18 +1123,45 @@ export default function ServiceRequestDetail() {
               <TabsContent value="existing" className="space-y-4 mt-4">
                 <div className="space-y-2">
                   <Label>Prestador *</Label>
-                  <Select value={selectedProviderId} onValueChange={setSelectedProviderId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o prestador" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {providers.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name} {p.city ? `— ${p.city}/${p.state}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={providerDropdownOpen} onOpenChange={setProviderDropdownOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                        {selectedProviderId
+                          ? (() => {
+                              const p = providers.find(p => p.id === selectedProviderId);
+                              return p ? `${p.name}${p.city ? ` — ${p.city}/${p.state}` : ""}` : "Selecione...";
+                            })()
+                          : "Buscar prestador..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Buscar por nome ou cidade..." />
+                        <CommandList>
+                          <CommandEmpty>Nenhum prestador encontrado.</CommandEmpty>
+                          <CommandGroup>
+                            {providers.map((p) => (
+                              <CommandItem
+                                key={p.id}
+                                value={`${p.name} ${p.city || ""} ${p.state || ""}`}
+                                onSelect={() => {
+                                  setSelectedProviderId(p.id);
+                                  setProviderDropdownOpen(false);
+                                }}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", selectedProviderId === p.id ? "opacity-100" : "opacity-0")} />
+                                <div className="flex flex-col">
+                                  <span>{p.name}</span>
+                                  {p.city && <span className="text-xs text-muted-foreground">{p.city}/{p.state}</span>}
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </TabsContent>
 
