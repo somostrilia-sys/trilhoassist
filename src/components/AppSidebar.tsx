@@ -91,7 +91,7 @@ const menuSections: MenuSection[] = [
       { title: "Permissões", url: "/settings/permissions", icon: Shield },
       { title: "Respostas Rápidas", url: "/settings/quick-replies", icon: Zap },
       { title: "Templates HSM", url: "/settings/templates", icon: FileText },
-      { title: "Configurações", url: "/settings", icon: Settings },
+      { title: "Ajustes", url: "/settings/ajustes", icon: Settings },
       { title: "Integrações", url: "/integrations", icon: Link2 },
     ],
   },

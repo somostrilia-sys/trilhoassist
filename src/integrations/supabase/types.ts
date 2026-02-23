@@ -989,10 +989,12 @@ export type Database = {
           accent_color: string | null
           active: boolean
           created_at: string
+          custom_labels: Json | null
           favicon_url: string | null
           id: string
           logo_url: string | null
           name: string
+          notification_settings: Json | null
           primary_color: string | null
           secondary_color: string | null
           slug: string
@@ -1002,10 +1004,12 @@ export type Database = {
           accent_color?: string | null
           active?: boolean
           created_at?: string
+          custom_labels?: Json | null
           favicon_url?: string | null
           id?: string
           logo_url?: string | null
           name: string
+          notification_settings?: Json | null
           primary_color?: string | null
           secondary_color?: string | null
           slug: string
@@ -1015,10 +1019,12 @@ export type Database = {
           accent_color?: string | null
           active?: boolean
           created_at?: string
+          custom_labels?: Json | null
           favicon_url?: string | null
           id?: string
           logo_url?: string | null
           name?: string
+          notification_settings?: Json | null
           primary_color?: string | null
           secondary_color?: string | null
           slug?: string
