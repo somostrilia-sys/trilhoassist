@@ -233,10 +233,10 @@ export default function ServiceRequests() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Atendimentos</h1>
-          <p className="text-sm text-muted-foreground">Visualize e acompanhe todos os atendimentos</p>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="page-header">
+          <h1>Atendimentos</h1>
+          <p>Visualize e acompanhe todos os atendimentos</p>
         </div>
         <div className="flex items-center gap-2">
           <DropdownMenu>
