@@ -51,7 +51,7 @@ export default function NewServiceRequest() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [tenantId, setTenantId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("atendimento");
+  
   const conversationId = searchParams.get("conversation_id");
 
   // Fetch the user's tenant_id
@@ -302,7 +302,7 @@ export default function NewServiceRequest() {
     const validationErrors = validate();
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) {
-      setActiveTab("atendimento");
+      // scroll to top to show errors
       toast({ title: "Preencha os campos obrigatórios", description: "Verifique os campos destacados em vermelho.", variant: "destructive" });
       return;
     }
@@ -418,22 +418,7 @@ export default function NewServiceRequest() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="atendimento" className="gap-2">
-              <Car className="h-4 w-4" />
-              <span className="hidden sm:inline">Atendimento</span>
-              <span className="sm:hidden">1</span>
-            </TabsTrigger>
-            <TabsTrigger value="valores" className="gap-2">
-              <DollarSign className="h-4 w-4" />
-              <span className="hidden sm:inline">Valores</span>
-              <span className="sm:hidden">2</span>
-            </TabsTrigger>
-          </TabsList>
-
-          {/* ═══════════════════════ TAB 1 - ATENDIMENTO ═══════════════════════ */}
-          <TabsContent value="atendimento" className="space-y-6 mt-6">
+            {/* ═══════════════ DADOS DO SOLICITANTE ═══════════════ */}
             {/* Requester Data */}
             <Card>
               <CardHeader>
@@ -712,15 +697,8 @@ export default function NewServiceRequest() {
               </CardContent>
             </Card>
 
-            <div className="flex justify-end">
-              <Button type="button" onClick={() => setActiveTab("valores")}>
-                Próximo: Valores →
-              </Button>
-            </div>
-          </TabsContent>
 
-          {/* ═══════════════════════ TAB 3 - VALORES ═══════════════════════ */}
-          <TabsContent value="valores" className="space-y-6 mt-6">
+            {/* ═══════════════ VALORES E PAGAMENTO ═══════════════ */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -741,7 +719,7 @@ export default function NewServiceRequest() {
                   </div>
                 </div>
 
-                <Separator />
+                <div className="border-t pt-4 mt-2" />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -825,22 +803,15 @@ export default function NewServiceRequest() {
             )}
 
             {!createdRequestId && (
-              <div className="flex justify-between">
-                <Button type="button" variant="outline" onClick={() => setActiveTab("atendimento")}>
-                  ← Voltar
+              <div className="flex justify-end gap-3">
+                <Button type="button" variant="outline" onClick={() => navigate("/operation/requests")}>
+                  Cancelar
                 </Button>
-                <div className="flex gap-3">
-                  <Button type="button" variant="outline" onClick={() => navigate("/operation/requests")}>
-                    Cancelar
-                  </Button>
-                  <Button type="submit" disabled={loading}>
-                    {loading ? "Salvando..." : isCollision ? "Criar Registro de Colisão" : "Criar Atendimento"}
-                  </Button>
-                </div>
+                <Button type="submit" disabled={loading}>
+                  {loading ? "Salvando..." : isCollision ? "Criar Registro de Colisão" : "Criar Atendimento"}
+                </Button>
               </div>
             )}
-          </TabsContent>
-        </Tabs>
       </form>
 
       {/* Exception Dialog */}
