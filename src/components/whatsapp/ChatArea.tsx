@@ -7,9 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   User, Phone, Plus, X, Send, UserCheck, Zap, ArrowRightLeft,
-  AlertCircle, Tag,
+  AlertCircle, Tag, ClipboardCheck, Car, Bike, Truck,
 } from "lucide-react";
-
+import { buildVerificationFormMessage, type VehicleCategory } from "@/lib/verificationFormMessages";
 interface ChatAreaProps {
   conversation: any;
   messages: any[];
@@ -29,6 +29,7 @@ interface ChatAreaProps {
   operators: any[];
   quickReplies: any[];
   onQuickReply: (message: string) => void;
+  onSendVerification?: (category: VehicleCategory) => void;
 }
 
 export function ChatArea({
@@ -50,6 +51,7 @@ export function ChatArea({
   operators,
   quickReplies,
   onQuickReply,
+  onSendVerification,
 }: ChatAreaProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [tagInput, setTagInput] = useState("");
@@ -222,25 +224,50 @@ export function ChatArea({
         </div>
       </ScrollArea>
 
-      {/* Quick replies */}
-      {quickReplies.length > 0 && (
-        <div className="border-t px-3 py-2">
-          <div className="flex gap-1 flex-wrap">
-            <Zap className="h-4 w-4 text-muted-foreground mr-1 mt-0.5" />
-            {quickReplies.map((qr: any) => (
-              <Button
-                key={qr.id}
-                variant="outline"
-                size="sm"
-                className="text-xs h-7"
-                onClick={() => onQuickReply(qr.message)}
-              >
-                {qr.title}
-              </Button>
-            ))}
-          </div>
+      {/* Quick replies + Verification */}
+      <div className="border-t px-3 py-2">
+        <div className="flex gap-1 flex-wrap items-center">
+          {/* Verification form button */}
+          {onSendVerification && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="text-xs h-7 gap-1">
+                  <ClipboardCheck className="h-3 w-3" /> Verificação
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-44 p-2">
+                <p className="text-xs font-medium mb-2">Enviar checklist:</p>
+                <Button variant="ghost" size="sm" className="w-full justify-start text-xs gap-2" onClick={() => onSendVerification("car")}>
+                  <Car className="h-3 w-3" /> Veículo
+                </Button>
+                <Button variant="ghost" size="sm" className="w-full justify-start text-xs gap-2" onClick={() => onSendVerification("motorcycle")}>
+                  <Bike className="h-3 w-3" /> Motocicleta
+                </Button>
+                <Button variant="ghost" size="sm" className="w-full justify-start text-xs gap-2" onClick={() => onSendVerification("truck")}>
+                  <Truck className="h-3 w-3" /> Caminhão
+                </Button>
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {quickReplies.length > 0 && (
+            <>
+              <Zap className="h-4 w-4 text-muted-foreground mr-1" />
+              {quickReplies.map((qr: any) => (
+                <Button
+                  key={qr.id}
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-7"
+                  onClick={() => onQuickReply(qr.message)}
+                >
+                  {qr.title}
+                </Button>
+              ))}
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Reply input */}
       <div className="border-t p-3">
