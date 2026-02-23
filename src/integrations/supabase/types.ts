@@ -1387,6 +1387,8 @@ export type Database = {
           beneficiary_id: string | null
           contact_name: string | null
           created_at: string
+          current_flow_id: string | null
+          current_flow_step: number | null
           destination_address: string | null
           destination_lat: number | null
           destination_lng: number | null
@@ -1417,6 +1419,8 @@ export type Database = {
           beneficiary_id?: string | null
           contact_name?: string | null
           created_at?: string
+          current_flow_id?: string | null
+          current_flow_step?: number | null
           destination_address?: string | null
           destination_lat?: number | null
           destination_lng?: number | null
@@ -1447,6 +1451,8 @@ export type Database = {
           beneficiary_id?: string | null
           contact_name?: string | null
           created_at?: string
+          current_flow_id?: string | null
+          current_flow_step?: number | null
           destination_address?: string | null
           destination_lat?: number | null
           destination_lng?: number | null
@@ -1481,6 +1487,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "whatsapp_conversations_current_flow_id_fkey"
+            columns: ["current_flow_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_flows"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "whatsapp_conversations_service_request_id_fkey"
             columns: ["service_request_id"]
             isOneToOne: false
@@ -1489,6 +1502,82 @@ export type Database = {
           },
           {
             foreignKeyName: "whatsapp_conversations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_flow_steps: {
+        Row: {
+          created_at: string
+          flow_id: string
+          id: string
+          is_first_manual: boolean
+          message_text: string
+          step_order: number
+          timeout_minutes: number
+        }
+        Insert: {
+          created_at?: string
+          flow_id: string
+          id?: string
+          is_first_manual?: boolean
+          message_text: string
+          step_order?: number
+          timeout_minutes?: number
+        }
+        Update: {
+          created_at?: string
+          flow_id?: string
+          id?: string
+          is_first_manual?: boolean
+          message_text?: string
+          step_order?: number
+          timeout_minutes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_flow_steps_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_flows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_flows: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          name: string
+          tenant_id: string
+          updated_at: string
+          vehicle_category: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name: string
+          tenant_id: string
+          updated_at?: string
+          vehicle_category?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name?: string
+          tenant_id?: string
+          updated_at?: string
+          vehicle_category?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_flows_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"

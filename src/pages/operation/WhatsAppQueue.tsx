@@ -73,6 +73,26 @@ export default function WhatsAppQueue() {
     enabled: !!tenantId,
   });
 
+  // Flows
+  const { data: flows = [] } = useQuery({
+    queryKey: ["whatsapp-flows-active", tenantId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("whatsapp_flows")
+        .select("*, whatsapp_flow_steps(*)")
+        .eq("tenant_id", tenantId!)
+        .eq("active", true)
+        .order("created_at", { ascending: false });
+      return (data ?? []).map((f: any) => ({
+        ...f,
+        whatsapp_flow_steps: (f.whatsapp_flow_steps || []).sort(
+          (a: any, b: any) => a.step_order - b.step_order
+        ),
+      }));
+    },
+    enabled: !!tenantId,
+  });
+
   // Operators
   const { data: operators = [] } = useQuery({
     queryKey: ["operators-profiles", tenantId],
@@ -175,6 +195,35 @@ export default function WhatsAppQueue() {
       toast({ title: "Checklist de verificação enviado" });
     } catch (err: any) {
       toast({ title: "Erro ao enviar checklist", description: err.message, variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleStartFlow = async (flowId: string, firstMessage: string) => {
+    if (!selectedConv || sending) return;
+    setSending(true);
+    try {
+      // Send the first message manually
+      const { data, error } = await supabase.functions.invoke("send-whatsapp", {
+        body: { phone: selectedConv.phone, message: firstMessage, conversation_id: selectedConv.id, tenant_id: tenantId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      // Set the conversation to track this flow at step 1
+      await supabase.from("whatsapp_conversations").update({
+        current_flow_id: flowId,
+        current_flow_step: 1,
+        followup_count: 0,
+        last_followup_at: null,
+      }).eq("id", selectedConv.id);
+
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-messages"] });
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-conversations"] });
+      toast({ title: "Fluxo iniciado! As próximas mensagens serão enviadas automaticamente." });
+    } catch (err: any) {
+      toast({ title: "Erro ao iniciar fluxo", description: err.message, variant: "destructive" });
     } finally {
       setSending(false);
     }
@@ -364,6 +413,8 @@ export default function WhatsAppQueue() {
               quickReplies={quickReplies}
               onQuickReply={handleQuickReply}
               onSendVerification={handleSendVerification}
+              flows={flows}
+              onStartFlow={handleStartFlow}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
