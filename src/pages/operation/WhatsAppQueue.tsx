@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { extractVerificationFromChat } from "@/lib/extractVerificationFromChat";
+import { buildVerificationFormMessage, type VehicleCategory } from "@/lib/verificationFormMessages";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTenantId } from "@/hooks/useFinancialData";
@@ -157,6 +158,26 @@ export default function WhatsAppQueue() {
 
   const handleQuickReply = (message: string) => {
     setReplyText(message);
+  };
+
+  const handleSendVerification = async (category: VehicleCategory) => {
+    if (!selectedConv || sending) return;
+    const formMessage = buildVerificationFormMessage(category);
+    setSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-whatsapp", {
+        body: { phone: selectedConv.phone, message: formMessage, conversation_id: selectedConv.id, tenant_id: tenantId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-messages"] });
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-conversations"] });
+      toast({ title: "Checklist de verificação enviado" });
+    } catch (err: any) {
+      toast({ title: "Erro ao enviar checklist", description: err.message, variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleAssignToMe = async () => {
@@ -342,6 +363,7 @@ export default function WhatsAppQueue() {
               operators={operators}
               quickReplies={quickReplies}
               onQuickReply={handleQuickReply}
+              onSendVerification={handleSendVerification}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">

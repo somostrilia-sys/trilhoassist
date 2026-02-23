@@ -1,10 +1,18 @@
 /**
- * Extracts verification answers and other structured data from WhatsApp conversation messages.
- * Scans outbound questions (quick replies) and the following inbound answers to map yes/no responses.
+ * Extracts verification answers from WhatsApp conversation messages.
+ * Supports two formats:
+ * 1. Numbered form responses: "1-Sim 2-Não 3-Sim..." (preferred - complete checklist)
+ * 2. Legacy question-answer pairs: outbound question → inbound answer
  */
 
+import {
+  type VehicleCategory,
+  getQuestionsForCategory,
+  parseNumberedResponse,
+} from "./verificationFormMessages";
+
 interface ExtractedData {
-  vehicle_category?: "car" | "motorcycle" | "truck";
+  vehicle_category?: VehicleCategory;
   service_type?: string;
   event_type?: string;
   vehicle_lowered?: boolean;
@@ -14,34 +22,6 @@ interface ExtractedData {
   motoVerification: Record<string, string>;
   truckVerification: Record<string, string>;
 }
-
-// Maps question keywords to verification field names
-const CAR_QUESTION_MAP: Record<string, string> = {
-  "roda.*travada": "wheel_locked",
-  "direção.*travada": "steering_locked",
-  "blindado": "armored",
-  "rebaixado": "vehicle_lowered",
-  "carga|excesso de peso": "carrying_cargo",
-  "fácil acesso": "easy_access",
-  "restrição de altura": "height_restriction",
-  "chave.*disponível|chave.*local": "key_available",
-  "documentos.*local|documentos.*disponív": "documents_available",
-  "passageiros": "has_passengers",
-  "colisão|bateu|colidiu": "had_collision",
-  "área de risco|emergencial": "risk_area",
-  "liga.*inoperante|veículo liga": "vehicle_starts",
-};
-
-const MOTO_QUESTION_MAP: Record<string, string> = {
-  "roda.*travada": "wheel_locked",
-  "fácil acesso": "easy_access",
-  "documentos.*chave|chave.*documento": "docs_key_available",
-};
-
-const TRUCK_QUESTION_MAP: Record<string, string> = {
-  "carregado|carga": "loaded",
-  "movimenta": "moves",
-};
 
 // Service type detection keywords
 const SERVICE_TYPE_MAP: Record<string, string> = {
@@ -67,6 +47,9 @@ const EVENT_TYPE_MAP: Record<string, string> = {
   "sem.*combustível|acabou.*gasolina|acabou.*diesel": "fuel_empty",
 };
 
+// The verification form header marker (sent by our system)
+const FORM_HEADER_PATTERN = /VERIFICAÇÃO\s+D[OA]\s+(VEÍCULO|MOTOCICLETA|CAMINHÃO)/i;
+
 function normalizeText(text: string): string {
   return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
@@ -83,25 +66,21 @@ function matchesPattern(text: string, pattern: string): boolean {
   });
 }
 
-function isYesAnswer(text: string): boolean | null {
-  const t = normalizeText(text.trim());
-  if (/^(sim|s|yes|y|positivo|isso|exato|correto|verdade|1|👍|✅)$/i.test(t)) return true;
-  if (/^(nao|n|no|não|negativo|nada|0|👎|❌|nenhum)$/i.test(t)) return false;
-  // Check for "sim" or "não" within short responses
-  if (t.length < 20) {
-    if (/\bsim\b|\byes\b/.test(t)) return true;
-    if (/\bnao\b|\bnão\b|\bno\b/.test(t)) return false;
-  }
-  return null;
-}
-
-function detectVehicleCategory(messages: any[]): "car" | "motorcycle" | "truck" | undefined {
+function detectVehicleCategory(messages: any[]): VehicleCategory | undefined {
   const allText = messages.map(m => m.content || "").join(" ");
   const normalized = normalizeText(allText);
   if (/\bmoto\b|\bmotocicleta\b/.test(normalized)) return "motorcycle";
   if (/\bcaminhao\b|\bcaminhão\b|\bcarreta\b|\btruck\b|\bbitrem\b/.test(normalized)) return "truck";
-  // Default to car if vehicle mentioned but not moto/truck
   return undefined;
+}
+
+function detectFormCategory(text: string): VehicleCategory | null {
+  const match = text.match(FORM_HEADER_PATTERN);
+  if (!match) return null;
+  const type = match[1].toUpperCase();
+  if (type === "MOTOCICLETA") return "motorcycle";
+  if (type === "CAMINHÃO") return "truck";
+  return "car";
 }
 
 export function extractVerificationFromChat(messages: any[]): ExtractedData {
@@ -118,7 +97,7 @@ export function extractVerificationFromChat(messages: any[]): ExtractedData {
   const inboundTexts = messages
     .filter(m => m.direction === "inbound" && m.content)
     .map(m => m.content);
-  
+
   const allInboundText = inboundTexts.join(" ");
 
   for (const [pattern, serviceType] of Object.entries(SERVICE_TYPE_MAP)) {
@@ -135,70 +114,43 @@ export function extractVerificationFromChat(messages: any[]): ExtractedData {
     }
   }
 
-  // Scan for question-answer pairs (outbound question, next inbound = answer)
+  // ===== PRIMARY: Scan for numbered form responses =====
+  // Look for outbound message with form header, then the next inbound = numbered answers
   for (let i = 0; i < messages.length - 1; i++) {
     const msg = messages[i];
     if (msg.direction !== "outbound" || !msg.content) continue;
 
-    // Find the next inbound message as the answer
-    let answer: any = null;
+    const formCategory = detectFormCategory(msg.content);
+    if (!formCategory) continue;
+
+    // Find the next inbound message as the response
     for (let j = i + 1; j < messages.length; j++) {
       if (messages[j].direction === "inbound" && messages[j].content) {
-        answer = messages[j];
-        break;
-      }
-    }
-    if (!answer) continue;
-
-    const questionText = msg.content;
-    const answerValue = isYesAnswer(answer.content);
-    const yesNo = answerValue === true ? "yes" : answerValue === false ? "no" : null;
-
-    if (yesNo === null) continue;
-
-    // Match against car verification questions
-    for (const [pattern, field] of Object.entries(CAR_QUESTION_MAP)) {
-      if (matchesPattern(questionText, pattern)) {
-        result.carVerification[field] = yesNo;
-        // Special fields that map to form-level booleans
-        if (field === "vehicle_lowered" && answerValue !== null) {
-          result.vehicle_lowered = answerValue;
+        const parsed = parseNumberedResponse(messages[j].content, formCategory);
+        if (parsed && Object.keys(parsed).length > 0) {
+          // Map to the correct verification bucket
+          if (formCategory === "car") {
+            result.carVerification = { ...result.carVerification, ...parsed };
+            if (parsed.vehicle_lowered) result.vehicle_lowered = parsed.vehicle_lowered === "yes";
+            if (parsed.easy_access) result.difficult_access = parsed.easy_access !== "yes";
+          } else if (formCategory === "motorcycle") {
+            result.motoVerification = { ...result.motoVerification, ...parsed };
+            if (parsed.easy_access) result.difficult_access = parsed.easy_access !== "yes";
+          } else if (formCategory === "truck") {
+            result.truckVerification = { ...result.truckVerification, ...parsed };
+          }
+          result.vehicle_category = formCategory;
         }
-        if (field === "easy_access" && answerValue !== null) {
-          result.difficult_access = !answerValue;
-        }
-        break;
-      }
-    }
-
-    // Match against motorcycle verification questions
-    for (const [pattern, field] of Object.entries(MOTO_QUESTION_MAP)) {
-      if (matchesPattern(questionText, pattern)) {
-        result.motoVerification[field] = yesNo;
-        if (field === "easy_access" && answerValue !== null) {
-          result.difficult_access = !answerValue;
-        }
-        break;
-      }
-    }
-
-    // Match against truck verification questions
-    for (const [pattern, field] of Object.entries(TRUCK_QUESTION_MAP)) {
-      if (matchesPattern(questionText, pattern)) {
-        result.truckVerification[field] = yesNo;
         break;
       }
     }
   }
 
-  // Also scan inbound messages for free-text answers about cargo type, truck type, etc.
+  // ===== FALLBACK: Detect truck type from free text =====
   for (const msg of messages) {
     if (msg.direction !== "inbound" || !msg.content) continue;
-    const text = msg.content;
-    
-    // Detect truck type from free text
-    const truckTypeMatch = normalizeText(text).match(/\b(toco|truck|carreta|bitrem|vanderleia|romeu.*julieta)\b/);
-    if (truckTypeMatch) {
+    const truckTypeMatch = normalizeText(msg.content).match(/\b(toco|truck|carreta|bitrem|vanderleia|romeu.*julieta)\b/);
+    if (truckTypeMatch && !result.truckVerification.truck_type) {
       result.truckVerification.truck_type = truckTypeMatch[0];
     }
   }
