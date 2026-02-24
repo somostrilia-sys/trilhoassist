@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
 
       const { data: clients } = await serviceSupabase
         .from("clients")
-        .select("id, name, api_endpoint, api_key, tenant_id, auto_sync_enabled")
+        .select("id, name, api_endpoint, api_key, api_auth_header, tenant_id, auto_sync_enabled")
         .eq("auto_sync_enabled", true);
 
       if (!clients || clients.length === 0) {
@@ -86,15 +86,33 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "API endpoint ou chave não configurados para este cliente" }, 400);
     }
 
+    // Build auth headers based on client config
+    const buildApiHeaders = (apiKey: string, authHeader?: string) => {
+      const h: Record<string, string> = { "Content-Type": "application/json" };
+      const headerType = authHeader || "token";
+      if (headerType === "bearer") {
+        h["Authorization"] = `Bearer ${apiKey}`;
+      } else {
+        h[headerType] = apiKey;
+      }
+      return h;
+    };
+
+    // Get extended client config (auth header type)
+    const { data: clientExt } = await supabase
+      .from("clients")
+      .select("api_auth_header")
+      .eq("id", client_id)
+      .single();
+
+    const apiHeaders = buildApiHeaders(client.api_key, clientExt?.api_auth_header);
+
     // ─── ACTION: TEST CONNECTION ───
     if (action === "test") {
       try {
         const response = await fetch(client.api_endpoint, {
           method: "GET",
-          headers: {
-            Authorization: `Bearer ${client.api_key}`,
-            "Content-Type": "application/json",
-          },
+          headers: apiHeaders,
         });
 
         if (!response.ok) {
@@ -146,10 +164,7 @@ Deno.serve(async (req) => {
       try {
         const response = await fetch(client.api_endpoint, {
           method: "GET",
-          headers: {
-            Authorization: `Bearer ${client.api_key}`,
-            "Content-Type": "application/json",
-          },
+          headers: apiHeaders,
         });
 
         if (!response.ok) {
@@ -188,10 +203,7 @@ Deno.serve(async (req) => {
         // Fetch data from ERP
         const response = await fetch(client.api_endpoint, {
           method: "GET",
-          headers: {
-            Authorization: `Bearer ${client.api_key}`,
-            "Content-Type": "application/json",
-          },
+          headers: apiHeaders,
         });
 
         if (!response.ok) {
@@ -346,9 +358,16 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
     .single();
 
   try {
+    const authHeader = client.api_auth_header || "token";
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (authHeader === "bearer") {
+      headers["Authorization"] = `Bearer ${client.api_key}`;
+    } else {
+      headers[authHeader] = client.api_key;
+    }
     const response = await fetch(client.api_endpoint, {
       method: "GET",
-      headers: { Authorization: `Bearer ${client.api_key}`, "Content-Type": "application/json" },
+      headers,
     });
 
     if (!response.ok) {
@@ -461,8 +480,8 @@ function extractUniqueFields(data: any): any {
   const plans = new Set<string>();
   const cooperativas = new Set<string>();
   for (const r of records) {
-    const plan = r.plano || r.plan || r.plan_name || "";
-    const coop = r.cooperativa || r.coop || r.cooperative || "";
+    const plan = r.plano || r.plan || r.plan_name || r.descricao_produto || "";
+    const coop = r.cooperativa || r.coop || r.cooperative || r.descricao_cooperativa || "";
     if (plan) plans.add(plan);
     if (coop) cooperativas.add(coop);
   }
