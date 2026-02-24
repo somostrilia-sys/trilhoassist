@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
     return await processInboundMessage(supabase, normalizeZapiPayload(payload), tenant.id, url);
   } catch (err) {
     console.error("Webhook error:", err);
-    return new Response(JSON.stringify({ error: err.message }), {
+    return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
