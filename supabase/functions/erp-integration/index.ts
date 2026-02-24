@@ -89,11 +89,12 @@ Deno.serve(async (req) => {
     // Build auth headers based on client config
     const buildApiHeaders = (apiKey: string, authHeader?: string) => {
       const h: Record<string, string> = { "Content-Type": "application/json" };
-      const headerType = authHeader || "token";
-      if (headerType === "bearer") {
-        h["Authorization"] = `Bearer ${apiKey}`;
+      const headerType = authHeader || "bearer";
+      if (headerType === "token") {
+        h["token"] = apiKey;
       } else {
-        h[headerType] = apiKey;
+        // Default: Bearer token
+        h["Authorization"] = `Bearer ${apiKey}`;
       }
       return h;
     };
@@ -106,7 +107,7 @@ Deno.serve(async (req) => {
       .single();
 
     const apiHeaders = buildApiHeaders(client.api_key, clientExt?.api_auth_header);
-
+    console.log("API headers keys:", Object.keys(apiHeaders), "authHeader config:", clientExt?.api_auth_header);
     // ─── ACTION: TEST CONNECTION ───
     if (action === "test") {
       try {
