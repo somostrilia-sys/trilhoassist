@@ -182,6 +182,9 @@ export default function ServiceRequestDetail() {
   const [noteText, setNoteText] = useState("");
   const [noteLoading, setNoteLoading] = useState(false);
   const [collisionMedia, setCollisionMedia] = useState<any[]>([]);
+  const [labelDialogOpen, setLabelDialogOpen] = useState(false);
+  const [labelText, setLabelText] = useState("");
+  const [labelSending, setLabelSending] = useState(false);
 
   const logEvent = useCallback(async (eventType: string, description: string, oldValue?: string, newValue?: string) => {
     if (!id) return;
@@ -645,51 +648,28 @@ export default function ServiceRequestDetail() {
               variant="outline"
               className="gap-2"
               onClick={() => {
-                const extractNeighborhood = (addr: string) => {
-                  const parts = addr.split(",").map(p => p.trim());
-                  return parts.length >= 2 ? parts[1] : addr;
-                };
-                const extractCity = (addr: string) => {
-                  const parts = addr.split(",").map(p => p.trim());
-                  if (parts.length >= 3) return parts.slice(2).join(", ");
-                  return parts.length >= 2 ? parts[1] : addr;
-                };
-                const fmtDate = (d: string) => new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-
                 const benName = beneficiary?.name || request.requester_name;
                 const clientName = (request as any).clients?.name || "";
-                const trackingLink = request.beneficiary_token
-                  ? `${window.location.origin}/tracking/${request.beneficiary_token}` : "";
+                const fmtDate = (d: string) => new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
                 const label = `*ATENDIMENTO*
 
 *BENEFICIÁRIO*: ${benName.toUpperCase()}
-*SOLICITANTE*: ${request.requester_name.toUpperCase()}
-*CONTATO SOLICITANTE*: ${request.requester_phone}${request.requester_phone_secondary ? `\n*CONTATO 2*: ${request.requester_phone_secondary}` : ""}
 *VEÍCULO*: ${(request.vehicle_model || "").toUpperCase()} (${(request.vehicle_plate || "").toUpperCase()})
-*CLIENTE*: ${clientName.toUpperCase()}
+*COR DO VEÍCULO*: —
 *SERVIÇO*: ${serviceTypeMap[request.service_type] || request.service_type}
-*DATA*: ${fmtDate(request.created_at)}
 *PROTOCOLO*: ${request.protocol}
+*OBSERVAÇÕES*: ${eventTypeMap[request.event_type] || request.event_type}
 
-*DADOS ORIGEM*
-*LOGRADOURO*: ${(request.origin_address || "").toUpperCase()}
-*BAIRRO*: ${extractNeighborhood(request.origin_address || "").toUpperCase()}
-*CIDADE*: ${extractCity(request.origin_address || "").toUpperCase()}
+*ORIGEM*: ${(request.origin_address || "").toUpperCase()}
+*DESTINO*: ${(request.destination_address || "").toUpperCase()}
 
-*DADOS DESTINO*
-*LOGRADOURO*: ${(request.destination_address || "").toUpperCase()}
-*BAIRRO*: ${extractNeighborhood(request.destination_address || "").toUpperCase()}
-*CIDADE*: ${extractCity(request.destination_address || "").toUpperCase()}
+*ASSISTÊNCIA*: ${clientName.toUpperCase() || "—"}
+*CENTRAL DE ASSISTÊNCIA*: TRILHO SOLUCOES
+${request.estimated_km ? `*DISTÂNCIA*: APROX ${Math.round(request.estimated_km)}KM` : ""}`.trim();
 
-*DADOS DE ACIONAMENTO*
-*TIPO DE EVENTO*: ${eventTypeMap[request.event_type] || request.event_type}
-${provider ? `*PRESTADOR*: ${provider.name.toUpperCase()}\n*VALOR PRESTADOR*: R$ ${(request.provider_cost || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n*VALOR COBRADO*: R$ ${(request.charged_amount || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}
-${request.estimated_km ? `\n*APROX: ${Math.round(request.estimated_km)}KM*` : ""}
-${trackingLink ? `\nOlá, segue o link com as informações do serviço: ${trackingLink}` : ""}`.trim();
-
-                navigator.clipboard.writeText(label);
-                toast.success("Etiqueta copiada!", { description: "Cole no WhatsApp ou onde desejar." });
+                setLabelText(label);
+                setLabelDialogOpen(true);
               }}
             >
               <ClipboardCopy className="h-4 w-4" />
@@ -1571,6 +1551,55 @@ ${trackingLink ? `\nOlá, segue o link com as informações do serviço: ${track
             <Button onClick={handleReopen} disabled={!reopenReason.trim() || actionLoading}>
               {actionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Confirmar Reabertura
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Label Dialog */}
+      <Dialog open={labelDialogOpen} onOpenChange={setLabelDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Etiqueta do Atendimento</DialogTitle>
+            <DialogDescription>Revise a etiqueta gerada e escolha como utilizá-la.</DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={labelText}
+            onChange={(e) => setLabelText(e.target.value)}
+            rows={16}
+            className="font-mono text-xs"
+          />
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => {
+                navigator.clipboard.writeText(labelText);
+                toast.success("Etiqueta copiada!");
+              }}
+            >
+              <ClipboardCopy className="h-4 w-4" />
+              Copiar Etiqueta
+            </Button>
+            <Button
+              className="gap-2"
+              disabled={labelSending}
+              onClick={async () => {
+                if (!id) return;
+                setLabelSending(true);
+                try {
+                  await sendServiceLabel(id, "creation");
+                  toast.success("Etiqueta enviada no WhatsApp!");
+                  setLabelDialogOpen(false);
+                } catch {
+                  toast.error("Erro ao enviar etiqueta");
+                } finally {
+                  setLabelSending(false);
+                }
+              }}
+            >
+              {labelSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Enviar no WhatsApp
             </Button>
           </DialogFooter>
         </DialogContent>
