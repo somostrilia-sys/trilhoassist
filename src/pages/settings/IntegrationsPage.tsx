@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Link2, TestTube, Download, RefreshCw, ArrowRight, CheckCircle2, XCircle, Clock, AlertCircle, MessageSquare, MapPin, Database, Eye, EyeOff, Save } from "lucide-react";
+import { Link2, TestTube, Download, RefreshCw, ArrowRight, CheckCircle2, XCircle, Clock, AlertCircle, MessageSquare, MapPin, Database, Eye, EyeOff, Save, QrCode } from "lucide-react";
+import { EvolutionApiIntegration } from "@/components/whatsapp/EvolutionApiIntegration";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
@@ -877,10 +878,13 @@ export default function IntegrationsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="whatsapp" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+      <Tabs defaultValue="evolution" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="evolution" className="flex items-center gap-2">
+            <QrCode className="h-4 w-4" /> Evolution API
+          </TabsTrigger>
           <TabsTrigger value="whatsapp" className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4" /> WhatsApp
+            <MessageSquare className="h-4 w-4" /> Z-API (Legacy)
           </TabsTrigger>
           <TabsTrigger value="google" className="flex items-center gap-2">
             <MapPin className="h-4 w-4" /> Google Maps
@@ -889,6 +893,10 @@ export default function IntegrationsPage() {
             <Database className="h-4 w-4" /> ERP / Associações
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="evolution">
+          <EvolutionApiIntegration tenantId={tenantId} />
+        </TabsContent>
 
         <TabsContent value="whatsapp">
           <WhatsAppIntegration tenantId={tenantId} />

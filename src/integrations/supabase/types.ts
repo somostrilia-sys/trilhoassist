@@ -1754,7 +1754,11 @@ export type Database = {
       zapi_instances: {
         Row: {
           active: boolean
+          api_type: string
+          connection_status: string | null
           created_at: string
+          evolution_instance_id: string | null
+          evolution_instance_name: string | null
           id: string
           instance_name: string
           operator_id: string
@@ -1766,7 +1770,11 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          api_type?: string
+          connection_status?: string | null
           created_at?: string
+          evolution_instance_id?: string | null
+          evolution_instance_name?: string | null
           id?: string
           instance_name?: string
           operator_id: string
@@ -1778,7 +1786,11 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          api_type?: string
+          connection_status?: string | null
           created_at?: string
+          evolution_instance_id?: string | null
+          evolution_instance_name?: string | null
           id?: string
           instance_name?: string
           operator_id?: string
