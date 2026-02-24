@@ -49,10 +49,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get Evolution API config from tenant if tenant_id provided, fallback to env
-    let EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "";
-    let EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
-    const EVOLUTION_INSTANCE = Deno.env.get("EVOLUTION_INSTANCE") || "default";
+    // Get Z-API config from tenant
+    let zapiInstanceId = "";
+    let zapiToken = "";
+    let zapiSecurityToken = "";
 
     if (tenant_id) {
       const adminSupabase = createClient(
@@ -61,59 +61,50 @@ Deno.serve(async (req) => {
       );
       const { data: tenant } = await adminSupabase
         .from("tenants")
-        .select("evolution_api_url, evolution_api_key")
+        .select("zapi_instance_id, zapi_token, zapi_security_token")
         .eq("id", tenant_id)
         .single();
 
-      if ((tenant as any)?.evolution_api_url) EVOLUTION_API_URL = (tenant as any).evolution_api_url;
-      if ((tenant as any)?.evolution_api_key) EVOLUTION_API_KEY = (tenant as any).evolution_api_key;
+      if (tenant) {
+        zapiInstanceId = (tenant as any).zapi_instance_id || "";
+        zapiToken = (tenant as any).zapi_token || "";
+        zapiSecurityToken = (tenant as any).zapi_security_token || "";
+      }
     }
 
-    if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+    if (!zapiInstanceId || !zapiToken) {
       return new Response(
         JSON.stringify({
-          error: "Evolution API não configurada. Vá em Configurações → Integrações → WhatsApp e configure sua instância.",
+          error: "Z-API não configurada. Vá em Configurações → Integrações → WhatsApp e configure sua instância.",
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const baseUrl = EVOLUTION_API_URL.replace(/\/$/, "");
 
     let cleanPhone = (phone || "").replace(/\D/g, "");
     if (cleanPhone.length <= 11) {
       cleanPhone = `55${cleanPhone}`;
     }
 
-    let result: any;
-    let response: Response;
+    const textToSend = template ? (template.body_text || template.name || message) : message;
+    const recipient = group_id || cleanPhone;
 
-    if (group_id) {
-      response = await fetch(`${baseUrl}/message/sendText/${EVOLUTION_INSTANCE}`, {
-        method: "POST",
-        headers: { apikey: EVOLUTION_API_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ number: group_id, text: message }),
-      });
-      result = await response.json();
-    } else if (template) {
-      const templateText = template.body_text || template.name || message;
-      response = await fetch(`${baseUrl}/message/sendText/${EVOLUTION_INSTANCE}`, {
-        method: "POST",
-        headers: { apikey: EVOLUTION_API_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ number: cleanPhone, text: templateText }),
-      });
-      result = await response.json();
-    } else {
-      response = await fetch(`${baseUrl}/message/sendText/${EVOLUTION_INSTANCE}`, {
-        method: "POST",
-        headers: { apikey: EVOLUTION_API_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ number: cleanPhone, text: message }),
-      });
-      result = await response.json();
+    const zapiUrl = `https://api.z-api.io/instances/${zapiInstanceId}/token/${zapiToken}/send-text`;
+    const zapiHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    if (zapiSecurityToken) {
+      zapiHeaders["Client-Token"] = zapiSecurityToken;
     }
 
+    const response = await fetch(zapiUrl, {
+      method: "POST",
+      headers: zapiHeaders,
+      body: JSON.stringify({ phone: recipient, message: textToSend }),
+    });
+
+    const result = await response.json();
+
     if (!response.ok) {
-      console.error("Evolution API error:", result);
+      console.error("Z-API error:", result);
       return new Response(
         JSON.stringify({ error: "Failed to send message", details: result }),
         { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -132,7 +123,7 @@ Deno.serve(async (req) => {
       await adminSupabase.from("whatsapp_messages").insert({
         conversation_id, direction: "outbound",
         message_type: template ? "template" : "text",
-        content: messageContent, external_id: result.key?.id || null,
+        content: messageContent, external_id: result.messageId || result.zaapId || null,
       });
 
       await adminSupabase.from("whatsapp_conversations").update({
@@ -140,7 +131,7 @@ Deno.serve(async (req) => {
       }).eq("id", conversation_id);
     }
 
-    return new Response(JSON.stringify({ success: true, message_id: result.key?.id }), {
+    return new Response(JSON.stringify({ success: true, message_id: result.messageId || result.zaapId }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

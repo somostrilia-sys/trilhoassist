@@ -2,7 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Sends automated WhatsApp notifications to beneficiaries and providers
- * at different stages of the service lifecycle via Evolution API.
+ * at different stages of the service lifecycle via Z-API.
  * Fire-and-forget: errors are logged but don't block the flow.
  */
 export async function sendAutoNotify(

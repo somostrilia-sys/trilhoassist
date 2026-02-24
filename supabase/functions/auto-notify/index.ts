@@ -57,27 +57,32 @@ function interpolateMessage(template: string, vars: Record<string, string>): str
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "—");
 }
 
-async function sendEvolutionMessage(
-  evolutionUrl: string,
-  evolutionKey: string,
-  evolutionInstance: string,
+async function sendZapiMessage(
+  instanceId: string,
+  token: string,
+  securityToken: string,
   phone: string,
   message: string
 ): Promise<{ ok: boolean; result: any }> {
-  if (!evolutionUrl || !evolutionKey) {
-    return { ok: false, result: { error: "Evolution API not configured for this tenant" } };
+  if (!instanceId || !token) {
+    return { ok: false, result: { error: "Z-API not configured for this tenant" } };
   }
 
-  const baseUrl = evolutionUrl.replace(/\/$/, "");
   let cleanPhone = phone.replace(/\D/g, "");
   if (cleanPhone.length <= 11) {
     cleanPhone = `55${cleanPhone}`;
   }
 
-  const response = await fetch(`${baseUrl}/message/sendText/${evolutionInstance}`, {
+  const zapiUrl = `https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (securityToken) {
+    headers["Client-Token"] = securityToken;
+  }
+
+  const response = await fetch(zapiUrl, {
     method: "POST",
-    headers: { apikey: evolutionKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ number: cleanPhone, text: message }),
+    headers,
+    body: JSON.stringify({ phone: cleanPhone, message }),
   });
 
   const result = await response.json();
@@ -103,8 +108,8 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims(token);
+    const tokenStr = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims(tokenStr);
     if (claimsErr || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -139,10 +144,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Fetch tenant for branding, notification settings AND integration keys
+    // Fetch tenant for branding, notification settings AND Z-API keys
     const { data: tenant } = await adminSupabase
       .from("tenants")
-      .select("name, notification_settings, evolution_api_url, evolution_api_key")
+      .select("name, notification_settings, zapi_instance_id, zapi_token, zapi_security_token")
       .eq("id", sr.tenant_id)
       .single();
 
@@ -150,10 +155,10 @@ Deno.serve(async (req) => {
     const notifSettings = (tenant?.notification_settings as any) || {};
     const autoNotifyConfig = notifSettings.auto_notify || {};
 
-    // Get Evolution API config from tenant (per-tenant config)
-    const evolutionUrl = (tenant as any)?.evolution_api_url || Deno.env.get("EVOLUTION_API_URL") || "";
-    const evolutionKey = (tenant as any)?.evolution_api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
-    const evolutionInstance = Deno.env.get("EVOLUTION_INSTANCE") || "default";
+    // Get Z-API config from tenant
+    const zapiInstanceId = (tenant as any)?.zapi_instance_id || "";
+    const zapiToken = (tenant as any)?.zapi_token || "";
+    const zapiSecurityToken = (tenant as any)?.zapi_security_token || "";
 
     // Check if this trigger is enabled
     const phaseConfig = autoNotifyConfig[trigger];
@@ -218,12 +223,12 @@ Deno.serve(async (req) => {
 
     if (trigger.startsWith("beneficiary_")) {
       if (beneficiaryPhone) {
-        const r = await sendEvolutionMessage(evolutionUrl, evolutionKey, evolutionInstance, beneficiaryPhone, finalMessage);
+        const r = await sendZapiMessage(zapiInstanceId, zapiToken, zapiSecurityToken, beneficiaryPhone, finalMessage);
         results.push({ target: "beneficiary", trigger, ok: r.ok });
       }
     } else if (trigger === "provider_dispatch") {
       if (provider_phone) {
-        const r = await sendEvolutionMessage(evolutionUrl, evolutionKey, evolutionInstance, provider_phone, finalMessage);
+        const r = await sendZapiMessage(zapiInstanceId, zapiToken, zapiSecurityToken, provider_phone, finalMessage);
         results.push({ target: "provider", trigger, ok: r.ok });
       }
     }
