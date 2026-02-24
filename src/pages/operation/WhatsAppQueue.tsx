@@ -8,7 +8,7 @@ import { useTenantId } from "@/hooks/useFinancialData";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Info, FileText, Plus } from "lucide-react";
+import { MessageSquare, Info, FileText, Plus, Link } from "lucide-react";
 import { ConversationList } from "@/components/whatsapp/ConversationList";
 import { ChatArea } from "@/components/whatsapp/ChatArea";
 import { ContactInfoPanel } from "@/components/whatsapp/ContactInfoPanel";
@@ -409,6 +409,35 @@ export default function WhatsAppQueue() {
           <Button variant="outline" size="sm" onClick={() => setShowTemplateDialog(true)}>
             <FileText className="h-4 w-4 mr-1" />
             Enviar Template
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              if (!selectedConv) {
+                toast({ title: "Selecione uma conversa primeiro", description: "É necessário selecionar uma conversa para enviar o link.", variant: "destructive" });
+                return;
+              }
+              try {
+                const { data, error } = await supabase.functions.invoke("send-whatsapp", {
+                  body: {
+                    phone: selectedConv.phone,
+                    message: "Olá! Para abrir sua solicitação de atendimento, acesse o link: https://www.trilhoassist.com.br/solicitar",
+                    conversation_id: selectedConv.id,
+                  },
+                });
+                if (error) throw error;
+                if (data?.error) throw new Error(data.error);
+                queryClient.invalidateQueries({ queryKey: ["whatsapp-messages"] });
+                queryClient.invalidateQueries({ queryKey: ["whatsapp-conversations"] });
+                toast({ title: "Link de solicitação enviado!" });
+              } catch (err: any) {
+                toast({ title: "Erro ao enviar link", description: err.message, variant: "destructive" });
+              }
+            }}
+          >
+            <Link className="h-4 w-4 mr-1" />
+            🔗 Link Solicitação
           </Button>
           {selectedConv && (
             <Button
