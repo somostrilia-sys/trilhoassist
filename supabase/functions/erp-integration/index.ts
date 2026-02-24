@@ -108,6 +108,20 @@ Deno.serve(async (req) => {
 
         const data = await response.json();
 
+        // Log raw response structure for debugging
+        const rawKeys = typeof data === "object" && data !== null ? Object.keys(data) : [];
+        console.log("ERP raw response keys:", rawKeys);
+        if (rawKeys.length > 0) {
+          for (const key of rawKeys.slice(0, 5)) {
+            const val = data[key];
+            const preview = typeof val === "string" ? val.substring(0, 500) : JSON.stringify(val)?.substring(0, 500);
+            console.log(`  key="${key}" type=${typeof val} isArray=${Array.isArray(val)} preview=${preview}`);
+          }
+        }
+
+        // Try to extract records from any nested key
+        const records = extractRecords(data);
+
         // Try to extract available fields/plans/cooperativas from response
         const sampleFields = extractSampleFields(data);
 
@@ -116,7 +130,8 @@ Deno.serve(async (req) => {
           status: response.status,
           message: "Conexão bem-sucedida",
           sample_data: sampleFields,
-          raw_count: Array.isArray(data) ? data.length : typeof data === "object" ? Object.keys(data).length : 0,
+          raw_count: records.length,
+          raw_keys: rawKeys,
         });
       } catch (fetchErr: any) {
         return jsonResponse({
@@ -186,11 +201,20 @@ Deno.serve(async (req) => {
         }
 
         const erpData = await response.json();
-        const records = Array.isArray(erpData) ? erpData : erpData.data || erpData.results || erpData.beneficiarios || [];
+        console.log("Import - ERP response type:", typeof erpData, "isArray:", Array.isArray(erpData));
+        if (typeof erpData === "object" && !Array.isArray(erpData)) {
+          console.log("Import - ERP response keys:", Object.keys(erpData));
+        }
+        const records = extractRecords(erpData);
+        console.log("Import - extracted records count:", records.length);
 
-        if (!Array.isArray(records)) {
-          await updateSyncLog(supabase, syncLog.id, "error", 0, 0, 0, "Resposta do ERP não contém array de registros");
-          return jsonResponse({ error: "Formato de resposta do ERP não reconhecido" }, 400);
+        if (records.length === 0) {
+          // Log first-level structure for debugging
+          const debugInfo = Array.isArray(erpData) 
+            ? `Array with ${erpData.length} items` 
+            : `Object with keys: ${Object.keys(erpData).join(", ")}`;
+          await updateSyncLog(supabase, syncLog.id, "error", 0, 0, 0, `Nenhum registro encontrado. Estrutura: ${debugInfo}`);
+          return jsonResponse({ error: "Nenhum registro encontrado na resposta do ERP", debug: debugInfo }, 400);
         }
 
         // Get field mappings for this client
@@ -334,10 +358,10 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
     }
 
     const erpData = await response.json();
-    const records = Array.isArray(erpData) ? erpData : erpData.data || erpData.results || erpData.beneficiarios || [];
-    if (!Array.isArray(records)) {
-      if (syncLog) await updateSyncLog(supabase, syncLog.id, "error", 0, 0, 0, "Formato não reconhecido");
-      return { error: "Formato não reconhecido" };
+    const records = extractRecords(erpData);
+    if (records.length === 0) {
+      if (syncLog) await updateSyncLog(supabase, syncLog.id, "error", 0, 0, 0, "Nenhum registro encontrado");
+      return { error: "Nenhum registro encontrado" };
     }
 
     const { data: mappings } = await supabase.from("erp_field_mappings").select("*").eq("client_id", client.id);
@@ -388,16 +412,53 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
   }
 }
 
+// Smart extraction of records array from any response structure
+function extractRecords(data: any): any[] {
+  if (Array.isArray(data)) return data;
+  if (typeof data !== "object" || data === null) return [];
+  
+  // Try common keys
+  const commonKeys = ["data", "results", "beneficiarios", "registros", "items", "lista", "produtos", "content", "records"];
+  for (const key of commonKeys) {
+    if (Array.isArray(data[key])) return data[key];
+  }
+  
+  // Try any key that contains an array
+  for (const key of Object.keys(data)) {
+    if (Array.isArray(data[key]) && data[key].length > 0 && typeof data[key][0] === "object") {
+      console.log(`extractRecords: found array in key "${key}" with ${data[key].length} items`);
+      return data[key];
+    }
+  }
+  
+  // Handle Hinova-style response: object with numeric keys like {"284": {...}, "285": {...}}
+  const keys = Object.keys(data);
+  if (keys.length > 0 && keys.every(k => /^\d+$/.test(k) || typeof data[k] === "object")) {
+    const values = keys.filter(k => typeof data[k] === "object" && data[k] !== null && !Array.isArray(data[k]));
+    if (values.length > 0) {
+      console.log(`extractRecords: found ${values.length} object values with numeric keys (Hinova-style)`);
+      return values.map(k => data[k]);
+    }
+  }
+  
+  // If response is a single object with typical record fields, wrap it
+  if (data.placa || data.nome || data.name || data.plate) {
+    return [data];
+  }
+  
+  return [];
+}
+
 function extractSampleFields(data: any): any {
-  const records = Array.isArray(data) ? data : data.data || data.results || data.beneficiarios || [];
-  if (!Array.isArray(records) || records.length === 0) return { keys: [], sample: null };
+  const records = extractRecords(data);
+  if (records.length === 0) return { keys: [], sample: null, total_records: 0 };
   const sample = records[0];
   return { keys: Object.keys(sample), sample, total_records: records.length };
 }
 
 function extractUniqueFields(data: any): any {
-  const records = Array.isArray(data) ? data : data.data || data.results || data.beneficiarios || [];
-  if (!Array.isArray(records)) return { plans: [], cooperativas: [] };
+  const records = extractRecords(data);
+  if (records.length === 0) return { plans: [], cooperativas: [] };
   const plans = new Set<string>();
   const cooperativas = new Set<string>();
   for (const r of records) {
