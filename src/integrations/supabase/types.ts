@@ -83,6 +83,7 @@ export type Database = {
       clients: {
         Row: {
           active: boolean
+          api_auth_header: string | null
           api_endpoint: string | null
           api_key: string | null
           auto_sync_enabled: boolean | null
@@ -101,6 +102,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          api_auth_header?: string | null
           api_endpoint?: string | null
           api_key?: string | null
           auto_sync_enabled?: boolean | null
@@ -119,6 +121,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          api_auth_header?: string | null
           api_endpoint?: string | null
           api_key?: string | null
           auto_sync_enabled?: boolean | null
