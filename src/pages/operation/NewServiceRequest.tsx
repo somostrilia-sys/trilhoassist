@@ -482,10 +482,6 @@ export default function NewServiceRequest() {
                   {errors.requester_phone && <p className="text-xs text-destructive">{errors.requester_phone}</p>}
                 </div>
                 <div className="space-y-2">
-                  <Label>Email do Solicitante</Label>
-                  <Input type="email" value={form.requester_email} onChange={(e) => update("requester_email", e.target.value)} />
-                </div>
-                <div className="space-y-2">
                   <Label>Telefone Secundário</Label>
                   <Input value={form.requester_phone_secondary} onChange={(e) => update("requester_phone_secondary", maskPhone(e.target.value))} placeholder="(00) 00000-0000" />
                 </div>
@@ -751,11 +747,6 @@ export default function NewServiceRequest() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Custo do Prestador (R$)</Label>
-                    <Input type="number" step="0.01" min="0" value={form.provider_cost} onChange={(e) => update("provider_cost", e.target.value)} placeholder="0,00" />
-                    <p className="text-xs text-muted-foreground">Valor negociado com o prestador</p>
-                  </div>
                   <div className="space-y-2">
                     <Label>Valor Cobrado do Cliente (R$)</Label>
                     <Input type="number" step="0.01" min="0" value={form.charged_amount} onChange={(e) => update("charged_amount", e.target.value)} placeholder="0,00" />

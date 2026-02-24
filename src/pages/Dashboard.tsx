@@ -221,7 +221,7 @@ export default function Dashboard() {
     { label: "Abertos", value: String(kpiData.openRequests), icon: AlertCircle, color: "text-accent" },
     { label: "Em andamento", value: String(kpiData.inProgressRequests), icon: Clock, color: "text-primary" },
     { label: "Faturado", value: formatCurrency(kpiData.totalRevenue), icon: DollarSign, color: "text-success" },
-    { label: "Ganho", value: formatCurrency(kpiData.totalGanho), icon: TrendingUp, color: "text-success", highlight: true },
+    { label: "Custo Prestadores", value: formatCurrency(kpiData.totalCost), icon: Banknote, color: "text-destructive" },
   ];
 
   const kpiCards2 = [
@@ -276,6 +276,7 @@ export default function Dashboard() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="1">Hoje</SelectItem>
               <SelectItem value="7">Últimos 7 dias</SelectItem>
               <SelectItem value="14">Últimos 14 dias</SelectItem>
               <SelectItem value="30">Últimos 30 dias</SelectItem>
@@ -289,7 +290,7 @@ export default function Dashboard() {
       {/* KPIs — Row 1: Operacionais */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {kpiCards.map((kpi) => (
-          <Card key={kpi.label} className={`kpi-card ${kpi.highlight ? "border-success/30 bg-success/5" : "hover:shadow-md"}`}>
+          <Card key={kpi.label} className="kpi-card hover:shadow-md">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{kpi.label}</span>
