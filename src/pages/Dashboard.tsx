@@ -230,7 +230,6 @@ export default function Dashboard() {
     { label: "Distância Média", value: kpiData.avgKm > 0 ? `${kpiData.avgKm.toFixed(1)} km` : "—", icon: Route, color: "text-primary" },
     { label: "Valor Méd. Cobrado", value: formatCurrency(kpiData.avgCost), icon: DollarSign, color: "text-primary" },
     { label: "Valor Méd. Prestador", value: formatCurrency(kpiData.avgProviderCost), icon: Banknote, color: "text-destructive" },
-    { label: "Custo Total Prestadores", value: formatCurrency(kpiData.totalCost), icon: Banknote, color: "text-destructive" },
   ];
 
   const requestClientMap = useMemo(() => {
