@@ -28,6 +28,7 @@ import CollisionPublicView from "./pages/collision/CollisionPublicView";
 import ProviderTracking from "./pages/tracking/ProviderTracking";
 import BeneficiaryTracking from "./pages/tracking/BeneficiaryTracking";
 import NpsSurvey from "./pages/nps/NpsSurvey";
+import PublicServiceRequest from "./pages/public/PublicServiceRequest";
 import ProviderDashboard from "./pages/provider/ProviderDashboard";
 import ProviderServices from "./pages/provider/ProviderServices";
 import ProviderFinancial from "./pages/provider/ProviderFinancial";
@@ -66,6 +67,7 @@ const App = () => (
             <Route path="/tracking/provider/:token" element={<ProviderTracking />} />
             <Route path="/tracking/:token" element={<BeneficiaryTracking />} />
             <Route path="/nps/:token" element={<NpsSurvey />} />
+            <Route path="/solicitar" element={<PublicServiceRequest />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             
             {/* Provider Portal */}
