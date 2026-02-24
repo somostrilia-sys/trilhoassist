@@ -251,7 +251,7 @@ Deno.serve(async (req) => {
           const vehicleYear = record.ano_modelo || record.ano || record.vehicle_year || record.year || null;
           const vehicleChassis = record.chassi || record.chassis || "";
           const erpPlan = record.plano || record.plan || record.plan_name || record.descricao_produto || "";
-          const erpCoop = record.cooperativa || record.coop || record.cooperative || record.descricao_cooperativa || "";
+          const erpCoop = record.nome_cooperativa || record.cooperativa || record.coop || record.cooperative || record.descricao_cooperativa || "";
 
           if (!name && !plate) continue; // skip empty records
 
@@ -400,7 +400,7 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
       const vehicleYear = record.ano_modelo || record.ano || record.vehicle_year || record.year || null;
       const vehicleChassis = record.chassi || record.chassis || "";
       const erpPlan = record.plano || record.plan || record.plan_name || record.descricao_produto || "";
-      const erpCoop = record.cooperativa || record.coop || record.cooperative || record.descricao_cooperativa || "";
+      const erpCoop = record.nome_cooperativa || record.cooperativa || record.coop || record.cooperative || record.descricao_cooperativa || "";
       const planId = planMap.get(erpPlan) || null;
       const cooperativa = coopMap.get(erpCoop) || erpCoop;
 
@@ -477,14 +477,22 @@ function extractSampleFields(data: any): any {
 
 function extractUniqueFields(data: any): any {
   const records = extractRecords(data);
-  if (records.length === 0) return { plans: [], cooperativas: [] };
+  if (records.length === 0) return { plans: [], cooperativas: [], sample_keys: [] };
+  
+  // Log sample record keys for debugging
+  const sampleKeys = Object.keys(records[0]);
+  console.log("extractUniqueFields sample keys:", sampleKeys);
+  console.log("extractUniqueFields sample values:", JSON.stringify(records[0]).substring(0, 1000));
+  
   const plans = new Set<string>();
   const cooperativas = new Set<string>();
   for (const r of records) {
-    const plan = r.plano || r.plan || r.plan_name || r.descricao_produto || "";
-    const coop = r.cooperativa || r.coop || r.cooperative || r.descricao_cooperativa || "";
+    // Try many possible field names for plan
+    const plan = r.descricao_produto || r.produto || r.plano || r.plan || r.plan_name || r.nome_produto || "";
+    // Try many possible field names for cooperativa - Hinova uses nome_cooperativa
+    const coop = r.nome_cooperativa || r.descricao_cooperativa || r.cooperativa || r.coop || r.cooperative || r.unidade || "";
     if (plan) plans.add(plan);
     if (coop) cooperativas.add(coop);
   }
-  return { plans: [...plans].sort(), cooperativas: [...cooperativas].sort() };
+  return { plans: [...plans].sort(), cooperativas: [...cooperativas].sort(), sample_keys: sampleKeys };
 }
