@@ -49,16 +49,36 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get Z-API config from tenant
+    const adminSupabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Try to find the operator's own Z-API instance first
     let zapiInstanceId = "";
     let zapiToken = "";
     let zapiSecurityToken = "";
+    let zapiInstanceDbId: string | null = null;
 
-    if (tenant_id) {
-      const adminSupabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
+    if (tenant_id && userId) {
+      const { data: operatorInstance } = await adminSupabase
+        .from("zapi_instances")
+        .select("*")
+        .eq("tenant_id", tenant_id)
+        .eq("operator_id", userId)
+        .eq("active", true)
+        .single();
+
+      if (operatorInstance) {
+        zapiInstanceId = operatorInstance.zapi_instance_id;
+        zapiToken = operatorInstance.zapi_token;
+        zapiSecurityToken = operatorInstance.zapi_security_token || "";
+        zapiInstanceDbId = operatorInstance.id;
+      }
+    }
+
+    // Fallback: use tenant-level Z-API config (legacy)
+    if (!zapiInstanceId && tenant_id) {
       const { data: tenant } = await adminSupabase
         .from("tenants")
         .select("zapi_instance_id, zapi_token, zapi_security_token")
@@ -75,7 +95,7 @@ Deno.serve(async (req) => {
     if (!zapiInstanceId || !zapiToken) {
       return new Response(
         JSON.stringify({
-          error: "Z-API não configurada. Vá em Configurações → Integrações → WhatsApp e configure sua instância.",
+          error: "Z-API não configurada. Vá em Integrações → WhatsApp e configure sua instância.",
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -111,13 +131,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Save outbound message to DB
+    // Save outbound message and update conversation
     if (conversation_id) {
-      const adminSupabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
-
       const messageContent = template ? `[Template: ${template.name}]` : message;
 
       await adminSupabase.from("whatsapp_messages").insert({
@@ -126,9 +141,16 @@ Deno.serve(async (req) => {
         content: messageContent, external_id: result.messageId || result.zaapId || null,
       });
 
-      await adminSupabase.from("whatsapp_conversations").update({
-        last_message_at: new Date().toISOString(), assigned_to: userId,
-      }).eq("id", conversation_id);
+      const convUpdate: Record<string, any> = {
+        last_message_at: new Date().toISOString(),
+        assigned_to: userId,
+      };
+      // Track which Z-API instance is handling this conversation
+      if (zapiInstanceDbId) {
+        convUpdate.operator_zapi_instance_id = zapiInstanceDbId;
+      }
+
+      await adminSupabase.from("whatsapp_conversations").update(convUpdate).eq("id", conversation_id);
     }
 
     return new Response(JSON.stringify({ success: true, message_id: result.messageId || result.zaapId }), {

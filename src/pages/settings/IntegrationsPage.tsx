@@ -18,41 +18,100 @@ function WhatsAppIntegration({ tenantId }: { tenantId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [showToken, setShowToken] = useState(false);
-  const [showSecurity, setShowSecurity] = useState(false);
-  const [zapiInstanceId, setZapiInstanceId] = useState("");
-  const [zapiToken, setZapiToken] = useState("");
-  const [zapiSecurityToken, setZapiSecurityToken] = useState("");
+  const [testing, setTesting] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({ operator_id: "", instance_name: "", zapi_instance_id: "", zapi_token: "", zapi_security_token: "" });
+  const [showTokens, setShowTokens] = useState<Record<string, boolean>>({});
 
-  const { data: tenant } = useQuery({
-    queryKey: ["tenant-integrations", tenantId],
+  // Fetch operators for this tenant
+  const { data: operators = [] } = useQuery({
+    queryKey: ["tenant-operators", tenantId],
     queryFn: async () => {
-      const { data } = await supabase.from("tenants").select("zapi_instance_id, zapi_token, zapi_security_token").eq("id", tenantId).single();
-      return data;
+      const { data: userTenants } = await supabase
+        .from("user_tenants")
+        .select("user_id")
+        .eq("tenant_id", tenantId);
+      if (!userTenants?.length) return [];
+      const userIds = userTenants.map((ut: any) => ut.user_id);
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .in("user_id", userIds)
+        .in("role", ["operator", "admin"]);
+      if (!roles?.length) return [];
+      const opIds = [...new Set(roles.map((r: any) => r.user_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, full_name")
+        .in("user_id", opIds);
+      return (profiles || []).map((p: any) => ({
+        id: p.user_id,
+        name: p.full_name || p.user_id.slice(0, 8),
+        role: roles.find((r: any) => r.user_id === p.user_id)?.role || "operator",
+      }));
     },
     enabled: !!tenantId,
   });
 
-  useEffect(() => {
-    if (tenant) {
-      setZapiInstanceId((tenant as any).zapi_instance_id || "");
-      setZapiToken((tenant as any).zapi_token || "");
-      setZapiSecurityToken((tenant as any).zapi_security_token || "");
-    }
-  }, [tenant]);
+  // Fetch existing instances
+  const { data: instances = [], isLoading } = useQuery({
+    queryKey: ["zapi-instances", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("zapi_instances" as any)
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .order("created_at");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!tenantId,
+  });
+
+  const assignedOperatorIds = (instances as any[]).map((i: any) => i.operator_id);
+  const availableOperators = operators.filter((o: any) => !assignedOperatorIds.includes(o.id) || o.id === form.operator_id);
+
+  const resetForm = () => {
+    setForm({ operator_id: "", instance_name: "", zapi_instance_id: "", zapi_token: "", zapi_security_token: "" });
+    setEditingId(null);
+  };
+
+  const handleEdit = (instance: any) => {
+    setEditingId(instance.id);
+    setForm({
+      operator_id: instance.operator_id,
+      instance_name: instance.instance_name || "",
+      zapi_instance_id: instance.zapi_instance_id,
+      zapi_token: instance.zapi_token,
+      zapi_security_token: instance.zapi_security_token || "",
+    });
+  };
 
   const handleSave = async () => {
+    if (!form.operator_id || !form.zapi_instance_id || !form.zapi_token) {
+      toast({ title: "Preencha operador, Instance ID e Token", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
-      const { error } = await supabase.from("tenants").update({
-        zapi_instance_id: zapiInstanceId || null,
-        zapi_token: zapiToken || null,
-        zapi_security_token: zapiSecurityToken || null,
-      } as any).eq("id", tenantId);
-      if (error) throw error;
-      queryClient.invalidateQueries({ queryKey: ["tenant-integrations"] });
-      toast({ title: "Configuração Z-API salva com sucesso" });
+      const payload = {
+        tenant_id: tenantId,
+        operator_id: form.operator_id,
+        instance_name: form.instance_name || operators.find((o: any) => o.id === form.operator_id)?.name || "",
+        zapi_instance_id: form.zapi_instance_id,
+        zapi_token: form.zapi_token,
+        zapi_security_token: form.zapi_security_token || null,
+      };
+      if (editingId) {
+        const { error } = await supabase.from("zapi_instances" as any).update(payload as any).eq("id", editingId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("zapi_instances" as any).insert(payload as any);
+        if (error) throw error;
+      }
+      queryClient.invalidateQueries({ queryKey: ["zapi-instances"] });
+      toast({ title: editingId ? "Instância atualizada!" : "Instância adicionada!" });
+      resetForm();
     } catch (err: any) {
       toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
     } finally {
@@ -60,29 +119,34 @@ function WhatsAppIntegration({ tenantId }: { tenantId: string }) {
     }
   };
 
-  const handleTest = async () => {
-    if (!zapiInstanceId || !zapiToken) {
-      toast({ title: "Preencha Instance ID e Token antes de testar", variant: "destructive" });
-      return;
+  const handleDelete = async (id: string) => {
+    if (!confirm("Remover esta instância Z-API?")) return;
+    const { error } = await supabase.from("zapi_instances" as any).delete().eq("id", id);
+    if (error) {
+      toast({ title: "Erro ao remover", description: error.message, variant: "destructive" });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ["zapi-instances"] });
+      toast({ title: "Instância removida" });
     }
-    setTesting(true);
+  };
+
+  const handleTest = async (instance: any) => {
+    setTesting(instance.id);
     try {
       const headers: Record<string, string> = {};
-      if (zapiSecurityToken) {
-        headers["Client-Token"] = zapiSecurityToken;
-      }
+      if (instance.zapi_security_token) headers["Client-Token"] = instance.zapi_security_token;
       const response = await fetch(
-        `https://api.z-api.io/instances/${zapiInstanceId}/token/${zapiToken}/status`,
+        `https://api.z-api.io/instances/${instance.zapi_instance_id}/token/${instance.zapi_token}/status`,
         { headers }
       );
       if (response.ok) {
         const data = await response.json();
         const connected = data.connected === true;
         toast({
-          title: connected ? "Conectado!" : "Instância encontrada",
+          title: connected ? "✅ Conectado!" : "⚠️ Instância encontrada",
           description: connected
-            ? `WhatsApp conectado com sucesso! Status: ${data.smartphoneConnected ? "Smartphone online" : "Verificar smartphone"}`
-            : `Status: ${JSON.stringify(data)}. Verifique se o QR Code foi escaneado.`,
+            ? `WhatsApp conectado! ${data.smartphoneConnected ? "Smartphone online" : "Verificar smartphone"}`
+            : `Status: ${JSON.stringify(data)}`,
         });
       } else {
         toast({ title: "Falha na conexão", description: `Status: ${response.status}`, variant: "destructive" });
@@ -90,11 +154,11 @@ function WhatsAppIntegration({ tenantId }: { tenantId: string }) {
     } catch (err: any) {
       toast({ title: "Erro de conexão", description: err.message, variant: "destructive" });
     } finally {
-      setTesting(false);
+      setTesting(null);
     }
   };
 
-  const isConfigured = !!(zapiInstanceId && zapiToken);
+  const getOperatorName = (opId: string) => operators.find((o: any) => o.id === opId)?.name || opId.slice(0, 8);
 
   return (
     <div className="space-y-6">
@@ -104,93 +168,135 @@ function WhatsAppIntegration({ tenantId }: { tenantId: string }) {
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
                 <MessageSquare className="h-5 w-5 text-green-600" />
-                Z-API (WhatsApp)
+                Z-API — Instâncias por Operador
               </CardTitle>
               <CardDescription>
-                Conecte sua instância da Z-API para enviar e receber mensagens WhatsApp automaticamente
+                Cada operador conecta sua própria instância Z-API (WhatsApp) para distribuir o volume e reduzir risco de ban.
               </CardDescription>
             </div>
-            <Badge variant={isConfigured ? "default" : "outline"}>
-              {isConfigured ? "Configurado" : "Não configurado"}
+            <Badge variant={(instances as any[]).length > 0 ? "default" : "outline"}>
+              {(instances as any[]).length} instância(s)
             </Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Instructions */}
           <div className="rounded-lg border p-4 bg-muted/20 space-y-2">
             <div className="flex items-start gap-2">
               <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5" />
               <div>
-                <p className="text-sm font-medium">Como configurar</p>
+                <p className="text-sm font-medium">Como funciona</p>
                 <ol className="text-xs text-muted-foreground list-decimal ml-4 mt-1 space-y-1">
-                  <li>Acesse o painel da <span className="font-medium">Z-API</span> (<code className="bg-muted px-1 rounded">app.z-api.io</code>)</li>
-                  <li>Crie uma instância ou selecione uma existente</li>
-                  <li>Copie o <span className="font-medium">Instance ID</span> e o <span className="font-medium">Token</span> da instância</li>
-                  <li>Copie o <span className="font-medium">Security Token</span> da sua conta (Configurações → Segurança)</li>
-                  <li>Cole os dados abaixo e clique em <span className="font-medium">Testar Conexão</span></li>
+                  <li>Crie uma instância Z-API para cada operador em <code className="bg-muted px-1 rounded">app.z-api.io</code></li>
+                  <li>Cada operador escaneia o QR Code da sua instância com seu WhatsApp pessoal/comercial</li>
+                  <li>Cadastre abaixo o <span className="font-medium">Instance ID</span>, <span className="font-medium">Token</span> e associe ao operador</li>
+                  <li>Configure o webhook de cada instância apontando para: <code className="bg-muted px-1 rounded text-xs break-all">
+                    {`https://gqczgatkouxjdcyxnubf.supabase.co/functions/v1/whatsapp-webhook?tenant=${tenantId}`}
+                  </code></li>
+                  <li>Quando o operador enviar mensagens no CRM, sairão pelo WhatsApp dele</li>
                 </ol>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>Instance ID *</Label>
-              <Input
-                value={zapiInstanceId}
-                onChange={(e) => setZapiInstanceId(e.target.value)}
-                placeholder="3C67AB641C8A..."
-              />
-              <p className="text-xs text-muted-foreground">ID da sua instância Z-API</p>
+          {/* Existing instances */}
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Carregando...</p>
+          ) : (instances as any[]).length > 0 ? (
+            <div className="space-y-3">
+              {(instances as any[]).map((inst: any) => (
+                <div key={inst.id} className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{inst.instance_name || getOperatorName(inst.operator_id)}</span>
+                      <Badge variant="secondary" className="text-xs">{getOperatorName(inst.operator_id)}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-mono">
+                      ID: {inst.zapi_instance_id.slice(0, 12)}...
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" onClick={() => handleTest(inst)} disabled={testing === inst.id}>
+                      <TestTube className="h-3 w-3 mr-1" />
+                      {testing === inst.id ? "..." : "Testar"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => handleEdit(inst)}>Editar</Button>
+                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDelete(inst.id)}>
+                      <XCircle className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="space-y-2">
-              <Label>Token *</Label>
-              <div className="relative">
-                <Input
-                  value={zapiToken}
-                  onChange={(e) => setZapiToken(e.target.value)}
-                  placeholder="Token da instância"
-                  type={showToken ? "text" : "password"}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowToken(!showToken)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              <p className="text-xs text-muted-foreground">Token gerado na instância Z-API</p>
-            </div>
-            <div className="space-y-2">
-              <Label>Security Token</Label>
-              <div className="relative">
-                <Input
-                  value={zapiSecurityToken}
-                  onChange={(e) => setZapiSecurityToken(e.target.value)}
-                  placeholder="Token de segurança da conta"
-                  type={showSecurity ? "text" : "password"}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowSecurity(!showSecurity)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showSecurity ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              <p className="text-xs text-muted-foreground">Client-Token da conta (opcional, recomendado)</p>
-            </div>
-          </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">Nenhuma instância cadastrada. Adicione abaixo.</p>
+          )}
 
-          <div className="flex gap-3">
-            <Button onClick={handleSave} disabled={saving}>
-              <Save className="h-4 w-4 mr-2" />
-              {saving ? "Salvando..." : "Salvar"}
-            </Button>
-            <Button onClick={handleTest} disabled={testing} variant="outline">
-              <TestTube className="h-4 w-4 mr-2" />
-              {testing ? "Testando..." : "Testar Conexão"}
-            </Button>
+          {/* Add/Edit form */}
+          <div className="rounded-lg border p-4 space-y-4 bg-muted/10">
+            <p className="text-sm font-medium">{editingId ? "Editar instância" : "Adicionar nova instância"}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Operador *</Label>
+                <Select value={form.operator_id} onValueChange={(v) => setForm({ ...form, operator_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o operador" /></SelectTrigger>
+                  <SelectContent>
+                    {availableOperators.map((op: any) => (
+                      <SelectItem key={op.id} value={op.id}>{op.name} ({op.role})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Nome da instância</Label>
+                <Input value={form.instance_name} onChange={(e) => setForm({ ...form, instance_name: e.target.value })} placeholder="Ex: WhatsApp João" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Instance ID *</Label>
+                <Input value={form.zapi_instance_id} onChange={(e) => setForm({ ...form, zapi_instance_id: e.target.value })} placeholder="3C67AB641C8A..." />
+              </div>
+              <div className="space-y-2">
+                <Label>Token *</Label>
+                <div className="relative">
+                  <Input
+                    value={form.zapi_token}
+                    onChange={(e) => setForm({ ...form, zapi_token: e.target.value })}
+                    placeholder="Token da instância"
+                    type={showTokens["form_token"] ? "text" : "password"}
+                  />
+                  <button type="button" onClick={() => setShowTokens(p => ({ ...p, form_token: !p.form_token }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    {showTokens["form_token"] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Security Token</Label>
+                <div className="relative">
+                  <Input
+                    value={form.zapi_security_token}
+                    onChange={(e) => setForm({ ...form, zapi_security_token: e.target.value })}
+                    placeholder="Client-Token (opcional)"
+                    type={showTokens["form_sec"] ? "text" : "password"}
+                  />
+                  <button type="button" onClick={() => setShowTokens(p => ({ ...p, form_sec: !p.form_sec }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    {showTokens["form_sec"] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Button onClick={handleSave} disabled={saving}>
+                <Save className="h-4 w-4 mr-2" />
+                {saving ? "Salvando..." : editingId ? "Atualizar" : "Adicionar"}
+              </Button>
+              {editingId && (
+                <Button variant="ghost" onClick={resetForm}>Cancelar</Button>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -201,11 +307,10 @@ function WhatsAppIntegration({ tenantId }: { tenantId: string }) {
         </CardHeader>
         <CardContent>
           <ul className="text-sm text-muted-foreground space-y-2">
-            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-600" /> Notificações automáticas ao beneficiário (criação, acionamento, finalização)</li>
-            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-600" /> Envio de link de rastreamento em tempo real</li>
-            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-600" /> Acionamento do prestador via WhatsApp com dados do serviço</li>
-            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-600" /> Etiquetas automáticas no grupo da associação</li>
-            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-600" /> CRM WhatsApp com fila de atendimento</li>
+            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-600" /> Cada operador envia mensagens pelo seu próprio WhatsApp</li>
+            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-600" /> Reduz risco de ban ao distribuir volume entre múltiplos números</li>
+            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-600" /> Respostas do cliente voltam para o operador que enviou</li>
+            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-600" /> CRM WhatsApp com fila de atendimento e histórico</li>
             <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-600" /> Pesquisa NPS pós-atendimento</li>
           </ul>
         </CardContent>

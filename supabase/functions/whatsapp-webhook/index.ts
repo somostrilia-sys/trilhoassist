@@ -97,6 +97,26 @@ Deno.serve(async (req) => {
 
     const cleanPhone = normalized.phone.replace(/\D/g, "");
 
+    // Try to identify which Z-API instance received this message (by phone matching a conversation)
+    // If the message comes to a specific instance, try to route to the operator who owns it
+    const incomingInstanceId = url.searchParams.get("instance_id");
+    let routeToOperator: string | null = null;
+    let routeToZapiInstanceDbId: string | null = null;
+
+    if (incomingInstanceId) {
+      const { data: zapiInst } = await supabase
+        .from("zapi_instances")
+        .select("id, operator_id")
+        .eq("tenant_id", tenant.id)
+        .eq("zapi_instance_id", incomingInstanceId)
+        .eq("active", true)
+        .single();
+      if (zapiInst) {
+        routeToOperator = zapiInst.operator_id;
+        routeToZapiInstanceDbId = zapiInst.id;
+      }
+    }
+
     // Find or create conversation
     let { data: conversation } = await supabase
       .from("whatsapp_conversations")
@@ -129,12 +149,20 @@ Deno.serve(async (req) => {
           detected_vehicle_year: beneficiary?.vehicle_year || null,
           detected_beneficiary_name: beneficiary?.name || null,
           status: "open",
+          assigned_to: routeToOperator,
+          operator_zapi_instance_id: routeToZapiInstanceDbId,
         })
         .select()
         .single();
 
       if (convErr) throw convErr;
       conversation = newConv;
+    } else if (routeToOperator && !conversation.assigned_to) {
+      // If conversation exists but unassigned, assign to the operator whose instance received it
+      await supabase
+        .from("whatsapp_conversations")
+        .update({ assigned_to: routeToOperator, operator_zapi_instance_id: routeToZapiInstanceDbId })
+        .eq("id", conversation.id);
     }
 
     // --- Smart extraction from message text ---

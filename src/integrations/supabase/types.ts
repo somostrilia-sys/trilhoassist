@@ -1416,6 +1416,7 @@ export type Database = {
           id: string
           last_followup_at: string | null
           last_message_at: string | null
+          operator_zapi_instance_id: string | null
           origin_lat: number | null
           origin_lng: number | null
           phone: string
@@ -1448,6 +1449,7 @@ export type Database = {
           id?: string
           last_followup_at?: string | null
           last_message_at?: string | null
+          operator_zapi_instance_id?: string | null
           origin_lat?: number | null
           origin_lng?: number | null
           phone: string
@@ -1480,6 +1482,7 @@ export type Database = {
           id?: string
           last_followup_at?: string | null
           last_message_at?: string | null
+          operator_zapi_instance_id?: string | null
           origin_lat?: number | null
           origin_lng?: number | null
           phone?: string
@@ -1503,6 +1506,13 @@ export type Database = {
             columns: ["current_flow_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_flows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_conversations_operator_zapi_instance_id_fkey"
+            columns: ["operator_zapi_instance_id"]
+            isOneToOne: false
+            referencedRelation: "zapi_instances"
             referencedColumns: ["id"]
           },
           {
@@ -1734,6 +1744,53 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "whatsapp_templates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      zapi_instances: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          instance_name: string
+          operator_id: string
+          tenant_id: string
+          updated_at: string
+          zapi_instance_id: string
+          zapi_security_token: string | null
+          zapi_token: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          instance_name?: string
+          operator_id: string
+          tenant_id: string
+          updated_at?: string
+          zapi_instance_id: string
+          zapi_security_token?: string | null
+          zapi_token: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          instance_name?: string
+          operator_id?: string
+          tenant_id?: string
+          updated_at?: string
+          zapi_instance_id?: string
+          zapi_security_token?: string | null
+          zapi_token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "zapi_instances_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
