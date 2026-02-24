@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
     const tenantIds = [...new Set(conversations.map((c: any) => c.tenant_id))];
     const { data: tenants } = await supabase
       .from("tenants")
-      .select("id, followup_timeout_minutes, followup_max_retries, evolution_api_url, evolution_api_key, name")
+      .select("id, followup_timeout_minutes, followup_max_retries, zapi_instance_id, zapi_token, zapi_security_token, name")
       .in("id", tenantIds);
 
     const tenantMap: Record<string, any> = {};
@@ -59,15 +59,15 @@ Deno.serve(async (req) => {
     }
 
     let processed = 0;
-    const EVOLUTION_INSTANCE = Deno.env.get("EVOLUTION_INSTANCE") || "default";
 
     for (const conv of conversations) {
       const tenant = tenantMap[conv.tenant_id];
       if (!tenant) continue;
 
-      const apiUrl = tenant.evolution_api_url;
-      const apiKey = tenant.evolution_api_key;
-      if (!apiUrl || !apiKey) continue;
+      const zapiInstanceId = tenant.zapi_instance_id;
+      const zapiToken = tenant.zapi_token;
+      const zapiSecurityToken = tenant.zapi_security_token || "";
+      if (!zapiInstanceId || !zapiToken) continue;
 
       // Get last messages
       const { data: messages } = await supabase
@@ -94,15 +94,14 @@ Deno.serve(async (req) => {
           const nextStep = steps.find((s: any) => s.step_order === conv.current_flow_step + 1);
 
           if (nextStep) {
-            // Send next step message
-            const sent = await sendMessage(apiUrl, apiKey, EVOLUTION_INSTANCE, conv.phone, nextStep.message_text);
+            const sent = await sendMessage(zapiInstanceId, zapiToken, zapiSecurityToken, conv.phone, nextStep.message_text);
             if (sent) {
               await supabase.from("whatsapp_messages").insert({
                 conversation_id: conv.id,
                 direction: "outbound",
                 message_type: "text",
                 content: nextStep.message_text,
-                external_id: sent.key?.id || null,
+                external_id: sent.messageId || sent.zaapId || null,
               });
               await supabase.from("whatsapp_conversations").update({
                 current_flow_step: nextStep.step_order,
@@ -147,14 +146,14 @@ Deno.serve(async (req) => {
             ? `⚠️ Última tentativa: ainda precisamos da sua resposta para continuar o atendimento. 🙏`
             : `Olá! 😊 Ainda aguardamos sua resposta para dar continuidade. Por favor, responda a última mensagem. 🙏`;
 
-          const sent = await sendMessage(apiUrl, apiKey, EVOLUTION_INSTANCE, conv.phone, reminderMessage);
+          const sent = await sendMessage(zapiInstanceId, zapiToken, zapiSecurityToken, conv.phone, reminderMessage);
           if (sent) {
             await supabase.from("whatsapp_messages").insert({
               conversation_id: conv.id,
               direction: "outbound",
               message_type: "text",
               content: reminderMessage,
-              external_id: sent.key?.id || null,
+              external_id: sent.messageId || sent.zaapId || null,
             });
             await supabase.from("whatsapp_conversations").update({
               followup_count: currentCount,
@@ -203,14 +202,14 @@ Deno.serve(async (req) => {
         reminderMessage = `⚠️ Última tentativa de contato!\n\nPrecisamos da sua resposta para:\n*"${questionText}"*\n\nCaso não responda, o atendimento poderá ser encerrado. Por favor, nos retorne. 🙏`;
       }
 
-      const sent = await sendMessage(apiUrl, apiKey, EVOLUTION_INSTANCE, conv.phone, reminderMessage);
+      const sent = await sendMessage(zapiInstanceId, zapiToken, zapiSecurityToken, conv.phone, reminderMessage);
       if (sent) {
         await supabase.from("whatsapp_messages").insert({
           conversation_id: conv.id,
           direction: "outbound",
           message_type: "text",
           content: reminderMessage,
-          external_id: sent.key?.id || null,
+          external_id: sent.messageId || sent.zaapId || null,
         });
         await supabase.from("whatsapp_conversations").update({
           followup_count: currentCount,
@@ -234,16 +233,21 @@ Deno.serve(async (req) => {
   }
 });
 
-async function sendMessage(apiUrl: string, apiKey: string, instance: string, phone: string, text: string): Promise<any | null> {
-  const baseUrl = apiUrl.replace(/\/$/, "");
+async function sendMessage(instanceId: string, token: string, securityToken: string, phone: string, text: string): Promise<any | null> {
   let cleanPhone = (phone || "").replace(/\D/g, "");
   if (cleanPhone.length <= 11) cleanPhone = `55${cleanPhone}`;
 
+  const zapiUrl = `https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (securityToken) {
+    headers["Client-Token"] = securityToken;
+  }
+
   try {
-    const response = await fetch(`${baseUrl}/message/sendText/${instance}`, {
+    const response = await fetch(zapiUrl, {
       method: "POST",
-      headers: { apikey: apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ number: cleanPhone, text }),
+      headers,
+      body: JSON.stringify({ phone: cleanPhone, message: text }),
     });
     if (response.ok) return await response.json();
     console.error(`Send failed:`, await response.text());

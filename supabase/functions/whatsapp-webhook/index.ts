@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const tenantSlug = url.searchParams.get("tenant");
 
-  // ========== EVOLUTION API WEBHOOK VERIFICATION (GET) ==========
+  // Z-API webhook verification (GET)
   if (req.method === "GET") {
     return new Response("ok", { status: 200, headers: corsHeaders });
   }
@@ -36,12 +36,13 @@ Deno.serve(async (req) => {
 
     const payload = await req.json();
 
-    // ========== EVOLUTION API EVENT ROUTING ==========
-    const event = payload.event;
+    // ========== Z-API EVENT ROUTING ==========
+    // Z-API sends "ReceivedCallback" for incoming messages and "DeliveryCallback" for sent
+    const eventType = payload.type;
 
-    // Ignore non-message events (connection updates, qrcode, etc.)
-    if (event && event !== "messages.upsert" && event !== "send.message") {
-      return new Response(JSON.stringify({ success: true, type: "ignored_event", event }), {
+    // Ignore non-message events
+    if (eventType && eventType !== "ReceivedCallback") {
+      return new Response(JSON.stringify({ success: true, type: "ignored_event", event: eventType }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -69,7 +70,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const normalized = normalizePayload(payload);
+    const normalized = normalizeZapiPayload(payload);
 
     if (!normalized.phone) {
       return new Response(JSON.stringify({ error: "No phone found in payload" }), {
@@ -78,7 +79,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Skip group messages (they end with @g.us)
+    // Skip group messages
     if (normalized.isGroup) {
       return new Response(JSON.stringify({ success: true, type: "group_message_skipped" }), {
         status: 200,
@@ -95,12 +96,6 @@ Deno.serve(async (req) => {
     }
 
     const cleanPhone = normalized.phone.replace(/\D/g, "");
-
-    // ========== DOWNLOAD MEDIA FROM EVOLUTION (if applicable) ==========
-    let mediaUrl = normalized.media_url;
-    if (normalized.media_base64 && !mediaUrl) {
-      mediaUrl = undefined;
-    }
 
     // Find or create conversation
     let { data: conversation } = await supabase
@@ -190,7 +185,7 @@ Deno.serve(async (req) => {
       direction: "inbound",
       message_type: normalized.message_type || "text",
       content: normalized.message || null,
-      media_url: mediaUrl || null,
+      media_url: normalized.media_url || null,
       latitude: normalized.latitude || null,
       longitude: normalized.longitude || null,
       external_id: normalized.external_id || null,
@@ -224,7 +219,6 @@ interface NormalizedMessage {
   message?: string;
   message_type?: string;
   media_url?: string;
-  media_base64?: string;
   latitude?: number;
   longitude?: number;
   external_id?: string;
@@ -232,81 +226,90 @@ interface NormalizedMessage {
   fromMe?: boolean;
 }
 
-function normalizePayload(payload: any): NormalizedMessage {
-  // ========== EVOLUTION API v2 FORMAT ==========
-  if (payload.data?.key?.remoteJid) {
-    const data = payload.data;
-    const remoteJid = data.key.remoteJid;
-    const isGroup = remoteJid.endsWith("@g.us");
-    const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@g.us", "");
-    const fromMe = data.key.fromMe === true;
+function normalizeZapiPayload(payload: any): NormalizedMessage {
+  // ========== Z-API ReceivedCallback FORMAT ==========
+  if (payload.type === "ReceivedCallback" || payload.phone) {
+    const phone = payload.phone || "";
+    const isGroup = payload.isGroup === true;
+    const fromMe = payload.fromMe === true;
+    const name = payload.senderName || payload.chatName || "";
 
-    const msg = data.message || {};
     let content = "";
     let messageType = "text";
     let mediaUrl: string | undefined;
     let latitude: number | undefined;
     let longitude: number | undefined;
 
-    if (msg.conversation) {
-      content = msg.conversation;
-    } else if (msg.extendedTextMessage?.text) {
-      content = msg.extendedTextMessage.text;
-    } else if (msg.imageMessage) {
-      content = msg.imageMessage.caption || "";
+    // Text message
+    if (payload.text?.message) {
+      content = payload.text.message;
+      messageType = "text";
+    }
+    // Hydrated template text
+    else if (payload.hydratedTemplate?.message) {
+      content = payload.hydratedTemplate.message;
+      messageType = "text";
+    }
+    // Image
+    else if (payload.image) {
+      content = payload.image.caption || "";
       messageType = "image";
-      mediaUrl = msg.imageMessage.url;
-    } else if (msg.videoMessage) {
-      content = msg.videoMessage.caption || "";
+      mediaUrl = payload.image.imageUrl;
+    }
+    // Video
+    else if (payload.video) {
+      content = payload.video.caption || "";
       messageType = "video";
-      mediaUrl = msg.videoMessage.url;
-    } else if (msg.audioMessage) {
+      mediaUrl = payload.video.videoUrl;
+    }
+    // Audio
+    else if (payload.audio) {
       messageType = "audio";
-      mediaUrl = msg.audioMessage.url;
-    } else if (msg.documentMessage) {
-      content = msg.documentMessage.fileName || "";
+      mediaUrl = payload.audio.audioUrl;
+    }
+    // Document
+    else if (payload.document) {
+      content = payload.document.fileName || payload.document.title || "";
       messageType = "document";
-      mediaUrl = msg.documentMessage.url;
-    } else if (msg.locationMessage) {
+      mediaUrl = payload.document.documentUrl;
+    }
+    // Location
+    else if (payload.location) {
       messageType = "location";
-      latitude = msg.locationMessage.degreesLatitude;
-      longitude = msg.locationMessage.degreesLongitude;
-    } else if (msg.contactMessage || msg.contactsArrayMessage) {
+      latitude = payload.location.latitude;
+      longitude = payload.location.longitude;
+      content = payload.location.name || payload.location.address || "";
+    }
+    // Contact
+    else if (payload.contact) {
       messageType = "contacts";
-      content = JSON.stringify(msg.contactMessage || msg.contactsArrayMessage);
-    } else if (msg.stickerMessage) {
+      content = payload.contact.displayName || JSON.stringify(payload.contact);
+    }
+    // Sticker
+    else if (payload.sticker) {
       messageType = "sticker";
+      mediaUrl = payload.sticker.stickerUrl;
+    }
+    // Button response
+    else if (payload.buttonsResponseMessage) {
+      content = payload.buttonsResponseMessage.message || "";
+      messageType = "text";
+    }
+    // List response
+    else if (payload.listResponseMessage) {
+      content = payload.listResponseMessage.title || payload.listResponseMessage.message || "";
+      messageType = "text";
     }
 
     return {
       phone,
-      name: data.pushName,
+      name,
       message: content,
       message_type: messageType,
       media_url: mediaUrl,
       latitude,
       longitude,
-      external_id: data.key.id,
-      isGroup,
-      fromMe,
-    };
-  }
-
-  // ========== EVOLUTION API v1 ALTERNATIVE FORMAT ==========
-  if (payload.key?.remoteJid) {
-    const remoteJid = payload.key.remoteJid;
-    const isGroup = remoteJid.endsWith("@g.us");
-    const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@g.us", "");
-    const fromMe = payload.key.fromMe === true;
-    const msg = payload.message || {};
-
-    return {
-      phone,
-      name: payload.pushName,
-      message: msg.conversation || msg.extendedTextMessage?.text || payload.body || "",
-      message_type: payload.messageType || "text",
-      media_url: undefined,
-      external_id: payload.key.id,
+      external_id: payload.messageId,
       isGroup,
       fromMe,
     };
@@ -316,7 +319,7 @@ function normalizePayload(payload: any): NormalizedMessage {
   if (payload.phone) {
     return {
       phone: payload.phone,
-      name: payload.name || payload.contact_name || payload.pushName,
+      name: payload.name || payload.contact_name || payload.senderName,
       message: payload.message || payload.text || payload.body,
       message_type: payload.message_type || payload.type || "text",
       media_url: payload.media_url || payload.mediaUrl,

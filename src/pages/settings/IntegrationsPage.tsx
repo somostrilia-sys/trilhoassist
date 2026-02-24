@@ -19,15 +19,16 @@ function WhatsAppIntegration({ tenantId }: { tenantId: string }) {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [showKey, setShowKey] = useState(false);
-  const [evolutionUrl, setEvolutionUrl] = useState("");
-  const [evolutionKey, setEvolutionKey] = useState("");
-  const [evolutionInstance, setEvolutionInstance] = useState("default");
+  const [showToken, setShowToken] = useState(false);
+  const [showSecurity, setShowSecurity] = useState(false);
+  const [zapiInstanceId, setZapiInstanceId] = useState("");
+  const [zapiToken, setZapiToken] = useState("");
+  const [zapiSecurityToken, setZapiSecurityToken] = useState("");
 
   const { data: tenant } = useQuery({
     queryKey: ["tenant-integrations", tenantId],
     queryFn: async () => {
-      const { data } = await supabase.from("tenants").select("evolution_api_url, evolution_api_key").eq("id", tenantId).single();
+      const { data } = await supabase.from("tenants").select("zapi_instance_id, zapi_token, zapi_security_token").eq("id", tenantId).single();
       return data;
     },
     enabled: !!tenantId,
@@ -35,8 +36,9 @@ function WhatsAppIntegration({ tenantId }: { tenantId: string }) {
 
   useEffect(() => {
     if (tenant) {
-      setEvolutionUrl((tenant as any).evolution_api_url || "");
-      setEvolutionKey((tenant as any).evolution_api_key || "");
+      setZapiInstanceId((tenant as any).zapi_instance_id || "");
+      setZapiToken((tenant as any).zapi_token || "");
+      setZapiSecurityToken((tenant as any).zapi_security_token || "");
     }
   }, [tenant]);
 
@@ -44,12 +46,13 @@ function WhatsAppIntegration({ tenantId }: { tenantId: string }) {
     setSaving(true);
     try {
       const { error } = await supabase.from("tenants").update({
-        evolution_api_url: evolutionUrl || null,
-        evolution_api_key: evolutionKey || null,
+        zapi_instance_id: zapiInstanceId || null,
+        zapi_token: zapiToken || null,
+        zapi_security_token: zapiSecurityToken || null,
       } as any).eq("id", tenantId);
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["tenant-integrations"] });
-      toast({ title: "Configuração WhatsApp salva com sucesso" });
+      toast({ title: "Configuração Z-API salva com sucesso" });
     } catch (err: any) {
       toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
     } finally {
@@ -58,20 +61,29 @@ function WhatsAppIntegration({ tenantId }: { tenantId: string }) {
   };
 
   const handleTest = async () => {
-    if (!evolutionUrl || !evolutionKey) {
-      toast({ title: "Preencha URL e API Key antes de testar", variant: "destructive" });
+    if (!zapiInstanceId || !zapiToken) {
+      toast({ title: "Preencha Instance ID e Token antes de testar", variant: "destructive" });
       return;
     }
     setTesting(true);
     try {
-      const baseUrl = evolutionUrl.replace(/\/$/, "");
-      const response = await fetch(`${baseUrl}/instance/fetchInstances`, {
-        headers: { apikey: evolutionKey },
-      });
+      const headers: Record<string, string> = {};
+      if (zapiSecurityToken) {
+        headers["Client-Token"] = zapiSecurityToken;
+      }
+      const response = await fetch(
+        `https://api.z-api.io/instances/${zapiInstanceId}/token/${zapiToken}/status`,
+        { headers }
+      );
       if (response.ok) {
         const data = await response.json();
-        const instances = Array.isArray(data) ? data : data?.instances || [];
-        toast({ title: "Conexão OK!", description: `${instances.length} instância(s) encontrada(s)` });
+        const connected = data.connected === true;
+        toast({
+          title: connected ? "Conectado!" : "Instância encontrada",
+          description: connected
+            ? `WhatsApp conectado com sucesso! Status: ${data.smartphoneConnected ? "Smartphone online" : "Verificar smartphone"}`
+            : `Status: ${JSON.stringify(data)}. Verifique se o QR Code foi escaneado.`,
+        });
       } else {
         toast({ title: "Falha na conexão", description: `Status: ${response.status}`, variant: "destructive" });
       }
@@ -82,7 +94,7 @@ function WhatsAppIntegration({ tenantId }: { tenantId: string }) {
     }
   };
 
-  const isConfigured = !!(evolutionUrl && evolutionKey);
+  const isConfigured = !!(zapiInstanceId && zapiToken);
 
   return (
     <div className="space-y-6">
@@ -92,10 +104,10 @@ function WhatsAppIntegration({ tenantId }: { tenantId: string }) {
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
                 <MessageSquare className="h-5 w-5 text-green-600" />
-                Evolution API (WhatsApp)
+                Z-API (WhatsApp)
               </CardTitle>
               <CardDescription>
-                Conecte sua instância da Evolution API para enviar e receber mensagens WhatsApp automaticamente
+                Conecte sua instância da Z-API para enviar e receber mensagens WhatsApp automaticamente
               </CardDescription>
             </div>
             <Badge variant={isConfigured ? "default" : "outline"}>
@@ -110,44 +122,63 @@ function WhatsAppIntegration({ tenantId }: { tenantId: string }) {
               <div>
                 <p className="text-sm font-medium">Como configurar</p>
                 <ol className="text-xs text-muted-foreground list-decimal ml-4 mt-1 space-y-1">
-                  <li>Instale a <span className="font-medium">Evolution API</span> em seu servidor ou use uma instância hospedada</li>
-                  <li>Copie a <span className="font-medium">URL base</span> da sua instância (ex: <code className="bg-muted px-1 rounded">https://api.seudominio.com</code>)</li>
-                  <li>Gere uma <span className="font-medium">API Key</span> no painel da Evolution</li>
+                  <li>Acesse o painel da <span className="font-medium">Z-API</span> (<code className="bg-muted px-1 rounded">app.z-api.io</code>)</li>
+                  <li>Crie uma instância ou selecione uma existente</li>
+                  <li>Copie o <span className="font-medium">Instance ID</span> e o <span className="font-medium">Token</span> da instância</li>
+                  <li>Copie o <span className="font-medium">Security Token</span> da sua conta (Configurações → Segurança)</li>
                   <li>Cole os dados abaixo e clique em <span className="font-medium">Testar Conexão</span></li>
                 </ol>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label>URL da API *</Label>
+              <Label>Instance ID *</Label>
               <Input
-                value={evolutionUrl}
-                onChange={(e) => setEvolutionUrl(e.target.value)}
-                placeholder="https://api.seudominio.com"
-                type="url"
+                value={zapiInstanceId}
+                onChange={(e) => setZapiInstanceId(e.target.value)}
+                placeholder="3C67AB641C8A..."
               />
-              <p className="text-xs text-muted-foreground">Endereço base da sua instância Evolution</p>
+              <p className="text-xs text-muted-foreground">ID da sua instância Z-API</p>
             </div>
             <div className="space-y-2">
-              <Label>API Key *</Label>
+              <Label>Token *</Label>
               <div className="relative">
                 <Input
-                  value={evolutionKey}
-                  onChange={(e) => setEvolutionKey(e.target.value)}
-                  placeholder="Sua chave de API"
-                  type={showKey ? "text" : "password"}
+                  value={zapiToken}
+                  onChange={(e) => setZapiToken(e.target.value)}
+                  placeholder="Token da instância"
+                  type={showToken ? "text" : "password"}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowKey(!showKey)}
+                  onClick={() => setShowToken(!showToken)}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
-                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <p className="text-xs text-muted-foreground">Chave gerada no painel da Evolution API</p>
+              <p className="text-xs text-muted-foreground">Token gerado na instância Z-API</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Security Token</Label>
+              <div className="relative">
+                <Input
+                  value={zapiSecurityToken}
+                  onChange={(e) => setZapiSecurityToken(e.target.value)}
+                  placeholder="Token de segurança da conta"
+                  type={showSecurity ? "text" : "password"}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSecurity(!showSecurity)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showSecurity ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">Client-Token da conta (opcional, recomendado)</p>
             </div>
           </div>
 
