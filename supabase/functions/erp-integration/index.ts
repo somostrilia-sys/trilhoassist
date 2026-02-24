@@ -231,14 +231,14 @@ Deno.serve(async (req) => {
 
         for (const record of records) {
           const plate = record.placa || record.vehicle_plate || record.plate || "";
-          const name = record.nome || record.name || record.beneficiario || "";
-          const phone = record.telefone || record.phone || record.celular || "";
+          const name = record.nome_associado || record.nome || record.name || record.beneficiario || "";
+          const phone = record.telefone || record.phone || record.celular || record.telefone_residencial || record.telefone_celular || "";
           const cpf = record.cpf || record.documento || "";
-          const vehicleModel = record.modelo || record.vehicle_model || record.veiculo || "";
-          const vehicleYear = record.ano || record.vehicle_year || record.year || null;
+          const vehicleModel = record.modelo || record.vehicle_model || record.veiculo || record.descricao_modelo || "";
+          const vehicleYear = record.ano_modelo || record.ano || record.vehicle_year || record.year || null;
           const vehicleChassis = record.chassi || record.chassis || "";
-          const erpPlan = record.plano || record.plan || record.plan_name || "";
-          const erpCoop = record.cooperativa || record.coop || record.cooperative || "";
+          const erpPlan = record.plano || record.plan || record.plan_name || record.descricao_produto || "";
+          const erpCoop = record.cooperativa || record.coop || record.cooperative || record.descricao_cooperativa || "";
 
           if (!name && !plate) continue; // skip empty records
 
@@ -371,16 +371,16 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
     let created = 0, updated = 0;
     for (const record of records) {
       const plate = record.placa || record.vehicle_plate || record.plate || "";
-      const name = record.nome || record.name || record.beneficiario || "";
+      const name = record.nome_associado || record.nome || record.name || record.beneficiario || "";
       if (!name && !plate) continue;
 
-      const phone = record.telefone || record.phone || record.celular || "";
+      const phone = record.telefone || record.phone || record.celular || record.telefone_residencial || record.telefone_celular || "";
       const cpf = record.cpf || record.documento || "";
-      const vehicleModel = record.modelo || record.vehicle_model || record.veiculo || "";
-      const vehicleYear = record.ano || record.vehicle_year || record.year || null;
+      const vehicleModel = record.modelo || record.vehicle_model || record.veiculo || record.descricao_modelo || "";
+      const vehicleYear = record.ano_modelo || record.ano || record.vehicle_year || record.year || null;
       const vehicleChassis = record.chassi || record.chassis || "";
-      const erpPlan = record.plano || record.plan || record.plan_name || "";
-      const erpCoop = record.cooperativa || record.coop || record.cooperative || "";
+      const erpPlan = record.plano || record.plan || record.plan_name || record.descricao_produto || "";
+      const erpCoop = record.cooperativa || record.coop || record.cooperative || record.descricao_cooperativa || "";
       const planId = planMap.get(erpPlan) || null;
       const cooperativa = coopMap.get(erpCoop) || erpCoop;
 
@@ -431,18 +431,17 @@ function extractRecords(data: any): any[] {
     }
   }
   
-  // Handle Hinova-style response: object with numeric keys like {"284": {...}, "285": {...}}
+  // Handle Hinova-style response: {"0": {record}, "1": {record}, "quantidade_veiculos": 1}
+  // Filter numeric keys whose values are objects
   const keys = Object.keys(data);
-  if (keys.length > 0 && keys.every(k => /^\d+$/.test(k) || typeof data[k] === "object")) {
-    const values = keys.filter(k => typeof data[k] === "object" && data[k] !== null && !Array.isArray(data[k]));
-    if (values.length > 0) {
-      console.log(`extractRecords: found ${values.length} object values with numeric keys (Hinova-style)`);
-      return values.map(k => data[k]);
-    }
+  const numericObjectKeys = keys.filter(k => /^\d+$/.test(k) && typeof data[k] === "object" && data[k] !== null && !Array.isArray(data[k]));
+  if (numericObjectKeys.length > 0) {
+    console.log(`extractRecords: found ${numericObjectKeys.length} records with numeric keys (Hinova-style)`);
+    return numericObjectKeys.map(k => data[k]);
   }
   
   // If response is a single object with typical record fields, wrap it
-  if (data.placa || data.nome || data.name || data.plate) {
+  if (data.placa || data.nome || data.name || data.plate || data.nome_associado) {
     return [data];
   }
   
