@@ -90,6 +90,7 @@ Deno.serve(async (req) => {
       // Create instance in Evolution API
       const webhookUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/whatsapp-webhook?tenant=${tenant_id}&source=evolution`;
 
+      // Step 1: Create instance without webhook (Evolution API expects webhook as string or separate call)
       const createResp = await fetch(`${evolutionUrl}/instance/create`, {
         method: "POST",
         headers: evolutionHeaders,
@@ -97,18 +98,39 @@ Deno.serve(async (req) => {
           instanceName: instance_name,
           integration: "WHATSAPP-BAILEYS",
           qrcode: true,
-          webhook: {
+        }),
+      });
+
+      const createResult = await createResp.json();
+
+      if (!createResp.ok) {
+        console.error("Evolution create error:", createResult);
+        return new Response(
+          JSON.stringify({ error: "Falha ao criar instância", details: createResult }),
+          { status: createResp.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Step 2: Set webhook separately
+      const evoInstanceName = createResult.instance?.instanceName || instance_name;
+      try {
+        await fetch(`${evolutionUrl}/webhook/set/${evoInstanceName}`, {
+          method: "POST",
+          headers: evolutionHeaders,
+          body: JSON.stringify({
             url: webhookUrl,
-            byEvents: false,
-            base64: false,
+            webhook_by_events: false,
+            webhook_base64: false,
             events: [
               "MESSAGES_UPSERT",
               "CONNECTION_UPDATE",
               "QRCODE_UPDATED",
             ],
-          },
-        }),
-      });
+          }),
+        });
+      } catch (whErr) {
+        console.error("Webhook set error (non-fatal):", whErr);
+      }
 
       const createResult = await createResp.json();
 
