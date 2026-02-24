@@ -15,6 +15,7 @@ import {
   Share2, Truck, XCircle, PlayCircle, CheckCircle2, Loader2, Clock, History,
   FilePlus2, RotateCcw, Send, Camera, Mic, Video, File, Link as LinkIcon,
   DollarSign, CalendarIcon, AlertCircle, Search, ChevronsUpDown, Check,
+  ClipboardCopy,
 } from "lucide-react";
 import { Command, CommandInput, CommandList, CommandEmpty, CommandItem, CommandGroup } from "@/components/ui/command";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -640,6 +641,60 @@ export default function ServiceRequestDetail() {
                 Alterar Status
               </Button>
             )}
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => {
+                const extractNeighborhood = (addr: string) => {
+                  const parts = addr.split(",").map(p => p.trim());
+                  return parts.length >= 2 ? parts[1] : addr;
+                };
+                const extractCity = (addr: string) => {
+                  const parts = addr.split(",").map(p => p.trim());
+                  if (parts.length >= 3) return parts.slice(2).join(", ");
+                  return parts.length >= 2 ? parts[1] : addr;
+                };
+                const fmtDate = (d: string) => new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+                const benName = beneficiary?.name || request.requester_name;
+                const clientName = (request as any).clients?.name || "";
+                const trackingLink = request.beneficiary_token
+                  ? `${window.location.origin}/tracking/${request.beneficiary_token}` : "";
+
+                const label = `*ATENDIMENTO*
+
+*BENEFICIÁRIO*: ${benName.toUpperCase()}
+*SOLICITANTE*: ${request.requester_name.toUpperCase()}
+*CONTATO SOLICITANTE*: ${request.requester_phone}${request.requester_phone_secondary ? `\n*CONTATO 2*: ${request.requester_phone_secondary}` : ""}
+*VEÍCULO*: ${(request.vehicle_model || "").toUpperCase()} (${(request.vehicle_plate || "").toUpperCase()})
+*CLIENTE*: ${clientName.toUpperCase()}
+*SERVIÇO*: ${serviceTypeMap[request.service_type] || request.service_type}
+*DATA*: ${fmtDate(request.created_at)}
+*PROTOCOLO*: ${request.protocol}
+
+*DADOS ORIGEM*
+*LOGRADOURO*: ${(request.origin_address || "").toUpperCase()}
+*BAIRRO*: ${extractNeighborhood(request.origin_address || "").toUpperCase()}
+*CIDADE*: ${extractCity(request.origin_address || "").toUpperCase()}
+
+*DADOS DESTINO*
+*LOGRADOURO*: ${(request.destination_address || "").toUpperCase()}
+*BAIRRO*: ${extractNeighborhood(request.destination_address || "").toUpperCase()}
+*CIDADE*: ${extractCity(request.destination_address || "").toUpperCase()}
+
+*DADOS DE ACIONAMENTO*
+*TIPO DE EVENTO*: ${eventTypeMap[request.event_type] || request.event_type}
+${provider ? `*PRESTADOR*: ${provider.name.toUpperCase()}\n*VALOR PRESTADOR*: R$ ${(request.provider_cost || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n*VALOR COBRADO*: R$ ${(request.charged_amount || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}
+${request.estimated_km ? `\n*APROX: ${Math.round(request.estimated_km)}KM*` : ""}
+${trackingLink ? `\nOlá, segue o link com as informações do serviço: ${trackingLink}` : ""}`.trim();
+
+                navigator.clipboard.writeText(label);
+                toast.success("Etiqueta copiada!", { description: "Cole no WhatsApp ou onde desejar." });
+              }}
+            >
+              <ClipboardCopy className="h-4 w-4" />
+              Gerar Etiqueta
+            </Button>
             {canCancel && (
               <Button
                 variant="destructive"
