@@ -422,7 +422,7 @@ export default function WhatsAppQueue() {
                 const { data, error } = await supabase.functions.invoke("send-whatsapp", {
                   body: {
                     phone: selectedConv.phone,
-                    message: "Olá! Para abrir sua solicitação de atendimento, acesse o link: https://trilhoassist.lovable.app/solicitar",
+                    message: "Olá! Para abrir sua solicitação de atendimento, acesse o link: https://trilhoassist.com.br/solicitar",
                     conversation_id: selectedConv.id,
                     tenant_id: tenantId,
                   },
