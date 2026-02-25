@@ -161,7 +161,7 @@ export default function WhatsAppQueue() {
     setSending(true);
     try {
       const { data, error } = await supabase.functions.invoke("send-whatsapp", {
-        body: { phone: selectedConv.phone, message: replyText.trim(), conversation_id: selectedConv.id },
+        body: { phone: selectedConv.phone, message: replyText.trim(), conversation_id: selectedConv.id, tenant_id: tenantId },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -424,6 +424,7 @@ export default function WhatsAppQueue() {
                     phone: selectedConv.phone,
                     message: "Olá! Para abrir sua solicitação de atendimento, acesse o link: https://www.trilhoassist.com.br/solicitar",
                     conversation_id: selectedConv.id,
+                    tenant_id: tenantId,
                   },
                 });
                 if (error) throw error;
