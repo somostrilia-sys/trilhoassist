@@ -91,10 +91,12 @@ const verificationLabels: Record<string, string> = {
   had_collision: "Sofreu colisão?",
   risk_area: "Área de risco ou emergencial?",
   vehicle_starts: "Veículo liga?",
-  on_kickstand: "Na cavalete/descanso?",
-  fallen_over: "Caída no chão?",
-  has_sidecar: "Possui sidecar/baú?",
+  people_count: "Há quantas pessoas no local?",
+  docs_key_available: "Documentos e chave estão no local?",
   truck_type: "Tipo de caminhão",
+  loaded: "Está carregado?",
+  cargo_type: "Qual carga?",
+  moves: "O caminhão movimenta ou não?",
   truck_type_other: "Descrição do tipo",
   has_trailer: "Possui carreta/reboque?",
   trailer_type: "Tipo de carreta",
@@ -103,6 +105,31 @@ const verificationLabels: Record<string, string> = {
   special_cargo: "Carga especial?",
   special_cargo_description: "Descrição da carga especial",
   needs_crane: "Necessita guincho/munck?",
+};
+
+const verificationFieldsByCategory: Record<string, string[]> = {
+  car: [
+    "wheel_locked",
+    "steering_locked",
+    "armored",
+    "vehicle_lowered",
+    "carrying_cargo",
+    "cargo_description",
+    "easy_access",
+    "vehicle_location",
+    "vehicle_location_other",
+    "height_restriction",
+    "height_restriction_value",
+    "key_available",
+    "documents_available",
+    "has_passengers",
+    "passenger_count",
+    "had_collision",
+    "risk_area",
+    "vehicle_starts",
+  ],
+  motorcycle: ["wheel_locked", "people_count", "easy_access", "docs_key_available"],
+  truck: ["truck_type", "loaded", "cargo_type", "moves"],
 };
 
 const vehicleLocationLabels: Record<string, string> = {
@@ -114,7 +141,7 @@ const vehicleLocationLabels: Record<string, string> = {
 };
 
 function formatValue(key: string, value: string): string {
-  if (!value) return "—";
+  if (value === "" || value === "null" || value === "undefined") return "Não informado";
   if (value === "yes") return "Sim";
   if (value === "no") return "Não";
   if (key === "vehicle_location") return vehicleLocationLabels[value] || value;
@@ -532,9 +559,12 @@ export default function ServiceRequestDetail() {
   const st = statusMap[request.status] || statusMap.open;
   const verification = request.verification_answers as Record<string, any> | null;
   const verificationCategory = verification?.category || request.vehicle_category || "car";
-  const verificationEntries = verification
-    ? Object.entries(verification).filter(([k, v]) => k !== "category" && v !== "" && v !== null && v !== undefined)
+  const categoryFields = verificationFieldsByCategory[verificationCategory] || [];
+  const categoryEntries = categoryFields.map((key) => [key, verification?.[key] ?? ""] as [string, any]);
+  const extraEntries = verification
+    ? Object.entries(verification).filter(([key]) => key !== "category" && !categoryFields.includes(key))
     : [];
+  const verificationEntries = [...categoryEntries, ...extraEntries];
 
   const canChangeStatus = (statusTransitions[request.status] || []).length > 0;
   const canCancel = request.status !== "cancelled" && request.status !== "completed" && request.status !== "refunded";
