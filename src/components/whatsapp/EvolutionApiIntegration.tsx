@@ -24,6 +24,7 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
   const [newOperatorId, setNewOperatorId] = useState("");
   const [qrCodeData, setQrCodeData] = useState<Record<string, string>>({});
   const [loadingQr, setLoadingQr] = useState<string | null>(null);
+  const [waitingQr, setWaitingQr] = useState<string | null>(null);
   const [checkingStatus, setCheckingStatus] = useState<string | null>(null);
   const pollingRef = useRef<Record<string, number>>({});
 
@@ -115,6 +116,7 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
           queryClient.invalidateQueries({ queryKey: ["uazapi-instances"] });
           toast({ title: "✅ WhatsApp conectado!" });
         } else if (data?.qrcode) {
+          setWaitingQr(null);
           setQrCodeData((prev) => ({ ...prev, [instanceId]: data.qrcode }));
         }
       } catch {
@@ -173,15 +175,20 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
         },
       });
       if (error) throw error;
+      if (!data?.success && data?.error) throw new Error(data.error);
 
       if (data?.qrcode) {
+        setWaitingQr(null);
         setQrCodeData((prev) => ({ ...prev, [instanceId]: data.qrcode }));
         startQrPolling(instanceId);
       } else if (data?.status === "connected") {
+        setWaitingQr(null);
         toast({ title: "✅ Já conectado!", description: "WhatsApp já está conectado nesta instância." });
         queryClient.invalidateQueries({ queryKey: ["uazapi-instances"] });
       } else {
-        toast({ title: "QR Code indisponível", description: "Tente novamente em alguns segundos.", variant: "destructive" });
+        // QR not ready yet (waiting_qr) — show spinner and start polling
+        setWaitingQr(instanceId);
+        startQrPolling(instanceId);
       }
     } catch (err: any) {
       toast({ title: "Erro ao buscar QR Code", description: err.message, variant: "destructive" });
@@ -378,6 +385,17 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
                         </Button>
                       </div>
                     </div>
+
+                    {/* Waiting for QR Code */}
+                    {waitingQr === inst.id && !qr && !isConnected && (
+                      <div className="flex flex-col items-center gap-3 py-6 bg-muted/30 rounded-lg border">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        <p className="text-sm font-medium">Gerando QR Code...</p>
+                        <p className="text-xs text-muted-foreground">
+                          Aguarde, o QR Code será exibido automaticamente.
+                        </p>
+                      </div>
+                    )}
 
                     {/* QR Code display */}
                     {qr && !isConnected && (
