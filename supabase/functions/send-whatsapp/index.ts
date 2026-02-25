@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
         token: instanceToken,
       };
 
-      const uazapiResp = await fetch(`${serverUrl}/instance/${instanceName}/send-text`, {
+      const uazapiResp = await fetch(`${serverUrl}/message/send-text`, {
         method: "POST",
         headers: uazapiHeaders,
         body: JSON.stringify({
