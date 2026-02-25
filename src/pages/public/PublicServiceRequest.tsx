@@ -4,11 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
   User, Car, MapPin, CheckCircle2, Loader2,
-  Navigation, Send, Search,
+  Navigation, Send, Search, AlertTriangle, FileText,
 } from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
 import CarVerification, { defaultCarVerification } from "@/components/service-request/CarVerification";
@@ -25,6 +26,17 @@ const serviceTypeOptions = [
   { value: "tire_change", label: "Troca de Pneu" },
   { value: "battery", label: "Bateria" },
   { value: "fuel", label: "Combustível" },
+  { value: "other", label: "Outro" },
+];
+
+const eventTypeOptions = [
+  { value: "mechanical_failure", label: "Pane Mecânica" },
+  { value: "accident", label: "Acidente" },
+  { value: "theft", label: "Roubo/Furto" },
+  { value: "flat_tire", label: "Pneu Furado" },
+  { value: "locked_out", label: "Chave Trancada" },
+  { value: "battery_dead", label: "Bateria Descarregada" },
+  { value: "fuel_empty", label: "Sem Combustível" },
   { value: "other", label: "Outro" },
 ];
 
@@ -45,7 +57,6 @@ async function lookupPlate(plate: string): Promise<{ model: string; year: string
   const clean = plate.replace(/[^A-Z0-9]/gi, "").toUpperCase();
   if (clean.length < 7) return null;
   try {
-    // Try Brasil API FIPE
     const res = await fetch(`https://brasilapi.com.br/api/fipe/preco/v1/${clean}`);
     if (res.ok) {
       const data = await res.json();
@@ -77,12 +88,15 @@ export default function PublicServiceRequest() {
   const [form, setForm] = useState({
     requester_name: "",
     requester_phone: "",
+    requester_phone_secondary: "",
     vehicle_plate: "",
     vehicle_model: "",
     vehicle_year: "",
     service_type: "tow_light",
+    event_type: "mechanical_failure",
     origin_address: "",
     destination_address: "",
+    notes: "",
   });
 
   const update = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
@@ -148,6 +162,12 @@ export default function PublicServiceRequest() {
     return errs;
   };
 
+  const getVerificationAnswers = () => {
+    if (vehicleCategory === "car") return { category: "car", ...carVerification };
+    if (vehicleCategory === "motorcycle") return { category: "motorcycle", ...motoVerification };
+    return { category: "truck", ...truckVerification };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const validationErrors = validate();
@@ -168,22 +188,19 @@ export default function PublicServiceRequest() {
           body: JSON.stringify({
             requester_name: form.requester_name,
             requester_phone: form.requester_phone,
+            requester_phone_secondary: form.requester_phone_secondary || null,
             vehicle_plate: form.vehicle_plate,
             vehicle_model: form.vehicle_model,
             vehicle_year: form.vehicle_year,
             vehicle_category: vehicleCategory,
             service_type: form.service_type,
-            event_type: "other",
+            event_type: form.event_type,
             origin_address: form.origin_address,
             origin_lat: originCoords?.lat || null,
             origin_lng: originCoords?.lng || null,
             destination_address: form.destination_address,
-            verification_answers: {
-              category: vehicleCategory,
-              ...(vehicleCategory === "car" ? carVerification :
-                  vehicleCategory === "motorcycle" ? motoVerification :
-                  truckVerification),
-            },
+            notes: form.notes || null,
+            verification_answers: getVerificationAnswers(),
           }),
         }
       );
@@ -208,8 +225,8 @@ export default function PublicServiceRequest() {
       <div className="min-h-screen bg-muted/30 flex items-center justify-center p-4">
         <Card className="max-w-md w-full shadow-lg">
           <CardContent className="pt-8 text-center space-y-4">
-            <div className="mx-auto w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
-              <CheckCircle2 className="h-8 w-8 text-green-600" />
+            <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+              <CheckCircle2 className="h-8 w-8 text-primary" />
             </div>
             <h2 className="text-xl font-bold">Solicitação Enviada!</h2>
             <p className="text-muted-foreground">Seu protocolo é:</p>
@@ -279,6 +296,14 @@ export default function PublicServiceRequest() {
                 />
                 {errors.requester_phone && <p className="text-xs text-destructive">{errors.requester_phone}</p>}
               </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Telefone Secundário</Label>
+                <Input
+                  value={form.requester_phone_secondary}
+                  onChange={(e) => update("requester_phone_secondary", maskPhone(e.target.value))}
+                  placeholder="(00) 00000-0000"
+                />
+              </div>
             </CardContent>
           </Card>
 
@@ -319,16 +344,16 @@ export default function PublicServiceRequest() {
                   />
                   <div className="absolute right-3 top-1/2 -translate-y-1/2">
                     {plateLookupStatus === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                    {plateLookupStatus === "found" && <CheckCircle2 className="h-4 w-4 text-green-600" />}
-                    {plateLookupStatus === "not_found" && <Search className="h-4 w-4 text-amber-500" />}
+                    {plateLookupStatus === "found" && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                    {plateLookupStatus === "not_found" && <Search className="h-4 w-4 text-muted-foreground" />}
                   </div>
                 </div>
                 {errors.vehicle_plate && <p className="text-xs text-destructive">{errors.vehicle_plate}</p>}
                 {plateLookupStatus === "found" && (
-                  <p className="text-xs text-green-600">✓ Veículo encontrado: {form.vehicle_model} {form.vehicle_year}</p>
+                  <p className="text-xs text-primary">✓ Veículo encontrado: {form.vehicle_model} {form.vehicle_year}</p>
                 )}
                 {plateLookupStatus === "not_found" && (
-                  <p className="text-xs text-amber-600">Veículo não encontrado. Preencha manualmente abaixo.</p>
+                  <p className="text-xs text-muted-foreground">Veículo não encontrado. Preencha manualmente abaixo.</p>
                 )}
               </div>
 
@@ -356,14 +381,27 @@ export default function PublicServiceRequest() {
             </CardContent>
           </Card>
 
-          {/* Serviço */}
+          {/* Motivo da Pane / Serviço */}
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
-                <Send className="h-4 w-4" /> Serviço
+                <AlertTriangle className="h-4 w-4" /> Motivo da Pane / Serviço
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-sm">Motivo da Pane *</Label>
+                <Select value={form.event_type} onValueChange={(v) => update("event_type", v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o motivo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {eventTypeOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">Tipo de Serviço *</Label>
                 <Select value={form.service_type} onValueChange={(v) => update("service_type", v)}>
@@ -380,6 +418,26 @@ export default function PublicServiceRequest() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Checklist de Verificação do Veículo */}
+          <div className={vehicleCategory !== "car" ? "hidden" : ""}>
+            <CarVerification
+              data={carVerification}
+              onChange={(field, value) => setCarVerification((prev) => ({ ...prev, [field]: value }))}
+            />
+          </div>
+          <div className={vehicleCategory !== "motorcycle" ? "hidden" : ""}>
+            <MotorcycleVerification
+              data={motoVerification}
+              onChange={(field, value) => setMotoVerification((prev) => ({ ...prev, [field]: value }))}
+            />
+          </div>
+          <div className={vehicleCategory !== "truck" ? "hidden" : ""}>
+            <TruckVerification
+              data={truckVerification}
+              onChange={(field, value) => setTruckVerification((prev) => ({ ...prev, [field]: value }))}
+            />
+          </div>
 
           {/* Endereços */}
           <Card className="shadow-sm">
@@ -435,25 +493,22 @@ export default function PublicServiceRequest() {
             </CardContent>
           </Card>
 
-          {/* Checklist de Verificação */}
-          {vehicleCategory === "car" && (
-            <CarVerification
-              data={carVerification}
-              onChange={(field, value) => setCarVerification((prev) => ({ ...prev, [field]: value }))}
-            />
-          )}
-          {vehicleCategory === "motorcycle" && (
-            <MotorcycleVerification
-              data={motoVerification}
-              onChange={(field, value) => setMotoVerification((prev) => ({ ...prev, [field]: value }))}
-            />
-          )}
-          {vehicleCategory === "truck" && (
-            <TruckVerification
-              data={truckVerification}
-              onChange={(field, value) => setTruckVerification((prev) => ({ ...prev, [field]: value }))}
-            />
-          )}
+          {/* Observações */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
+                <FileText className="h-4 w-4" /> Observações
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={form.notes}
+                onChange={(e) => update("notes", e.target.value)}
+                placeholder="Informações adicionais sobre o atendimento..."
+                rows={4}
+              />
+            </CardContent>
+          </Card>
 
           {/* Submit */}
           <Button type="submit" className="w-full h-12 text-base font-semibold shadow-md" disabled={loading}>
