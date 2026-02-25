@@ -78,9 +78,13 @@ Deno.serve(async (req) => {
 
     // Helper: call GET /instance/connect/{name} to get QR
     async function fetchConnect(instName: string): Promise<any> {
-      const url = `${serverUrl}/instance/connect/${instName}`;
-      console.log("Calling UazapiGO connect:", url);
-      const resp = await fetch(url, { method: "GET", headers: adminHeaders });
+      const url = `${serverUrl}/instance/connect`;
+      console.log("Calling UazapiGO connect (POST):", url, "instanceName:", instName);
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: adminHeaders,
+        body: JSON.stringify({ instanceName: instName }),
+      });
       return { status: resp.status, data: await resp.json() };
     }
 
