@@ -15,6 +15,8 @@ import logoTrilho from "@/assets/logo-trilho.png";
 import CarVerification, { defaultCarVerification } from "@/components/service-request/CarVerification";
 import MotorcycleVerification, { defaultMotorcycleVerification } from "@/components/service-request/MotorcycleVerification";
 import TruckVerification, { defaultTruckVerification } from "@/components/service-request/TruckVerification";
+import AddressAutocomplete from "@/components/service-request/AddressAutocomplete";
+import RouteDistanceDisplay from "@/components/service-request/RouteDistanceDisplay";
 
 type VehicleCategory = "car" | "motorcycle" | "truck";
 
@@ -81,6 +83,7 @@ export default function PublicServiceRequest() {
   const [plateLookupStatus, setPlateLookupStatus] = useState<"idle" | "loading" | "found" | "not_found">("idle");
   const [gpsLoading, setGpsLoading] = useState(false);
   const [originCoords, setOriginCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [carVerification, setCarVerification] = useState(defaultCarVerification);
   const [motoVerification, setMotoVerification] = useState(defaultMotorcycleVerification);
   const [truckVerification, setTruckVerification] = useState(defaultTruckVerification);
@@ -222,6 +225,8 @@ export default function PublicServiceRequest() {
             origin_lat: originCoords?.lat || null,
             origin_lng: originCoords?.lng || null,
             destination_address: form.destination_address,
+            destination_lat: destinationCoords?.lat || null,
+            destination_lng: destinationCoords?.lng || null,
             notes: form.notes || null,
             verification_answers: getVerificationAnswers(),
           }),
@@ -479,13 +484,17 @@ export default function PublicServiceRequest() {
               <div className="space-y-1.5">
                 <Label className="text-sm">Endereço de Origem *</Label>
                 <div className="flex gap-2">
-                  <Input
-                    value={form.origin_address}
-                    onChange={(e) => { update("origin_address", e.target.value); setErrors((p) => ({ ...p, origin_address: "" })); }}
-                    placeholder="Capture pelo GPS ou digite"
-                    className={`flex-1 ${errors.origin_address ? "border-destructive" : ""}`}
-                    readOnly={!!originCoords}
-                  />
+                  <div className="flex-1">
+                    <AddressAutocomplete
+                      value={form.origin_address}
+                      onChange={(v) => { update("origin_address", v); setErrors((p) => ({ ...p, origin_address: "" })); }}
+                      onPlaceSelect={(place) => setOriginCoords({ lat: place.lat, lng: place.lng })}
+                      placeholder="Digite o endereço ou use o GPS"
+                      error={errors.origin_address}
+                      coords={originCoords}
+                      disabled={!!originCoords && gpsLoading}
+                    />
+                  </div>
                   <Button
                     type="button"
                     variant={originCoords ? "default" : "outline"}
@@ -506,19 +515,25 @@ export default function PublicServiceRequest() {
                     Limpar e digitar manualmente
                   </button>
                 )}
-                {errors.origin_address && <p className="text-xs text-destructive">{errors.origin_address}</p>}
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm">Endereço de Destino *</Label>
-                <Input
+                <Label className="text-sm">Endereço de Destino {!["locksmith", "tire_change", "battery"].includes(form.service_type) ? "*" : ""}</Label>
+                <AddressAutocomplete
                   value={form.destination_address}
-                  onChange={(e) => { update("destination_address", e.target.value); setErrors((p) => ({ ...p, destination_address: "" })); }}
-                  placeholder="Rua, Bairro, Cidade - UF"
-                  className={errors.destination_address ? "border-destructive" : ""}
+                  onChange={(v) => { update("destination_address", v); setErrors((p) => ({ ...p, destination_address: "" })); }}
+                  onPlaceSelect={(place) => setDestinationCoords({ lat: place.lat, lng: place.lng })}
+                  placeholder="Digite o endereço de destino"
+                  error={errors.destination_address}
+                  coords={destinationCoords}
                 />
-                {errors.destination_address && <p className="text-xs text-destructive">{errors.destination_address}</p>}
               </div>
+
+              {/* Route Distance */}
+              <RouteDistanceDisplay
+                originCoords={originCoords}
+                destinationCoords={destinationCoords}
+              />
             </CardContent>
           </Card>
 

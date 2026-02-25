@@ -23,6 +23,8 @@ import CarVerification, { defaultCarVerification } from "@/components/service-re
 import MotorcycleVerification, { defaultMotorcycleVerification } from "@/components/service-request/MotorcycleVerification";
 import TruckVerification, { defaultTruckVerification } from "@/components/service-request/TruckVerification";
 import CollisionMediaUpload from "@/components/collision/CollisionMediaUpload";
+import AddressAutocomplete from "@/components/service-request/AddressAutocomplete";
+import RouteDistanceDisplay from "@/components/service-request/RouteDistanceDisplay";
 
 async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
   if (!address.trim()) return null;
@@ -106,6 +108,7 @@ export default function NewServiceRequest() {
     payment_term: "",
     provider_cost: "",
     charged_amount: "",
+    estimated_km: "",
   });
 
   // Parse verification answers from URL params
@@ -403,6 +406,7 @@ export default function NewServiceRequest() {
       payment_method: form.payment_method || null,
       payment_term: form.payment_term || null,
       provider_cost: providerCostNum,
+      estimated_km: form.estimated_km ? parseFloat(String(form.estimated_km)) : null,
       charged_amount: chargedAmountNum,
       operator_id: user?.id,
       tenant_id: tenantId,
@@ -699,59 +703,61 @@ export default function NewServiceRequest() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Endereço de Origem *</Label>
-                    <div className="relative">
-                      <Input value={form.origin_address} onChange={(e) => { update("origin_address", e.target.value); setErrors(prev => ({ ...prev, origin_address: "" })); }} onBlur={() => scheduleGeocode("origin")} placeholder="Rua, Bairro, Cidade - UF" className={`pr-9 ${errors.origin_address ? "border-destructive" : ""}`} />
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        {geoStatus.origin === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                        {geoStatus.origin === "success" && <MapPinned className="h-4 w-4 text-green-600" />}
-                        {geoStatus.origin === "error" && <XCircle className="h-4 w-4 text-destructive" />}
-                      </div>
-                    </div>
-                    {errors.origin_address && <p className="text-xs text-destructive">{errors.origin_address}</p>}
-                    {geoStatus.origin === "success" && geoCoords.origin && (
-                      <p className="text-xs text-green-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Geocodificado: {geoCoords.origin.lat.toFixed(4)}, {geoCoords.origin.lng.toFixed(4)}</p>
-                    )}
-                    {geoStatus.origin === "error" && (
-                      <p className="text-xs text-destructive flex items-center gap-1"><XCircle className="h-3 w-3" /> Endereço não encontrado no mapa</p>
-                    )}
+                    <AddressAutocomplete
+                      value={form.origin_address}
+                      onChange={(v) => { update("origin_address", v); setErrors(prev => ({ ...prev, origin_address: "" })); }}
+                      onPlaceSelect={(place) => {
+                        setGeoCoords(prev => ({ ...prev, origin: { lat: place.lat, lng: place.lng } }));
+                        setGeoStatus(prev => ({ ...prev, origin: "success" }));
+                      }}
+                      placeholder="Digite o endereço de origem"
+                      error={errors.origin_address}
+                      tenantId={tenantId}
+                      coords={geoCoords.origin}
+                    />
                   </div>
                   <div className="space-y-2">
-                    <Label>Endereço de Destino *</Label>
-                    <div className="relative">
-                      <Input value={form.destination_address} onChange={(e) => { update("destination_address", e.target.value); setErrors(prev => ({ ...prev, destination_address: "" })); }} onBlur={() => scheduleGeocode("destination")} placeholder="Rua, Bairro, Cidade - UF" className={`pr-9 ${errors.destination_address ? "border-destructive" : ""}`} />
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        {geoStatus.destination === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                        {geoStatus.destination === "success" && <MapPinned className="h-4 w-4 text-green-600" />}
-                        {geoStatus.destination === "error" && <XCircle className="h-4 w-4 text-destructive" />}
-                      </div>
-                    </div>
-                    {errors.destination_address && <p className="text-xs text-destructive">{errors.destination_address}</p>}
-                    {geoStatus.destination === "success" && geoCoords.destination && (
-                      <p className="text-xs text-green-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Geocodificado: {geoCoords.destination.lat.toFixed(4)}, {geoCoords.destination.lng.toFixed(4)}</p>
-                    )}
-                    {geoStatus.destination === "error" && (
-                      <p className="text-xs text-destructive flex items-center gap-1"><XCircle className="h-3 w-3" /> Endereço não encontrado no mapa</p>
-                    )}
+                    <Label>Endereço de Destino {!["collision", "locksmith", "tire_change", "battery"].includes(form.service_type) ? "*" : ""}</Label>
+                    <AddressAutocomplete
+                      value={form.destination_address}
+                      onChange={(v) => { update("destination_address", v); setErrors(prev => ({ ...prev, destination_address: "" })); }}
+                      onPlaceSelect={(place) => {
+                        setGeoCoords(prev => ({ ...prev, destination: { lat: place.lat, lng: place.lng } }));
+                        setGeoStatus(prev => ({ ...prev, destination: "success" }));
+                      }}
+                      placeholder="Digite o endereço de destino"
+                      error={errors.destination_address}
+                      tenantId={tenantId}
+                      coords={geoCoords.destination}
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label>Nº Origem</Label>
-                    <Input value={form.origin_number} onChange={(e) => update("origin_number", e.target.value)} onBlur={() => scheduleGeocode("origin")} placeholder="Nº" />
+                    <Input value={form.origin_number} onChange={(e) => update("origin_number", e.target.value)} placeholder="Nº" />
                   </div>
                   <div className="space-y-2">
-                    <Label>Complemento Origem</Label>
-                    <Input value={form.origin_complement} onChange={(e) => update("origin_complement", e.target.value)} placeholder="Apto, Bloco..." />
+                    <Label>Complemento / Referência Origem</Label>
+                    <Input value={form.origin_complement} onChange={(e) => update("origin_complement", e.target.value)} placeholder="Apto, Bloco, Referência..." />
                   </div>
                   <div className="space-y-2">
                     <Label>Nº Destino</Label>
-                    <Input value={form.destination_number} onChange={(e) => update("destination_number", e.target.value)} onBlur={() => scheduleGeocode("destination")} placeholder="Nº" />
+                    <Input value={form.destination_number} onChange={(e) => update("destination_number", e.target.value)} placeholder="Nº" />
                   </div>
                   <div className="space-y-2">
-                    <Label>Complemento Destino</Label>
-                    <Input value={form.destination_complement} onChange={(e) => update("destination_complement", e.target.value)} placeholder="Apto, Bloco..." />
+                    <Label>Complemento / Referência Destino</Label>
+                    <Input value={form.destination_complement} onChange={(e) => update("destination_complement", e.target.value)} placeholder="Apto, Bloco, Referência..." />
                   </div>
                 </div>
+
+                {/* Route Distance */}
+                <RouteDistanceDisplay
+                  originCoords={geoCoords.origin}
+                  destinationCoords={geoCoords.destination}
+                  onDistanceCalculated={(km) => update("estimated_km", km)}
+                />
+
                 {/* Additional options */}
                 <div className="flex flex-wrap gap-6 pt-2">
                   <div className="flex items-center gap-2">
