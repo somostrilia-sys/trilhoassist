@@ -82,6 +82,7 @@ export function SendTemplateDialog({ open, onOpenChange, defaultPhone, conversat
         body: {
           phone: phone.trim(),
           conversation_id: conversationId || null,
+          tenant_id: tenantId,
           template: {
             name: selectedTemplate.meta_template_name,
             language: selectedTemplate.language,
