@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Settings2, Building2, Palette, Tag, Bell, Save, Upload, Siren, MessageSquare, RotateCcw } from "lucide-react";
+import { Settings2, Building2, Palette, Tag, Bell, Save, Upload, Siren, MessageSquare, RotateCcw, Smartphone } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
@@ -140,6 +140,8 @@ export default function AjustesSettings() {
   const [followupTimeoutMin, setFollowupTimeoutMin] = useState(3);
   const [followupMaxRetries, setFollowupMaxRetries] = useState(3);
   const [autoNotifySettings, setAutoNotifySettings] = useState<AutoNotifySettings>({});
+  const [uazapiServerUrl, setUazapiServerUrl] = useState("");
+  const [uazapiAdminToken, setUazapiAdminToken] = useState("");
 
   const { data: tenant, isLoading } = useQuery({
     queryKey: ["tenant-settings", tenantId],
@@ -191,6 +193,8 @@ export default function AjustesSettings() {
         };
       }
       setAutoNotifySettings(loadedAutoNotify);
+      setUazapiServerUrl((tenant as any).uazapi_server_url || "");
+      setUazapiAdminToken((tenant as any).uazapi_admin_token || "");
     }
   }, [tenant]);
 
@@ -209,6 +213,8 @@ export default function AjustesSettings() {
         payload = { notification_settings: { ...notifications, auto_notify: autoNotifySettings } };
       } else if (section === "alerts") {
         payload = { alert_dispatch_minutes: alertDispatchMin, alert_late_minutes: alertLateMin, followup_timeout_minutes: followupTimeoutMin, followup_max_retries: followupMaxRetries };
+      } else if (section === "uazapi") {
+        payload = { uazapi_server_url: uazapiServerUrl, uazapi_admin_token: uazapiAdminToken };
       }
 
       const { error } = await supabase
@@ -255,7 +261,7 @@ export default function AjustesSettings() {
       </div>
 
       <Tabs defaultValue="company" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="company" className="flex items-center gap-1.5 text-xs">
             <Building2 className="h-3.5 w-3.5" /> Empresa
           </TabsTrigger>
@@ -270,6 +276,9 @@ export default function AjustesSettings() {
           </TabsTrigger>
           <TabsTrigger value="alerts" className="flex items-center gap-1.5 text-xs">
             <Siren className="h-3.5 w-3.5" /> Alertas
+          </TabsTrigger>
+          <TabsTrigger value="uazapi" className="flex items-center gap-1.5 text-xs">
+            <Smartphone className="h-3.5 w-3.5" /> UazapiGO
           </TabsTrigger>
         </TabsList>
 
@@ -608,6 +617,46 @@ export default function AjustesSettings() {
                 </div>
               </div>
               <Button onClick={() => handleSave("alerts")} disabled={saving}>
+                <Save className="h-4 w-4 mr-2" /> {saving ? "Salvando..." : "Salvar"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* UazapiGO */}
+        <TabsContent value="uazapi">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">UazapiGO</CardTitle>
+              <CardDescription>Configuração do servidor UazapiGO para integração de WhatsApp</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Server URL</Label>
+                  <Input
+                    value={uazapiServerUrl}
+                    onChange={(e) => setUazapiServerUrl(e.target.value)}
+                    placeholder="https://seu-servidor-uazapi.com"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    URL do seu servidor UazapiGO (ex: https://uazapi.seudominio.com.br)
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Admin Token</Label>
+                  <Input
+                    type="password"
+                    value={uazapiAdminToken}
+                    onChange={(e) => setUazapiAdminToken(e.target.value)}
+                    placeholder="Token de administração"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Token global de administração do UazapiGO (header: admintoken)
+                  </p>
+                </div>
+              </div>
+              <Button onClick={() => handleSave("uazapi")} disabled={saving}>
                 <Save className="h-4 w-4 mr-2" /> {saving ? "Salvando..." : "Salvar"}
               </Button>
             </CardContent>
