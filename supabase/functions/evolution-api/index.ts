@@ -118,12 +118,22 @@ Deno.serve(async (req) => {
 
     // Helper: extract QR from connect response
     function extractQr(data: any): { qrcode: string | null; status: string } {
-      const state = data.state || data.instance?.state;
-      if (state === "connected" || state === "open") {
+      // Check all possible "connected" indicators from UazapiGO
+      const state = data.state || data.instance?.state || data.instance?.status || data.status;
+      const isConnected = data.connected === true 
+        || data.loggedIn === true
+        || ["connected", "open", "CONNECTED"].includes(state)
+        || data.response === "Already connected";
+      
+      if (isConnected) {
+        console.log("extractQr: detected connected state", JSON.stringify({ state, connected: data.connected, loggedIn: data.loggedIn, response: data.response }));
         return { qrcode: null, status: "connected" };
       }
+      
       const qr = data.instance?.qrcode || data.qrcode || data.base64 || null;
-      return { qrcode: qr, status: qr ? "qr_ready" : "waiting_qr" };
+      // Filter out empty strings
+      const validQr = qr && qr.length > 10 ? qr : null;
+      return { qrcode: validQr, status: validQr ? "qr_ready" : "waiting_qr" };
     }
 
     // ====== CREATE INSTANCE ======
