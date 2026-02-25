@@ -91,11 +91,8 @@ Deno.serve(async (req) => {
         method: "POST",
         headers: adminHeaders,
         body: JSON.stringify({
-          instanceName: instance_name,
+          name: instance_name,
           webhook: webhookUrl,
-          webhookByEvents: false,
-          webhookBase64: false,
-          qrcode: true,
         }),
       });
 
