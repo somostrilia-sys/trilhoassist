@@ -151,6 +151,26 @@ export default function PublicServiceRequest() {
     );
   };
 
+  const validateChecklist = (): string | null => {
+    const requiredByCategory: Record<VehicleCategory, { fields: string[]; data: Record<string, string> }> = {
+      car: {
+        fields: ["wheel_locked", "steering_locked", "armored", "vehicle_lowered", "carrying_cargo", "easy_access", "vehicle_location", "key_available", "documents_available", "has_passengers", "had_collision", "risk_area", "vehicle_starts"],
+        data: carVerification as any,
+      },
+      motorcycle: {
+        fields: ["wheel_locked", "easy_access", "docs_key_available"],
+        data: motoVerification as any,
+      },
+      truck: {
+        fields: ["truck_type", "loaded", "moves"],
+        data: truckVerification as any,
+      },
+    };
+    const { fields, data } = requiredByCategory[vehicleCategory];
+    const missing = fields.filter((f) => !data[f] || data[f].trim() === "");
+    return missing.length > 0 ? "Preencha todos os campos obrigatórios do checklist de verificação do veículo." : null;
+  };
+
   const validate = (): Record<string, string> => {
     const errs: Record<string, string> = {};
     if (!form.requester_name.trim()) errs.requester_name = "Nome é obrigatório";
@@ -159,6 +179,8 @@ export default function PublicServiceRequest() {
     if (!form.service_type) errs.service_type = "Serviço é obrigatório";
     if (!form.origin_address.trim()) errs.origin_address = "Endereço de origem é obrigatório";
     if (!form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório";
+    const checklistError = validateChecklist();
+    if (checklistError) errs.checklist = checklistError;
     return errs;
   };
 
@@ -438,6 +460,12 @@ export default function PublicServiceRequest() {
               onChange={(field, value) => setTruckVerification((prev) => ({ ...prev, [field]: value }))}
             />
           </div>
+          {errors.checklist && (
+            <div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              {errors.checklist}
+            </div>
+          )}
 
           {/* Endereços */}
           <Card className="shadow-sm">
