@@ -76,6 +76,49 @@ Deno.serve(async (req) => {
       admintoken: adminToken,
     };
 
+    // Helper: call GET /instance/connect/{name} to get QR
+    async function fetchConnect(instName: string): Promise<any> {
+      const url = `${serverUrl}/instance/connect/${instName}`;
+      console.log("Calling UazapiGO connect:", url);
+      const resp = await fetch(url, { method: "GET", headers: adminHeaders });
+      return { status: resp.status, data: await resp.json() };
+    }
+
+    // Helper: recreate instance on UazapiGO and update DB row
+    async function recreateInstance(instName: string, dbId: string, tenantId: string): Promise<any> {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?tenant=${tenantId}&source=uazapi`;
+      const createBody = { name: instName, instanceName: instName, webhook: webhookUrl };
+      console.log("Recreating UazapiGO instance:", JSON.stringify(createBody));
+
+      const resp = await fetch(`${serverUrl}/instance/create`, {
+        method: "POST",
+        headers: adminHeaders,
+        body: JSON.stringify(createBody),
+      });
+      const result = await resp.json();
+      if (!resp.ok) {
+        console.error("UazapiGO recreate error:", result);
+        return null;
+      }
+      const newToken = result.token || result.instance?.token || "";
+      await adminSupabase
+        .from("zapi_instances")
+        .update({ instance_token: newToken, connection_status: "disconnected" })
+        .eq("id", dbId);
+      return result;
+    }
+
+    // Helper: extract QR from connect response
+    function extractQr(data: any): { qrcode: string | null; status: string } {
+      const state = data.state || data.instance?.state;
+      if (state === "connected" || state === "open") {
+        return { qrcode: null, status: "connected" };
+      }
+      const qr = data.qrcode || data.base64 || data.qr || null;
+      return { qrcode: qr, status: qr ? "qr_ready" : "waiting_qr" };
+    }
+
     // ====== CREATE INSTANCE ======
     if (action === "create_instance") {
       if (!instance_name || !tenant_id || !operator_id) {
@@ -88,7 +131,6 @@ Deno.serve(async (req) => {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?tenant=${tenant_id}&source=uazapi`;
 
-      // UazapiGO accepts both "name" and "instanceName" — send both to guarantee compatibility
       const createBody = {
         name: instance_name,
         instanceName: instance_name,
@@ -113,11 +155,9 @@ Deno.serve(async (req) => {
         );
       }
 
-      // UazapiGO returns instance token on creation
       const instanceToken = createResult.token || createResult.instance?.token || "";
       const instanceId = createResult.instance?.instanceName || createResult.instanceName || instance_name;
 
-      // Save to DB
       const { data: dbInstance, error: dbErr } = await adminSupabase
         .from("zapi_instances")
         .insert({
@@ -144,11 +184,24 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Immediately call /instance/connect to get QR code
+      let qrcode: string | null = null;
+      let qrStatus = "waiting_qr";
+      try {
+        const connectResult = await fetchConnect(instance_name);
+        const extracted = extractQr(connectResult.data);
+        qrcode = extracted.qrcode;
+        qrStatus = extracted.status;
+      } catch (e) {
+        console.error("Connect after create error (non-fatal):", e);
+      }
+
       return new Response(
         JSON.stringify({
           success: true,
           instance: dbInstance,
-          qrcode: createResult.qrcode,
+          qrcode,
+          status: qrStatus,
           uazapi_data: createResult,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -178,36 +231,40 @@ Deno.serve(async (req) => {
       }
 
       const instName = (inst as any).instance_name || (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
+      const instTenantId = (inst as any).tenant_id;
 
-      console.log("Fetching QR for instance:", instName, "URL:", `${serverUrl}/instance/qrcode/${instName}`);
+      // Call GET /instance/connect/{instanceName}
+      let connectResult = await fetchConnect(instName);
 
-      const qrResp = await fetch(`${serverUrl}/instance/qrcode/${instName}`, {
-        method: "GET",
-        headers: adminHeaders,
-      });
+      // If 404, instance doesn't exist on UazapiGO — recreate it
+      if (connectResult.status === 404) {
+        console.log("Instance not found on UazapiGO, recreating:", instName);
+        const recreated = await recreateInstance(instName, instance_db_id, instTenantId);
+        if (!recreated) {
+          return new Response(
+            JSON.stringify({ error: "Falha ao recriar instância no UazapiGO" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        // Try connect again after recreation
+        connectResult = await fetchConnect(instName);
+      }
 
-      const qrResult = await qrResp.json();
+      const extracted = extractQr(connectResult.data);
 
-      // Check if already connected
-      const state = qrResult.state || qrResult.instance?.state;
-      if (state === "connected" || state === "open") {
+      if (extracted.status === "connected") {
         await adminSupabase
           .from("zapi_instances")
           .update({ connection_status: "connected" })
           .eq("id", instance_db_id);
-
-        return new Response(
-          JSON.stringify({ success: true, qrcode: null, status: "connected" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
       }
 
       return new Response(
         JSON.stringify({
           success: true,
-          qrcode: qrResult.qrcode || qrResult.base64 || qrResult.qr || null,
-          pairingCode: qrResult.pairingCode || null,
-          status: state || "waiting_qr",
+          qrcode: extracted.qrcode,
+          pairingCode: connectResult.data.pairingCode || null,
+          status: extracted.status,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
