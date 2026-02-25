@@ -85,15 +85,22 @@ Deno.serve(async (req) => {
         });
       }
 
-      const webhookUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/whatsapp-webhook?tenant=${tenant_id}&source=uazapi`;
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?tenant=${tenant_id}&source=uazapi`;
+
+      // UazapiGO accepts both "name" and "instanceName" — send both to guarantee compatibility
+      const createBody = {
+        name: instance_name,
+        instanceName: instance_name,
+        webhook: webhookUrl,
+      };
+
+      console.log("Creating UazapiGO instance:", JSON.stringify(createBody));
 
       const createResp = await fetch(`${serverUrl}/instance/create`, {
         method: "POST",
         headers: adminHeaders,
-        body: JSON.stringify({
-          name: instance_name,
-          webhook: webhookUrl,
-        }),
+        body: JSON.stringify(createBody),
       });
 
       const createResult = await createResp.json();
