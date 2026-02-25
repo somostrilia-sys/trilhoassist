@@ -350,7 +350,8 @@ export default function NewServiceRequest() {
     if (!form.requester_name.trim()) errs.requester_name = "Nome do solicitante é obrigatório";
     if (!form.requester_phone.trim()) errs.requester_phone = "Telefone do solicitante é obrigatório";
     if (!form.origin_address.trim()) errs.origin_address = form.service_type === "collision" ? "Local do ocorrido é obrigatório" : "Endereço de origem é obrigatório";
-    if (form.service_type !== "collision" && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório";
+    const onSiteServices = ["collision", "locksmith", "tire_change", "battery"];
+    if (!onSiteServices.includes(form.service_type) && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório";
     const checklistError = validateChecklist();
     if (checklistError) errs.checklist = checklistError;
     return errs;
