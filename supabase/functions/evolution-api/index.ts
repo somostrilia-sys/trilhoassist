@@ -307,16 +307,56 @@ Deno.serve(async (req) => {
         });
       }
 
-      const instName = (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
+      const instName = (inst as any).instance_name || (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
+      const instToken = (inst as any).instance_token || "";
 
-      const statusResp = await fetch(`${serverUrl}/instance/${instName}/info`, {
-        method: "GET",
-        headers: adminHeaders,
-      });
+      // Try multiple endpoints to check status
+      let state = "unknown";
+      let isConnected = false;
 
-      const statusResult = await statusResp.json();
-      const state = statusResult.state || statusResult.instance?.state || statusResult.connectionState;
-      const isConnected = state === "connected" || state === "open";
+      // 1) Try /instance/connectionState/{name} with instance token
+      try {
+        const statusResp = await fetch(`${serverUrl}/instance/connectionState/${instName}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json", token: instToken },
+        });
+        const statusResult = await statusResp.json();
+        console.log("check_status connectionState response:", JSON.stringify(statusResult));
+        state = statusResult.state || statusResult.instance?.state || statusResult.connectionState || statusResult.status || "unknown";
+      } catch (e) {
+        console.log("connectionState endpoint failed, trying /instance/info:", e);
+      }
+
+      // 2) Fallback: try /instance/{name}/info with admintoken
+      if (state === "unknown") {
+        try {
+          const statusResp2 = await fetch(`${serverUrl}/instance/${instName}/info`, {
+            method: "GET",
+            headers: adminHeaders,
+          });
+          const statusResult2 = await statusResp2.json();
+          console.log("check_status info response:", JSON.stringify(statusResult2));
+          state = statusResult2.state || statusResult2.instance?.state || statusResult2.connectionState || statusResult2.status || "unknown";
+        } catch (e2) {
+          console.error("info endpoint also failed:", e2);
+        }
+      }
+
+      // 3) Fallback: try POST /instance/connect with instance token
+      if (state === "unknown") {
+        try {
+          const connectResult = await fetchConnect(instName, instToken);
+          console.log("check_status connect fallback response:", JSON.stringify(connectResult.data));
+          const extracted = extractQr(connectResult.data);
+          if (extracted.status === "connected") {
+            state = "connected";
+          }
+        } catch (e3) {
+          console.error("connect fallback also failed:", e3);
+        }
+      }
+
+      isConnected = ["connected", "open", "CONNECTED"].includes(state);
 
       await adminSupabase
         .from("zapi_instances")
