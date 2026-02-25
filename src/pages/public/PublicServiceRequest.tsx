@@ -178,7 +178,8 @@ export default function PublicServiceRequest() {
     if (!form.vehicle_plate.trim() || form.vehicle_plate.length < 7) errs.vehicle_plate = "Placa é obrigatória (7 caracteres)";
     if (!form.service_type) errs.service_type = "Serviço é obrigatório";
     if (!form.origin_address.trim()) errs.origin_address = "Endereço de origem é obrigatório";
-    if (!form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório";
+    const onSiteServices = ["locksmith", "tire_change", "battery"];
+    if (!onSiteServices.includes(form.service_type) && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório";
     const checklistError = validateChecklist();
     if (checklistError) errs.checklist = checklistError;
     return errs;
