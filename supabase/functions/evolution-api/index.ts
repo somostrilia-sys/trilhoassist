@@ -177,9 +177,11 @@ Deno.serve(async (req) => {
         });
       }
 
-      const instName = (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
+      const instName = (inst as any).instance_name || (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
 
-      const qrResp = await fetch(`${serverUrl}/instance/${instName}/qrcode`, {
+      console.log("Fetching QR for instance:", instName, "URL:", `${serverUrl}/instance/qrcode/${instName}`);
+
+      const qrResp = await fetch(`${serverUrl}/instance/qrcode/${instName}`, {
         method: "GET",
         headers: adminHeaders,
       });
