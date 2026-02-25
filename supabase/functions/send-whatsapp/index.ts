@@ -135,14 +135,45 @@ Deno.serve(async (req) => {
         token: instanceToken,
       };
 
-      const uazapiResp = await fetch(`${serverUrl}/message/send-text`, {
-        method: "POST",
-        headers: uazapiHeaders,
-        body: JSON.stringify({
-          phone: recipient,
-          message: textToSend,
-        }),
-      });
+      // UazapiGO V2: try multiple endpoint patterns
+      const endpointsToTry = [
+        `${serverUrl}/chat/send-text`,
+        `${serverUrl}/send-text`,
+        `${serverUrl}/message/send-text/${instanceName}`,
+      ];
+
+      let uazapiResp: Response | null = null;
+      let usedEndpoint = "";
+
+      for (const endpoint of endpointsToTry) {
+        console.log("Trying UazapiGO send endpoint:", endpoint);
+        const resp = await fetch(endpoint, {
+          method: "POST",
+          headers: uazapiHeaders,
+          body: JSON.stringify({
+            phone: recipient,
+            message: textToSend,
+          }),
+        });
+        const status = resp.status;
+        if (status !== 405 && status !== 404) {
+          uazapiResp = resp;
+          usedEndpoint = endpoint;
+          break;
+        }
+        // consume body to avoid leak
+        const discarded = await resp.text();
+        console.log(`Endpoint ${endpoint} returned ${status}:`, discarded);
+      }
+
+      if (!uazapiResp) {
+        return new Response(
+          JSON.stringify({ error: "Nenhum endpoint de envio encontrado na UazapiGO. Verifique a versão da API." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log("UazapiGO send succeeded via:", usedEndpoint);
 
       result = await uazapiResp.json();
 
