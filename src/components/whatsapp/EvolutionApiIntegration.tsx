@@ -25,6 +25,14 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
   const [qrCodeData, setQrCodeData] = useState<Record<string, string>>({});
   const [loadingQr, setLoadingQr] = useState<string | null>(null);
   const [checkingStatus, setCheckingStatus] = useState<string | null>(null);
+  const pollingRef = useRef<Record<string, number>>({});
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(pollingRef.current).forEach(clearInterval);
+    };
+  }, []);
 
   // Fetch operators
   const { data: operators = [] } = useQuery({
@@ -55,15 +63,15 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
     enabled: !!tenantId,
   });
 
-  // Fetch evolution instances
+  // Fetch UazapiGO instances
   const { data: instances = [], isLoading } = useQuery({
-    queryKey: ["evolution-instances", tenantId],
+    queryKey: ["uazapi-instances", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("zapi_instances" as any)
         .select("*")
         .eq("tenant_id", tenantId)
-        .eq("api_type", "evolution")
+        .in("api_type", ["uazapi", "evolution"])
         .order("created_at");
       if (error) throw error;
       return data || [];
@@ -76,6 +84,44 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
 
   const getOperatorName = (opId: string) =>
     operators.find((o: any) => o.id === opId)?.name || opId.slice(0, 8);
+
+  // Start polling QR code every 3s
+  const startQrPolling = (instanceId: string) => {
+    // Clear existing
+    if (pollingRef.current[instanceId]) {
+      clearInterval(pollingRef.current[instanceId]);
+    }
+
+    pollingRef.current[instanceId] = setInterval(async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("evolution-api", {
+          body: {
+            action: "get_qrcode",
+            tenant_id: tenantId,
+            instance_db_id: instanceId,
+          },
+        });
+        if (error) return;
+
+        if (data?.status === "connected") {
+          // Connected! Stop polling
+          clearInterval(pollingRef.current[instanceId]);
+          delete pollingRef.current[instanceId];
+          setQrCodeData((prev) => {
+            const copy = { ...prev };
+            delete copy[instanceId];
+            return copy;
+          });
+          queryClient.invalidateQueries({ queryKey: ["uazapi-instances"] });
+          toast({ title: "✅ WhatsApp conectado!" });
+        } else if (data?.qrcode) {
+          setQrCodeData((prev) => ({ ...prev, [instanceId]: data.qrcode }));
+        }
+      } catch {
+        // Silently retry
+      }
+    }, 3000) as unknown as number;
+  };
 
   const handleCreate = async () => {
     if (!newInstanceName.trim() || !newOperatorId) {
@@ -95,11 +141,15 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      queryClient.invalidateQueries({ queryKey: ["evolution-instances"] });
+      queryClient.invalidateQueries({ queryKey: ["uazapi-instances"] });
 
-      // Show QR code if available
-      if (data?.qrcode?.base64) {
-        setQrCodeData((prev) => ({ ...prev, [data.instance.id]: data.qrcode.base64 }));
+      // Show QR code and start polling
+      if (data?.qrcode?.base64 || data?.qrcode) {
+        const qr = typeof data.qrcode === "string" ? data.qrcode : data.qrcode.base64;
+        if (qr) {
+          setQrCodeData((prev) => ({ ...prev, [data.instance.id]: qr }));
+          startQrPolling(data.instance.id);
+        }
       }
 
       toast({ title: "Instância criada! Escaneie o QR Code para conectar." });
@@ -126,9 +176,10 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
 
       if (data?.qrcode) {
         setQrCodeData((prev) => ({ ...prev, [instanceId]: data.qrcode }));
-      } else if (data?.status === "open") {
+        startQrPolling(instanceId);
+      } else if (data?.status === "connected") {
         toast({ title: "✅ Já conectado!", description: "WhatsApp já está conectado nesta instância." });
-        queryClient.invalidateQueries({ queryKey: ["evolution-instances"] });
+        queryClient.invalidateQueries({ queryKey: ["uazapi-instances"] });
       } else {
         toast({ title: "QR Code indisponível", description: "Tente novamente em alguns segundos.", variant: "destructive" });
       }
@@ -151,7 +202,7 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
       });
       if (error) throw error;
 
-      queryClient.invalidateQueries({ queryKey: ["evolution-instances"] });
+      queryClient.invalidateQueries({ queryKey: ["uazapi-instances"] });
       toast({
         title: data?.connected ? "✅ Conectado!" : "❌ Desconectado",
         description: `Estado: ${data?.state || "desconhecido"}`,
@@ -166,6 +217,12 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
   const handleDelete = async (instanceId: string) => {
     if (!confirm("Remover esta instância? O WhatsApp será desconectado.")) return;
     try {
+      // Stop polling
+      if (pollingRef.current[instanceId]) {
+        clearInterval(pollingRef.current[instanceId]);
+        delete pollingRef.current[instanceId];
+      }
+
       const { error } = await supabase.functions.invoke("evolution-api", {
         body: {
           action: "delete_instance",
@@ -180,7 +237,7 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
         delete copy[instanceId];
         return copy;
       });
-      queryClient.invalidateQueries({ queryKey: ["evolution-instances"] });
+      queryClient.invalidateQueries({ queryKey: ["uazapi-instances"] });
       toast({ title: "Instância removida" });
     } catch (err: any) {
       toast({ title: "Erro ao remover", description: err.message, variant: "destructive" });
@@ -204,7 +261,7 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
         delete copy[instanceId];
         return copy;
       });
-      queryClient.invalidateQueries({ queryKey: ["evolution-instances"] });
+      queryClient.invalidateQueries({ queryKey: ["uazapi-instances"] });
       toast({ title: "WhatsApp desconectado" });
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
@@ -219,7 +276,7 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
                 <QrCode className="h-5 w-5 text-green-600" />
-                Evolution API — Instâncias com QR Code
+                UazapiGO — Instâncias com QR Code
               </CardTitle>
               <CardDescription>
                 Cada operador conecta seu WhatsApp escaneando um QR Code diretamente no sistema. Sem custo por instância.
@@ -238,8 +295,9 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
               <div>
                 <p className="text-sm font-medium">Como funciona</p>
                 <ol className="text-xs text-muted-foreground list-decimal ml-4 mt-1 space-y-1">
+                  <li>Configure o <span className="font-medium">Server URL</span> e <span className="font-medium">Admin Token</span> do UazapiGO nos Ajustes</li>
                   <li>Crie uma instância abaixo e associe a um operador</li>
-                  <li>Um QR Code será gerado automaticamente</li>
+                  <li>Um QR Code será gerado automaticamente (atualiza a cada 3s)</li>
                   <li>O operador escaneia o QR Code com o WhatsApp do celular</li>
                   <li>Pronto! Mensagens enviadas no CRM sairão pelo WhatsApp do operador</li>
                 </ol>
@@ -335,13 +393,10 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
                         <p className="text-xs text-muted-foreground">
                           Abra o WhatsApp → Menu → Aparelhos conectados → Conectar
                         </p>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleGetQrCode(inst.id)}
-                        >
-                          <RefreshCw className="h-3 w-3 mr-1" /> Atualizar QR Code
-                        </Button>
+                        <p className="text-xs text-green-600 flex items-center gap-1">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Aguardando conexão... (atualiza automaticamente)
+                        </p>
                       </div>
                     )}
                   </div>
@@ -396,7 +451,7 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Vantagens da Evolution API</CardTitle>
+          <CardTitle className="text-sm">Vantagens do UazapiGO</CardTitle>
         </CardHeader>
         <CardContent>
           <ul className="text-sm text-muted-foreground space-y-2">
@@ -404,16 +459,16 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
               <CheckCircle2 className="h-4 w-4 text-green-600" /> QR Code direto no sistema — sem acessar painel externo
             </li>
             <li className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-600" /> Sem custo por instância (open-source)
+              <CheckCircle2 className="h-4 w-4 text-green-600" /> Sem custo por instância (self-hosted)
             </li>
             <li className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-green-600" /> Cada operador usa seu próprio número
             </li>
             <li className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-600" /> Webhook automático configurado
+              <CheckCircle2 className="h-4 w-4 text-green-600" /> Webhook automático configurado na criação
             </li>
             <li className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-600" /> Compatível com Z-API (ambos podem coexistir)
+              <CheckCircle2 className="h-4 w-4 text-green-600" /> Polling automático do QR Code (3s)
             </li>
           </ul>
         </CardContent>

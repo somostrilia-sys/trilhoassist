@@ -42,40 +42,38 @@ Deno.serve(async (req) => {
 
     const { action, tenant_id, operator_id, instance_name, instance_db_id } = await req.json();
 
-    // Get Evolution API config: first try tenant-level, then fallback to global env
-    let evolutionUrl = "";
-    let evolutionApiKey = "";
+    // Get UazapiGO config: tenant-level first, then global env fallback
+    let serverUrl = "";
+    let adminToken = "";
 
     if (tenant_id) {
       const { data: tenant } = await adminSupabase
         .from("tenants")
-        .select("evolution_api_url, evolution_api_key")
+        .select("uazapi_server_url, uazapi_admin_token")
         .eq("id", tenant_id)
         .single();
 
       if (tenant) {
-        evolutionUrl = (tenant as any).evolution_api_url || "";
-        evolutionApiKey = (tenant as any).evolution_api_key || "";
+        serverUrl = (tenant as any).uazapi_server_url || "";
+        adminToken = (tenant as any).uazapi_admin_token || "";
       }
     }
 
-    // Fallback to global secrets
-    if (!evolutionUrl) evolutionUrl = Deno.env.get("EVOLUTION_API_URL") || "";
-    if (!evolutionApiKey) evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY") || "";
+    if (!serverUrl) serverUrl = Deno.env.get("UAZAPI_SERVER_URL") || Deno.env.get("EVOLUTION_API_URL") || "";
+    if (!adminToken) adminToken = Deno.env.get("UAZAPI_ADMIN_TOKEN") || Deno.env.get("EVOLUTION_API_KEY") || "";
 
-    if (!evolutionUrl || !evolutionApiKey) {
+    if (!serverUrl || !adminToken) {
       return new Response(
-        JSON.stringify({ error: "Evolution API não configurada." }),
+        JSON.stringify({ error: "UazapiGO não configurada. Vá em Integrações e configure Server URL e Admin Token." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Normalize URL (remove trailing slash)
-    evolutionUrl = evolutionUrl.replace(/\/$/, "");
+    serverUrl = serverUrl.replace(/\/$/, "");
 
-    const evolutionHeaders = {
+    const adminHeaders = {
       "Content-Type": "application/json",
-      apikey: evolutionApiKey,
+      admintoken: adminToken,
     };
 
     // ====== CREATE INSTANCE ======
@@ -87,16 +85,16 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Create instance in Evolution API
-      const webhookUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/whatsapp-webhook?tenant=${tenant_id}&source=evolution`;
+      const webhookUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/whatsapp-webhook?tenant=${tenant_id}&source=uazapi`;
 
-      // Step 1: Create instance without webhook (Evolution API expects webhook as string or separate call)
-      const createResp = await fetch(`${evolutionUrl}/instance/create`, {
+      const createResp = await fetch(`${serverUrl}/instance/create`, {
         method: "POST",
-        headers: evolutionHeaders,
+        headers: adminHeaders,
         body: JSON.stringify({
           instanceName: instance_name,
-          integration: "WHATSAPP-BAILEYS",
+          webhook: webhookUrl,
+          webhookByEvents: false,
+          webhookBase64: false,
           qrcode: true,
         }),
       });
@@ -104,43 +102,16 @@ Deno.serve(async (req) => {
       const createResult = await createResp.json();
 
       if (!createResp.ok) {
-        console.error("Evolution create error:", createResult);
+        console.error("UazapiGO create error:", createResult);
         return new Response(
           JSON.stringify({ error: "Falha ao criar instância", details: createResult }),
           { status: createResp.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Step 2: Set webhook separately
-      const evoInstanceName = createResult.instance?.instanceName || instance_name;
-      try {
-        await fetch(`${evolutionUrl}/webhook/set/${evoInstanceName}`, {
-          method: "POST",
-          headers: evolutionHeaders,
-          body: JSON.stringify({
-            url: webhookUrl,
-            webhook_by_events: false,
-            webhook_base64: false,
-            events: [
-              "MESSAGES_UPSERT",
-              "CONNECTION_UPDATE",
-              "QRCODE_UPDATED",
-            ],
-          }),
-        });
-      } catch (whErr) {
-        console.error("Webhook set error (non-fatal):", whErr);
-      }
-
-      const createResult = await createResp.json();
-
-      if (!createResp.ok) {
-        console.error("Evolution create error:", createResult);
-        return new Response(
-          JSON.stringify({ error: "Falha ao criar instância", details: createResult }),
-          { status: createResp.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      // UazapiGO returns instance token on creation
+      const instanceToken = createResult.token || createResult.instance?.token || "";
+      const instanceId = createResult.instance?.instanceName || createResult.instanceName || instance_name;
 
       // Save to DB
       const { data: dbInstance, error: dbErr } = await adminSupabase
@@ -149,11 +120,12 @@ Deno.serve(async (req) => {
           tenant_id,
           operator_id,
           instance_name,
-          api_type: "evolution",
-          evolution_instance_name: instance_name,
-          evolution_instance_id: createResult.instance?.instanceName || instance_name,
-          zapi_instance_id: createResult.instance?.instanceName || instance_name,
-          zapi_token: "evolution",
+          api_type: "uazapi",
+          evolution_instance_name: instanceId,
+          evolution_instance_id: instanceId,
+          zapi_instance_id: instanceId,
+          zapi_token: "uazapi",
+          instance_token: instanceToken,
           connection_status: "disconnected",
           active: true,
         })
@@ -163,7 +135,7 @@ Deno.serve(async (req) => {
       if (dbErr) {
         console.error("DB insert error:", dbErr);
         return new Response(
-          JSON.stringify({ error: "Instância criada na Evolution mas erro ao salvar no banco", details: dbErr }),
+          JSON.stringify({ error: "Instância criada mas erro ao salvar no banco", details: dbErr }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -173,7 +145,7 @@ Deno.serve(async (req) => {
           success: true,
           instance: dbInstance,
           qrcode: createResult.qrcode,
-          evolution_data: createResult,
+          uazapi_data: createResult,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -201,22 +173,35 @@ Deno.serve(async (req) => {
         });
       }
 
-      const evoName = (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
+      const instName = (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
 
-      // Connect to get QR code
-      const connectResp = await fetch(
-        `${evolutionUrl}/instance/connect/${evoName}`,
-        { method: "GET", headers: evolutionHeaders }
-      );
+      const qrResp = await fetch(`${serverUrl}/instance/${instName}/qrcode`, {
+        method: "GET",
+        headers: adminHeaders,
+      });
 
-      const connectResult = await connectResp.json();
+      const qrResult = await qrResp.json();
+
+      // Check if already connected
+      const state = qrResult.state || qrResult.instance?.state;
+      if (state === "connected" || state === "open") {
+        await adminSupabase
+          .from("zapi_instances")
+          .update({ connection_status: "connected" })
+          .eq("id", instance_db_id);
+
+        return new Response(
+          JSON.stringify({ success: true, qrcode: null, status: "connected" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       return new Response(
         JSON.stringify({
           success: true,
-          qrcode: connectResult.base64 || connectResult.qrcode?.base64 || null,
-          pairingCode: connectResult.pairingCode || null,
-          status: connectResult.instance?.state || "unknown",
+          qrcode: qrResult.qrcode || qrResult.base64 || qrResult.qr || null,
+          pairingCode: qrResult.pairingCode || null,
+          status: state || "waiting_qr",
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -244,17 +229,17 @@ Deno.serve(async (req) => {
         });
       }
 
-      const evoName = (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
+      const instName = (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
 
-      const statusResp = await fetch(
-        `${evolutionUrl}/instance/connectionState/${evoName}`,
-        { method: "GET", headers: evolutionHeaders }
-      );
+      const statusResp = await fetch(`${serverUrl}/instance/${instName}/info`, {
+        method: "GET",
+        headers: adminHeaders,
+      });
 
       const statusResult = await statusResp.json();
-      const isConnected = statusResult.instance?.state === "open";
+      const state = statusResult.state || statusResult.instance?.state || statusResult.connectionState;
+      const isConnected = state === "connected" || state === "open";
 
-      // Update DB status
       await adminSupabase
         .from("zapi_instances")
         .update({ connection_status: isConnected ? "connected" : "disconnected" })
@@ -264,7 +249,7 @@ Deno.serve(async (req) => {
         JSON.stringify({
           success: true,
           connected: isConnected,
-          state: statusResult.instance?.state || "unknown",
+          state: state || "unknown",
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -286,19 +271,17 @@ Deno.serve(async (req) => {
         .single();
 
       if (inst) {
-        const evoName = (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
+        const instName = (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
 
-        // Delete from Evolution API (best effort)
         try {
-          await fetch(`${evolutionUrl}/instance/delete/${evoName}`, {
+          await fetch(`${serverUrl}/instance/${instName}/delete`, {
             method: "DELETE",
-            headers: evolutionHeaders,
+            headers: adminHeaders,
           });
         } catch (e) {
-          console.error("Evolution delete error (non-fatal):", e);
+          console.error("UazapiGO delete error (non-fatal):", e);
         }
 
-        // Delete from DB
         await adminSupabase.from("zapi_instances").delete().eq("id", instance_db_id);
       }
 
@@ -324,12 +307,16 @@ Deno.serve(async (req) => {
         .single();
 
       if (inst) {
-        const evoName = (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
+        const instName = (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
 
-        await fetch(`${evolutionUrl}/instance/logout/${evoName}`, {
-          method: "DELETE",
-          headers: evolutionHeaders,
-        });
+        try {
+          await fetch(`${serverUrl}/instance/${instName}/logout`, {
+            method: "DELETE",
+            headers: adminHeaders,
+          });
+        } catch (e) {
+          console.error("UazapiGO logout error:", e);
+        }
 
         await adminSupabase
           .from("zapi_instances")
@@ -348,7 +335,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("Evolution API error:", err);
+    console.error("UazapiGO API error:", err);
     return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

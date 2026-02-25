@@ -148,27 +148,63 @@ function buildCancellationLabel(sr: any, client: any, reason: string): string {
 *CANCELADO EM*: ${formatDate(new Date().toISOString())}`;
 }
 
-// ========== SEND VIA EVOLUTION API ==========
-async function sendViaEvolution(groupId: string, message: string): Promise<{ ok: boolean; result: any }> {
-  const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
-  const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
-  const EVOLUTION_INSTANCE = Deno.env.get("EVOLUTION_INSTANCE") || "default";
+// ========== SEND VIA UAZAPI GO ==========
+async function sendViaUazapi(
+  adminSupabase: any,
+  tenantId: string,
+  groupId: string,
+  message: string
+): Promise<{ ok: boolean; result: any }> {
+  // Get UazapiGO config from tenant
+  let serverUrl = "";
+  let instanceToken = "";
+  let instanceName = "";
 
-  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
-    return { ok: false, result: { error: "Evolution API not configured" } };
+  if (tenantId) {
+    const { data: tenant } = await adminSupabase
+      .from("tenants")
+      .select("uazapi_server_url, uazapi_admin_token")
+      .eq("id", tenantId)
+      .single();
+
+    if (tenant) {
+      serverUrl = (tenant as any).uazapi_server_url || "";
+    }
+
+    // Find any active UazapiGO instance for this tenant to send group messages
+    const { data: inst } = await adminSupabase
+      .from("zapi_instances")
+      .select("instance_token, evolution_instance_name")
+      .eq("tenant_id", tenantId)
+      .in("api_type", ["uazapi", "evolution"])
+      .eq("active", true)
+      .eq("connection_status", "connected")
+      .limit(1)
+      .single();
+
+    if (inst) {
+      instanceToken = (inst as any).instance_token || "";
+      instanceName = (inst as any).evolution_instance_name || "";
+    }
   }
 
-  const baseUrl = EVOLUTION_API_URL.replace(/\/$/, "");
+  if (!serverUrl) serverUrl = Deno.env.get("UAZAPI_SERVER_URL") || Deno.env.get("EVOLUTION_API_URL") || "";
 
-  const response = await fetch(`${baseUrl}/message/sendText/${EVOLUTION_INSTANCE}`, {
+  if (!serverUrl || !instanceToken || !instanceName) {
+    return { ok: false, result: { error: "UazapiGO not configured or no connected instance" } };
+  }
+
+  const baseUrl = serverUrl.replace(/\/$/, "");
+
+  const response = await fetch(`${baseUrl}/instance/${instanceName}/send-text`, {
     method: "POST",
     headers: {
-      apikey: EVOLUTION_API_KEY,
+      token: instanceToken,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      number: groupId,
-      text: message,
+      phone: groupId,
+      message: message,
     }),
   });
 
@@ -313,11 +349,11 @@ Deno.serve(async (req) => {
         });
     }
 
-    // Send via Evolution API
-    const { ok, result } = await sendViaEvolution(groupId, message);
+    // Send via UazapiGO
+    const { ok, result } = await sendViaUazapi(adminSupabase, sr.tenant_id, groupId, message);
 
     if (!ok) {
-      console.error("Evolution API error:", result);
+      console.error("UazapiGO error:", result);
       return new Response(
         JSON.stringify({ error: "Failed to send label", details: result }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
