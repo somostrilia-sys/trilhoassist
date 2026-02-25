@@ -11,6 +11,9 @@ import {
   Navigation, Send, Search,
 } from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
+import CarVerification, { defaultCarVerification } from "@/components/service-request/CarVerification";
+import MotorcycleVerification, { defaultMotorcycleVerification } from "@/components/service-request/MotorcycleVerification";
+import TruckVerification, { defaultTruckVerification } from "@/components/service-request/TruckVerification";
 
 type VehicleCategory = "car" | "motorcycle" | "truck";
 
@@ -67,6 +70,9 @@ export default function PublicServiceRequest() {
   const [plateLookupStatus, setPlateLookupStatus] = useState<"idle" | "loading" | "found" | "not_found">("idle");
   const [gpsLoading, setGpsLoading] = useState(false);
   const [originCoords, setOriginCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [carVerification, setCarVerification] = useState(defaultCarVerification);
+  const [motoVerification, setMotoVerification] = useState(defaultMotorcycleVerification);
+  const [truckVerification, setTruckVerification] = useState(defaultTruckVerification);
 
   const [form, setForm] = useState({
     requester_name: "",
@@ -172,7 +178,12 @@ export default function PublicServiceRequest() {
             origin_lat: originCoords?.lat || null,
             origin_lng: originCoords?.lng || null,
             destination_address: form.destination_address,
-            verification_answers: { category: vehicleCategory },
+            verification_answers: {
+              category: vehicleCategory,
+              ...(vehicleCategory === "car" ? carVerification :
+                  vehicleCategory === "motorcycle" ? motoVerification :
+                  truckVerification),
+            },
           }),
         }
       );
@@ -423,6 +434,26 @@ export default function PublicServiceRequest() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Checklist de Verificação */}
+          {vehicleCategory === "car" && (
+            <CarVerification
+              data={carVerification}
+              onChange={(field, value) => setCarVerification((prev) => ({ ...prev, [field]: value }))}
+            />
+          )}
+          {vehicleCategory === "motorcycle" && (
+            <MotorcycleVerification
+              data={motoVerification}
+              onChange={(field, value) => setMotoVerification((prev) => ({ ...prev, [field]: value }))}
+            />
+          )}
+          {vehicleCategory === "truck" && (
+            <TruckVerification
+              data={truckVerification}
+              onChange={(field, value) => setTruckVerification((prev) => ({ ...prev, [field]: value }))}
+            />
+          )}
 
           {/* Submit */}
           <Button type="submit" className="w-full h-12 text-base font-semibold shadow-md" disabled={loading}>
