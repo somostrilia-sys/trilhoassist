@@ -1238,6 +1238,8 @@ export type Database = {
           slug: string
           state: string | null
           street: string | null
+          uazapi_admin_token: string | null
+          uazapi_server_url: string | null
           updated_at: string
           zapi_instance_id: string | null
           zapi_security_token: string | null
@@ -1272,6 +1274,8 @@ export type Database = {
           slug: string
           state?: string | null
           street?: string | null
+          uazapi_admin_token?: string | null
+          uazapi_server_url?: string | null
           updated_at?: string
           zapi_instance_id?: string | null
           zapi_security_token?: string | null
@@ -1306,6 +1310,8 @@ export type Database = {
           slug?: string
           state?: string | null
           street?: string | null
+          uazapi_admin_token?: string | null
+          uazapi_server_url?: string | null
           updated_at?: string
           zapi_instance_id?: string | null
           zapi_security_token?: string | null
@@ -1761,6 +1767,7 @@ export type Database = {
           evolution_instance_name: string | null
           id: string
           instance_name: string
+          instance_token: string | null
           operator_id: string
           tenant_id: string
           updated_at: string
@@ -1777,6 +1784,7 @@ export type Database = {
           evolution_instance_name?: string | null
           id?: string
           instance_name?: string
+          instance_token?: string | null
           operator_id: string
           tenant_id: string
           updated_at?: string
@@ -1793,6 +1801,7 @@ export type Database = {
           evolution_instance_name?: string | null
           id?: string
           instance_name?: string
+          instance_token?: string | null
           operator_id?: string
           tenant_id?: string
           updated_at?: string

@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
 
   const url = new URL(req.url);
   const tenantSlug = url.searchParams.get("tenant");
-  const source = url.searchParams.get("source"); // "evolution" or null (z-api)
+  const source = url.searchParams.get("source"); // "uazapi", "evolution" or null (z-api)
 
   // Webhook verification (GET)
   if (req.method === "GET") {
@@ -37,9 +37,9 @@ Deno.serve(async (req) => {
 
     const payload = await req.json();
 
-    // ========== EVOLUTION API EVENTS ==========
-    if (source === "evolution") {
-      return await handleEvolutionWebhook(supabase, payload, tenantSlug, url);
+    // ========== UAZAPI GO / EVOLUTION API EVENTS ==========
+    if (source === "uazapi" || source === "evolution") {
+      return await handleUazapiWebhook(supabase, payload, tenantSlug, url);
     }
 
     // ========== Z-API EVENT ROUTING (legacy) ==========
@@ -96,22 +96,22 @@ Deno.serve(async (req) => {
   }
 });
 
-// ========== EVOLUTION API WEBHOOK HANDLER ==========
-async function handleEvolutionWebhook(supabase: any, payload: any, tenantSlug: string | null, url: URL) {
+// ========== UAZAPI GO WEBHOOK HANDLER ==========
+async function handleUazapiWebhook(supabase: any, payload: any, tenantSlug: string | null, url: URL) {
   const event = payload.event;
 
   // Handle connection updates
-  if (event === "connection.update") {
-    const instanceName = payload.instance;
-    const state = payload.data?.state;
+  if (event === "connection.update" || event === "CONNECTION_UPDATE") {
+    const instanceName = payload.instance || payload.instanceName;
+    const state = payload.data?.state || payload.state;
 
     if (instanceName && state) {
-      const connStatus = state === "open" ? "connected" : "disconnected";
+      const connStatus = (state === "open" || state === "connected") ? "connected" : "disconnected";
       await supabase
         .from("zapi_instances")
         .update({ connection_status: connStatus })
         .eq("evolution_instance_name", instanceName)
-        .eq("api_type", "evolution");
+        .in("api_type", ["uazapi", "evolution"]);
     }
 
     return new Response(JSON.stringify({ success: true, type: "connection_update" }), {
@@ -121,15 +121,15 @@ async function handleEvolutionWebhook(supabase: any, payload: any, tenantSlug: s
   }
 
   // Handle QR code updates (just acknowledge)
-  if (event === "qrcode.updated") {
+  if (event === "qrcode.updated" || event === "QRCODE_UPDATED") {
     return new Response(JSON.stringify({ success: true, type: "qrcode_update" }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  // Handle messages
-  if (event === "messages.upsert") {
+  // Handle messages — UazapiGO format: { event: "messages.upsert", data: { key, message, pushName, ... } }
+  if (event === "messages.upsert" || event === "MESSAGES_UPSERT" || event === "message" || event === "onMessage") {
     if (!tenantSlug) {
       return new Response(JSON.stringify({ error: "tenant query param required" }), {
         status: 400,
@@ -137,7 +137,7 @@ async function handleEvolutionWebhook(supabase: any, payload: any, tenantSlug: s
       });
     }
 
-    // Resolve tenant (by slug or ID)
+    // Resolve tenant
     let tenantId = "";
     const { data: tenant } = await supabase
       .from("tenants")
@@ -165,7 +165,7 @@ async function handleEvolutionWebhook(supabase: any, payload: any, tenantSlug: s
       });
     }
 
-    const normalized = normalizeEvolutionPayload(payload);
+    const normalized = normalizeUazapiPayload(payload);
 
     if (!normalized.phone || normalized.isGroup || normalized.fromMe) {
       return new Response(JSON.stringify({ success: true, type: "skipped" }), {
@@ -174,23 +174,23 @@ async function handleEvolutionWebhook(supabase: any, payload: any, tenantSlug: s
       });
     }
 
-    // Try to route to operator by instance name
-    const instanceName = payload.instance;
+    // Route to operator by instance name
+    const instanceName = payload.instance || payload.instanceName;
     let routeToOperator: string | null = null;
     let routeToInstanceDbId: string | null = null;
 
     if (instanceName) {
-      const { data: evoInst } = await supabase
+      const { data: uazInst } = await supabase
         .from("zapi_instances")
         .select("id, operator_id")
         .eq("evolution_instance_name", instanceName)
-        .eq("api_type", "evolution")
+        .in("api_type", ["uazapi", "evolution"])
         .eq("active", true)
         .single();
 
-      if (evoInst) {
-        routeToOperator = evoInst.operator_id;
-        routeToInstanceDbId = evoInst.id;
+      if (uazInst) {
+        routeToOperator = uazInst.operator_id;
+        routeToInstanceDbId = uazInst.id;
       }
     }
 
@@ -379,12 +379,27 @@ interface NormalizedMessage {
   fromMe?: boolean;
 }
 
-function normalizeEvolutionPayload(payload: any): NormalizedMessage {
-  const data = payload.data;
+function normalizeUazapiPayload(payload: any): NormalizedMessage {
+  // UazapiGO V2 format: { event, data: { key: { remoteJid, fromMe, id }, message: {...}, pushName }, instance }
+  const data = payload.data || payload;
   if (!data) return { phone: "" };
 
   const key = data.key;
-  if (!key) return { phone: "" };
+  if (!key) {
+    // Fallback: direct phone field (alternative UazapiGO format)
+    if (data.phone || payload.phone) {
+      return {
+        phone: (data.phone || payload.phone || "").replace(/\D/g, ""),
+        name: data.pushName || data.senderName || payload.pushName || "",
+        message: data.body || data.text || data.message || payload.body || payload.message || "",
+        message_type: "text",
+        external_id: data.id || payload.id || data.messageId || payload.messageId,
+        isGroup: false,
+        fromMe: data.fromMe === true || payload.fromMe === true,
+      };
+    }
+    return { phone: "" };
+  }
 
   const phone = (key.remoteJid || "").replace("@s.whatsapp.net", "").replace("@g.us", "");
   const isGroup = (key.remoteJid || "").includes("@g.us");

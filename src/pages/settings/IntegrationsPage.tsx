@@ -878,10 +878,10 @@ export default function IntegrationsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="evolution" className="space-y-6">
+      <Tabs defaultValue="uazapi" className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="evolution" className="flex items-center gap-2">
-            <QrCode className="h-4 w-4" /> Evolution API
+          <TabsTrigger value="uazapi" className="flex items-center gap-2">
+            <QrCode className="h-4 w-4" /> UazapiGO
           </TabsTrigger>
           <TabsTrigger value="whatsapp" className="flex items-center gap-2">
             <MessageSquare className="h-4 w-4" /> Z-API (Legacy)
@@ -894,7 +894,7 @@ export default function IntegrationsPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="evolution">
+        <TabsContent value="uazapi">
           <EvolutionApiIntegration tenantId={tenantId} />
         </TabsContent>
 

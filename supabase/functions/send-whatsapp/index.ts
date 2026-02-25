@@ -53,13 +53,17 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Try to find the operator's own instance first
-    let apiType = "zapi";
+    // Find the operator's UazapiGO instance
+    let instanceToken = "";
+    let serverUrl = "";
+    let instanceName = "";
+    let instanceDbId: string | null = null;
+    let apiType = "uazapi";
+
+    // Legacy Z-API fallback vars
     let zapiInstanceId = "";
     let zapiToken = "";
     let zapiSecurityToken = "";
-    let zapiInstanceDbId: string | null = null;
-    let evolutionInstanceName = "";
 
     if (tenant_id && userId) {
       const { data: operatorInstance } = await adminSupabase
@@ -71,17 +75,33 @@ Deno.serve(async (req) => {
         .single();
 
       if (operatorInstance) {
-        apiType = (operatorInstance as any).api_type || "zapi";
+        apiType = (operatorInstance as any).api_type || "uazapi";
+        instanceToken = (operatorInstance as any).instance_token || "";
+        instanceName = (operatorInstance as any).evolution_instance_name || (operatorInstance as any).zapi_instance_id || "";
+        instanceDbId = operatorInstance.id;
+
+        // Legacy Z-API fields
         zapiInstanceId = operatorInstance.zapi_instance_id;
         zapiToken = operatorInstance.zapi_token;
         zapiSecurityToken = operatorInstance.zapi_security_token || "";
-        zapiInstanceDbId = operatorInstance.id;
-        evolutionInstanceName = (operatorInstance as any).evolution_instance_name || "";
       }
     }
 
-    // Fallback: use tenant-level Z-API config (legacy)
-    if (!zapiInstanceId && tenant_id) {
+    // Get UazapiGO server URL from tenant
+    if ((apiType === "uazapi" || apiType === "evolution") && tenant_id) {
+      const { data: tenantData } = await adminSupabase
+        .from("tenants")
+        .select("uazapi_server_url, uazapi_admin_token")
+        .eq("id", tenant_id)
+        .single();
+      if (tenantData) {
+        serverUrl = (tenantData as any).uazapi_server_url || "";
+      }
+      if (!serverUrl) serverUrl = Deno.env.get("UAZAPI_SERVER_URL") || Deno.env.get("EVOLUTION_API_URL") || "";
+    }
+
+    // Fallback: legacy Z-API tenant config
+    if (!instanceToken && !zapiInstanceId && tenant_id) {
       const { data: tenant } = await adminSupabase
         .from("tenants")
         .select("zapi_instance_id, zapi_token, zapi_security_token")
@@ -106,59 +126,36 @@ Deno.serve(async (req) => {
 
     let result: any;
 
-    // ====== EVOLUTION API ======
-    if (apiType === "evolution" && evolutionInstanceName) {
-      // Get Evolution API config
-      let evolutionUrl = "";
-      let evolutionApiKey = "";
+    // ====== UAZAPI GO V2 ======
+    if ((apiType === "uazapi" || apiType === "evolution") && instanceToken && serverUrl && instanceName) {
+      serverUrl = serverUrl.replace(/\/$/, "");
 
-      if (tenant_id) {
-        const { data: tenantData } = await adminSupabase
-          .from("tenants")
-          .select("evolution_api_url, evolution_api_key")
-          .eq("id", tenant_id)
-          .single();
-        if (tenantData) {
-          evolutionUrl = (tenantData as any).evolution_api_url || "";
-          evolutionApiKey = (tenantData as any).evolution_api_key || "";
-        }
-      }
-      if (!evolutionUrl) evolutionUrl = Deno.env.get("EVOLUTION_API_URL") || "";
-      if (!evolutionApiKey) evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY") || "";
+      const uazapiHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+        token: instanceToken,
+      };
 
-      if (!evolutionUrl || !evolutionApiKey) {
-        return new Response(
-          JSON.stringify({ error: "Evolution API não configurada." }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      const uazapiResp = await fetch(`${serverUrl}/instance/${instanceName}/send-text`, {
+        method: "POST",
+        headers: uazapiHeaders,
+        body: JSON.stringify({
+          phone: recipient,
+          message: textToSend,
+        }),
+      });
 
-      evolutionUrl = evolutionUrl.replace(/\/$/, "");
+      result = await uazapiResp.json();
 
-      const evoResponse = await fetch(
-        `${evolutionUrl}/message/sendText/${evolutionInstanceName}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", apikey: evolutionApiKey },
-          body: JSON.stringify({
-            number: recipient,
-            text: textToSend,
-          }),
-        }
-      );
-
-      result = await evoResponse.json();
-
-      if (!evoResponse.ok) {
-        console.error("Evolution API error:", result);
+      if (!uazapiResp.ok) {
+        console.error("UazapiGO send error:", result);
         return new Response(
           JSON.stringify({ error: "Failed to send message", details: result }),
-          { status: evoResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: uazapiResp.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
     }
     // ====== Z-API (legacy) ======
-    else if (zapiInstanceId && zapiToken) {
+    else if (zapiInstanceId && zapiToken && zapiToken !== "uazapi") {
       const zapiUrl = `https://api.z-api.io/instances/${zapiInstanceId}/token/${zapiToken}/send-text`;
       const zapiHeaders: Record<string, string> = { "Content-Type": "application/json" };
       if (zapiSecurityToken) {
@@ -197,15 +194,15 @@ Deno.serve(async (req) => {
         conversation_id, direction: "outbound",
         message_type: template ? "template" : "text",
         content: messageContent,
-        external_id: result.messageId || result.zaapId || result.key?.id || null,
+        external_id: result.messageId || result.zaapId || result.key?.id || result.id || null,
       });
 
       const convUpdate: Record<string, any> = {
         last_message_at: new Date().toISOString(),
         assigned_to: userId,
       };
-      if (zapiInstanceDbId) {
-        convUpdate.operator_zapi_instance_id = zapiInstanceDbId;
+      if (instanceDbId) {
+        convUpdate.operator_zapi_instance_id = instanceDbId;
       }
 
       await adminSupabase.from("whatsapp_conversations").update(convUpdate).eq("id", conversation_id);
@@ -213,7 +210,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      message_id: result.messageId || result.zaapId || result.key?.id,
+      message_id: result.messageId || result.zaapId || result.key?.id || result.id,
     }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
