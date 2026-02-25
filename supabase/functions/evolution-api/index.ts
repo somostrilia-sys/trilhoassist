@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
           "Content-Type": "application/json",
           token: instanceToken,
         },
-        body: JSON.stringify({ instanceName: instName }),
+        body: "{}",
       });
       return { status: resp.status, data: await resp.json() };
     }
@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
       if (state === "connected" || state === "open") {
         return { qrcode: null, status: "connected" };
       }
-      const qr = data.qrcode || data.base64 || data.qr || null;
+      const qr = data.instance?.qrcode || data.qrcode || data.base64 || null;
       return { qrcode: qr, status: qr ? "qr_ready" : "waiting_qr" };
     }
 
