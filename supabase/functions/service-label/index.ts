@@ -176,7 +176,7 @@ async function sendViaUazapi(
       .from("zapi_instances")
       .select("instance_token, evolution_instance_name")
       .eq("tenant_id", tenantId)
-      .in("api_type", ["uazapi", "evolution"])
+      .eq("api_type", "uazapi")
       .eq("active", true)
       .eq("connection_status", "connected")
       .limit(1)
@@ -187,8 +187,6 @@ async function sendViaUazapi(
       instanceName = (inst as any).evolution_instance_name || "";
     }
   }
-
-  if (!serverUrl) serverUrl = Deno.env.get("UAZAPI_SERVER_URL") || Deno.env.get("EVOLUTION_API_URL") || "";
 
   if (!serverUrl || !instanceToken || !instanceName) {
     return { ok: false, result: { error: "UazapiGO not configured or no connected instance" } };
@@ -203,8 +201,8 @@ async function sendViaUazapi(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      phone: groupId,
-      message: message,
+      number: groupId,
+      text: message,
     }),
   });
 

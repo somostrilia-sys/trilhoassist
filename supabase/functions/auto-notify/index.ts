@@ -57,15 +57,45 @@ function interpolateMessage(template: string, vars: Record<string, string>): str
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "—");
 }
 
-async function sendZapiMessage(
-  instanceId: string,
-  token: string,
-  securityToken: string,
+// Send via UazapiGO using a connected instance from the tenant
+async function sendUazapiMessage(
+  adminSupabase: any,
+  tenantId: string,
   phone: string,
   message: string
 ): Promise<{ ok: boolean; result: any }> {
-  if (!instanceId || !token) {
-    return { ok: false, result: { error: "Z-API not configured for this tenant" } };
+  // Get server URL from tenant
+  const { data: tenant } = await adminSupabase
+    .from("tenants")
+    .select("uazapi_server_url")
+    .eq("id", tenantId)
+    .single();
+
+  const serverUrl = ((tenant as any)?.uazapi_server_url || "").replace(/\/$/, "");
+  if (!serverUrl) {
+    return { ok: false, result: { error: "UazapiGO server URL not configured" } };
+  }
+
+  // Find any connected instance for this tenant
+  const { data: inst } = await adminSupabase
+    .from("zapi_instances")
+    .select("instance_token, evolution_instance_name")
+    .eq("tenant_id", tenantId)
+    .eq("api_type", "uazapi")
+    .eq("active", true)
+    .eq("connection_status", "connected")
+    .limit(1)
+    .single();
+
+  if (!inst) {
+    return { ok: false, result: { error: "No connected UazapiGO instance found" } };
+  }
+
+  const instanceToken = (inst as any).instance_token || "";
+  const instanceName = (inst as any).evolution_instance_name || "";
+
+  if (!instanceToken || !instanceName) {
+    return { ok: false, result: { error: "Instance token/name missing" } };
   }
 
   let cleanPhone = phone.replace(/\D/g, "");
@@ -73,16 +103,13 @@ async function sendZapiMessage(
     cleanPhone = `55${cleanPhone}`;
   }
 
-  const zapiUrl = `https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`;
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (securityToken) {
-    headers["Client-Token"] = securityToken;
-  }
-
-  const response = await fetch(zapiUrl, {
+  const response = await fetch(`${serverUrl}/instance/${instanceName}/send-text`, {
     method: "POST",
-    headers,
-    body: JSON.stringify({ phone: cleanPhone, message }),
+    headers: {
+      "Content-Type": "application/json",
+      token: instanceToken,
+    },
+    body: JSON.stringify({ number: cleanPhone, text: message }),
   });
 
   const result = await response.json();
@@ -109,8 +136,8 @@ Deno.serve(async (req) => {
     );
 
     const tokenStr = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims(tokenStr);
-    if (claimsErr || !claimsData?.claims) {
+    const { data: { user }, error: userErr } = await supabase.auth.getUser(tokenStr);
+    if (userErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -144,21 +171,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Fetch tenant for branding, notification settings AND Z-API keys
+    // Fetch tenant for branding and notification settings
     const { data: tenant } = await adminSupabase
       .from("tenants")
-      .select("name, notification_settings, zapi_instance_id, zapi_token, zapi_security_token")
+      .select("name, notification_settings")
       .eq("id", sr.tenant_id)
       .single();
 
     const tenantName = tenant?.name || "Assistência";
     const notifSettings = (tenant?.notification_settings as any) || {};
     const autoNotifyConfig = notifSettings.auto_notify || {};
-
-    // Get Z-API config from tenant
-    const zapiInstanceId = (tenant as any)?.zapi_instance_id || "";
-    const zapiToken = (tenant as any)?.zapi_token || "";
-    const zapiSecurityToken = (tenant as any)?.zapi_security_token || "";
 
     // Check if this trigger is enabled
     const phaseConfig = autoNotifyConfig[trigger];
@@ -223,13 +245,15 @@ Deno.serve(async (req) => {
 
     if (trigger.startsWith("beneficiary_")) {
       if (beneficiaryPhone) {
-        const r = await sendZapiMessage(zapiInstanceId, zapiToken, zapiSecurityToken, beneficiaryPhone, finalMessage);
+        const r = await sendUazapiMessage(adminSupabase, sr.tenant_id, beneficiaryPhone, finalMessage);
         results.push({ target: "beneficiary", trigger, ok: r.ok });
+        if (!r.ok) console.error("UazapiGO send error:", r.result);
       }
     } else if (trigger === "provider_dispatch") {
       if (provider_phone) {
-        const r = await sendZapiMessage(zapiInstanceId, zapiToken, zapiSecurityToken, provider_phone, finalMessage);
+        const r = await sendUazapiMessage(adminSupabase, sr.tenant_id, provider_phone, finalMessage);
         results.push({ target: "provider", trigger, ok: r.ok });
+        if (!r.ok) console.error("UazapiGO send error:", r.result);
       }
     }
 

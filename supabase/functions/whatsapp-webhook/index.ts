@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
 
   const url = new URL(req.url);
   const tenantSlug = url.searchParams.get("tenant");
-  const source = url.searchParams.get("source"); // "uazapi", "evolution" or null (z-api)
+  const source = url.searchParams.get("source");
 
   // Webhook verification (GET)
   if (req.method === "GET") {
@@ -37,56 +37,8 @@ Deno.serve(async (req) => {
 
     const payload = await req.json();
 
-    // ========== UAZAPI GO / EVOLUTION API EVENTS ==========
-    if (source === "uazapi" || source === "evolution") {
-      return await handleUazapiWebhook(supabase, payload, tenantSlug, url);
-    }
-
-    // ========== Z-API EVENT ROUTING (legacy) ==========
-    const eventType = payload.type;
-
-    // Ignore non-message events
-    if (eventType && eventType !== "ReceivedCallback") {
-      return new Response(JSON.stringify({ success: true, type: "ignored_event", event: eventType }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (!tenantSlug) {
-      return new Response(JSON.stringify({ error: "tenant query param required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Resolve tenant
-    const { data: tenant, error: tenantErr } = await supabase
-      .from("tenants")
-      .select("id")
-      .eq("slug", tenantSlug)
-      .eq("active", true)
-      .single();
-
-    if (tenantErr || !tenant) {
-      // Try by ID
-      const { data: tenantById } = await supabase
-        .from("tenants")
-        .select("id")
-        .eq("id", tenantSlug)
-        .eq("active", true)
-        .single();
-
-      if (!tenantById) {
-        return new Response(JSON.stringify({ error: "Tenant not found" }), {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      return await processInboundMessage(supabase, normalizeZapiPayload(payload), tenantById.id, url);
-    }
-
-    return await processInboundMessage(supabase, normalizeZapiPayload(payload), tenant.id, url);
+    // ========== UAZAPI GO EVENTS ==========
+    return await handleUazapiWebhook(supabase, payload, tenantSlug, url);
   } catch (err) {
     console.error("Webhook error:", err);
     return new Response(JSON.stringify({ error: (err as Error).message }), {
@@ -111,7 +63,7 @@ async function handleUazapiWebhook(supabase: any, payload: any, tenantSlug: stri
         .from("zapi_instances")
         .update({ connection_status: connStatus })
         .eq("evolution_instance_name", instanceName)
-        .in("api_type", ["uazapi", "evolution"]);
+        .eq("api_type", "uazapi");
     }
 
     return new Response(JSON.stringify({ success: true, type: "connection_update" }), {
@@ -128,7 +80,7 @@ async function handleUazapiWebhook(supabase: any, payload: any, tenantSlug: stri
     });
   }
 
-  // Handle messages — UazapiGO format: { event: "messages.upsert", data: { key, message, pushName, ... } }
+  // Handle messages
   if (event === "messages.upsert" || event === "MESSAGES_UPSERT" || event === "message" || event === "onMessage") {
     if (!tenantSlug) {
       return new Response(JSON.stringify({ error: "tenant query param required" }), {
@@ -184,7 +136,7 @@ async function handleUazapiWebhook(supabase: any, payload: any, tenantSlug: stri
         .from("zapi_instances")
         .select("id, operator_id")
         .eq("evolution_instance_name", instanceName)
-        .in("api_type", ["uazapi", "evolution"])
+        .eq("api_type", "uazapi")
         .eq("active", true)
         .single();
 
@@ -235,24 +187,6 @@ async function processInboundMessage(
   }
 
   const cleanPhone = normalized.phone.replace(/\D/g, "");
-
-  // For Z-API source, get routing from URL params
-  if (!routeToOperator) {
-    const incomingInstanceId = url.searchParams.get("instance_id");
-    if (incomingInstanceId) {
-      const { data: zapiInst } = await supabase
-        .from("zapi_instances")
-        .select("id, operator_id")
-        .eq("tenant_id", tenantId)
-        .eq("zapi_instance_id", incomingInstanceId)
-        .eq("active", true)
-        .single();
-      if (zapiInst) {
-        routeToOperator = zapiInst.operator_id;
-        routeToInstanceDbId = zapiInst.id;
-      }
-    }
-  }
 
   // Find or create conversation
   let { data: conversation } = await supabase
@@ -364,7 +298,7 @@ async function processInboundMessage(
   });
 }
 
-// ========== PAYLOAD NORMALIZERS ==========
+// ========== PAYLOAD NORMALIZER ==========
 
 interface NormalizedMessage {
   phone: string;
@@ -386,7 +320,7 @@ function normalizeUazapiPayload(payload: any): NormalizedMessage {
 
   const key = data.key;
   if (!key) {
-    // Fallback: direct phone field (alternative UazapiGO format)
+    // Fallback: direct phone field (alternative format)
     if (data.phone || payload.phone) {
       return {
         phone: (data.phone || payload.phone || "").replace(/\D/g, ""),
@@ -461,85 +395,4 @@ function normalizeUazapiPayload(payload: any): NormalizedMessage {
     isGroup,
     fromMe,
   };
-}
-
-function normalizeZapiPayload(payload: any): NormalizedMessage {
-  if (payload.type === "ReceivedCallback" || payload.phone) {
-    const phone = payload.phone || "";
-    const isGroup = payload.isGroup === true;
-    const fromMe = payload.fromMe === true;
-    const name = payload.senderName || payload.chatName || "";
-
-    let content = "";
-    let messageType = "text";
-    let mediaUrl: string | undefined;
-    let latitude: number | undefined;
-    let longitude: number | undefined;
-
-    if (payload.text?.message) {
-      content = payload.text.message;
-    } else if (payload.hydratedTemplate?.message) {
-      content = payload.hydratedTemplate.message;
-    } else if (payload.image) {
-      content = payload.image.caption || "";
-      messageType = "image";
-      mediaUrl = payload.image.imageUrl;
-    } else if (payload.video) {
-      content = payload.video.caption || "";
-      messageType = "video";
-      mediaUrl = payload.video.videoUrl;
-    } else if (payload.audio) {
-      messageType = "audio";
-      mediaUrl = payload.audio.audioUrl;
-    } else if (payload.document) {
-      content = payload.document.fileName || payload.document.title || "";
-      messageType = "document";
-      mediaUrl = payload.document.documentUrl;
-    } else if (payload.location) {
-      messageType = "location";
-      latitude = payload.location.latitude;
-      longitude = payload.location.longitude;
-      content = payload.location.name || payload.location.address || "";
-    } else if (payload.contact) {
-      messageType = "contacts";
-      content = payload.contact.displayName || JSON.stringify(payload.contact);
-    } else if (payload.sticker) {
-      messageType = "sticker";
-      mediaUrl = payload.sticker.stickerUrl;
-    } else if (payload.buttonsResponseMessage) {
-      content = payload.buttonsResponseMessage.message || "";
-    } else if (payload.listResponseMessage) {
-      content = payload.listResponseMessage.title || payload.listResponseMessage.message || "";
-    }
-
-    return {
-      phone,
-      name,
-      message: content,
-      message_type: messageType,
-      media_url: mediaUrl,
-      latitude,
-      longitude,
-      external_id: payload.messageId,
-      isGroup,
-      fromMe,
-    };
-  }
-
-  if (payload.phone) {
-    return {
-      phone: payload.phone,
-      name: payload.name || payload.contact_name || payload.senderName,
-      message: payload.message || payload.text || payload.body,
-      message_type: payload.message_type || payload.type || "text",
-      media_url: payload.media_url || payload.mediaUrl,
-      latitude: payload.latitude || payload.lat,
-      longitude: payload.longitude || payload.lng,
-      external_id: payload.external_id || payload.id || payload.messageId,
-      isGroup: false,
-      fromMe: false,
-    };
-  }
-
-  return { phone: "" };
 }

@@ -6,6 +6,35 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// Send via UazapiGO
+async function sendMessage(
+  serverUrl: string,
+  instanceName: string,
+  instanceToken: string,
+  phone: string,
+  text: string
+): Promise<any | null> {
+  let cleanPhone = (phone || "").replace(/\D/g, "");
+  if (cleanPhone.length <= 11) cleanPhone = `55${cleanPhone}`;
+
+  try {
+    const response = await fetch(`${serverUrl}/instance/${instanceName}/send-text`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        token: instanceToken,
+      },
+      body: JSON.stringify({ number: cleanPhone, text }),
+    });
+    if (response.ok) return await response.json();
+    console.error(`Send failed:`, await response.text());
+    return null;
+  } catch (e) {
+    console.error(`Send error:`, e);
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -30,16 +59,42 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Cache tenant configs
+    // Cache tenant configs + UazapiGO settings
     const tenantIds = [...new Set(conversations.map((c: any) => c.tenant_id))];
     const { data: tenants } = await supabase
       .from("tenants")
-      .select("id, followup_timeout_minutes, followup_max_retries, zapi_instance_id, zapi_token, zapi_security_token, name")
+      .select("id, followup_timeout_minutes, followup_max_retries, uazapi_server_url, name")
       .in("id", tenantIds);
 
     const tenantMap: Record<string, any> = {};
     for (const t of tenants || []) {
       tenantMap[t.id] = t;
+    }
+
+    // Cache connected UazapiGO instances per tenant (pick first connected)
+    const instanceMap: Record<string, { serverUrl: string; instanceName: string; instanceToken: string }> = {};
+    for (const tid of tenantIds) {
+      const tenant = tenantMap[tid];
+      const serverUrl = ((tenant as any)?.uazapi_server_url || "").replace(/\/$/, "");
+      if (!serverUrl) continue;
+
+      const { data: inst } = await supabase
+        .from("zapi_instances")
+        .select("instance_token, evolution_instance_name")
+        .eq("tenant_id", tid)
+        .eq("api_type", "uazapi")
+        .eq("active", true)
+        .eq("connection_status", "connected")
+        .limit(1)
+        .single();
+
+      if (inst) {
+        instanceMap[tid] = {
+          serverUrl,
+          instanceName: (inst as any).evolution_instance_name || "",
+          instanceToken: (inst as any).instance_token || "",
+        };
+      }
     }
 
     // Cache flow steps for active flows
@@ -64,10 +119,8 @@ Deno.serve(async (req) => {
       const tenant = tenantMap[conv.tenant_id];
       if (!tenant) continue;
 
-      const zapiInstanceId = tenant.zapi_instance_id;
-      const zapiToken = tenant.zapi_token;
-      const zapiSecurityToken = tenant.zapi_security_token || "";
-      if (!zapiInstanceId || !zapiToken) continue;
+      const uazapi = instanceMap[conv.tenant_id];
+      if (!uazapi || !uazapi.instanceToken || !uazapi.instanceName) continue;
 
       // Get last messages
       const { data: messages } = await supabase
@@ -94,14 +147,14 @@ Deno.serve(async (req) => {
           const nextStep = steps.find((s: any) => s.step_order === conv.current_flow_step + 1);
 
           if (nextStep) {
-            const sent = await sendMessage(zapiInstanceId, zapiToken, zapiSecurityToken, conv.phone, nextStep.message_text);
+            const sent = await sendMessage(uazapi.serverUrl, uazapi.instanceName, uazapi.instanceToken, conv.phone, nextStep.message_text);
             if (sent) {
               await supabase.from("whatsapp_messages").insert({
                 conversation_id: conv.id,
                 direction: "outbound",
                 message_type: "text",
                 content: nextStep.message_text,
-                external_id: sent.messageId || sent.zaapId || null,
+                external_id: sent.messageId || sent.key?.id || null,
               });
               await supabase.from("whatsapp_conversations").update({
                 current_flow_step: nextStep.step_order,
@@ -113,7 +166,7 @@ Deno.serve(async (req) => {
               console.log(`Flow step ${nextStep.step_order} sent to ${conv.phone}`);
             }
           } else {
-            // Flow complete — clear flow tracking
+            // Flow complete
             await supabase.from("whatsapp_conversations").update({
               current_flow_id: null,
               current_flow_step: 0,
@@ -125,7 +178,7 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // If last message is OUTBOUND (waiting for response), check timeout for reminder
+        // If last message is OUTBOUND (waiting for response), check timeout
         if (lastMsg.direction === "outbound") {
           const msgTime = new Date(lastMsg.created_at).getTime();
           const elapsedMin = (now - msgTime) / 60000;
@@ -135,7 +188,6 @@ Deno.serve(async (req) => {
           if (elapsedMin < stepTimeout) continue;
           if ((conv.followup_count || 0) >= maxRetries) continue;
 
-          // Check cooldown
           if (conv.last_followup_at) {
             const sinceLastFollowup = (now - new Date(conv.last_followup_at).getTime()) / 60000;
             if (sinceLastFollowup < stepTimeout) continue;
@@ -146,14 +198,14 @@ Deno.serve(async (req) => {
             ? `⚠️ Última tentativa: ainda precisamos da sua resposta para continuar o atendimento. 🙏`
             : `Olá! 😊 Ainda aguardamos sua resposta para dar continuidade. Por favor, responda a última mensagem. 🙏`;
 
-          const sent = await sendMessage(zapiInstanceId, zapiToken, zapiSecurityToken, conv.phone, reminderMessage);
+          const sent = await sendMessage(uazapi.serverUrl, uazapi.instanceName, uazapi.instanceToken, conv.phone, reminderMessage);
           if (sent) {
             await supabase.from("whatsapp_messages").insert({
               conversation_id: conv.id,
               direction: "outbound",
               message_type: "text",
               content: reminderMessage,
-              external_id: sent.messageId || sent.zaapId || null,
+              external_id: sent.messageId || sent.key?.id || null,
             });
             await supabase.from("whatsapp_conversations").update({
               followup_count: currentCount,
@@ -202,14 +254,14 @@ Deno.serve(async (req) => {
         reminderMessage = `⚠️ Última tentativa de contato!\n\nPrecisamos da sua resposta para:\n*"${questionText}"*\n\nCaso não responda, o atendimento poderá ser encerrado. Por favor, nos retorne. 🙏`;
       }
 
-      const sent = await sendMessage(zapiInstanceId, zapiToken, zapiSecurityToken, conv.phone, reminderMessage);
+      const sent = await sendMessage(uazapi.serverUrl, uazapi.instanceName, uazapi.instanceToken, conv.phone, reminderMessage);
       if (sent) {
         await supabase.from("whatsapp_messages").insert({
           conversation_id: conv.id,
           direction: "outbound",
           message_type: "text",
           content: reminderMessage,
-          external_id: sent.messageId || sent.zaapId || null,
+          external_id: sent.messageId || sent.key?.id || null,
         });
         await supabase.from("whatsapp_conversations").update({
           followup_count: currentCount,
@@ -232,28 +284,3 @@ Deno.serve(async (req) => {
     });
   }
 });
-
-async function sendMessage(instanceId: string, token: string, securityToken: string, phone: string, text: string): Promise<any | null> {
-  let cleanPhone = (phone || "").replace(/\D/g, "");
-  if (cleanPhone.length <= 11) cleanPhone = `55${cleanPhone}`;
-
-  const zapiUrl = `https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`;
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (securityToken) {
-    headers["Client-Token"] = securityToken;
-  }
-
-  try {
-    const response = await fetch(zapiUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ phone: cleanPhone, message: text }),
-    });
-    if (response.ok) return await response.json();
-    console.error(`Send failed:`, await response.text());
-    return null;
-  } catch (e) {
-    console.error(`Send error:`, e);
-    return null;
-  }
-}
