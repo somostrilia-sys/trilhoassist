@@ -245,7 +245,7 @@ Deno.serve(async (req) => {
       let connectResult = await fetchConnect(instName, instToken);
 
       // If 404, instance doesn't exist on UazapiGO — recreate it
-      if (connectResult.status === 404) {
+      if (connectResult.status === 404 || connectResult.status === 401) {
         console.log("Instance not found on UazapiGO, recreating:", instName);
         const recreated = await recreateInstance(instName, instance_db_id, instTenantId);
         if (!recreated) {
