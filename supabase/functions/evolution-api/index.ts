@@ -76,13 +76,16 @@ Deno.serve(async (req) => {
       admintoken: adminToken,
     };
 
-    // Helper: call GET /instance/connect/{name} to get QR
-    async function fetchConnect(instName: string): Promise<any> {
+    // Helper: POST /instance/connect with instance token
+    async function fetchConnect(instName: string, instanceToken: string): Promise<any> {
       const url = `${serverUrl}/instance/connect`;
       console.log("Calling UazapiGO connect (POST):", url, "instanceName:", instName);
       const resp = await fetch(url, {
         method: "POST",
-        headers: adminHeaders,
+        headers: {
+          "Content-Type": "application/json",
+          token: instanceToken,
+        },
         body: JSON.stringify({ instanceName: instName }),
       });
       return { status: resp.status, data: await resp.json() };
@@ -192,7 +195,7 @@ Deno.serve(async (req) => {
       let qrcode: string | null = null;
       let qrStatus = "waiting_qr";
       try {
-        const connectResult = await fetchConnect(instance_name);
+        const connectResult = await fetchConnect(instance_name, instanceToken);
         const extracted = extractQr(connectResult.data);
         qrcode = extracted.qrcode;
         qrStatus = extracted.status;
@@ -235,10 +238,11 @@ Deno.serve(async (req) => {
       }
 
       const instName = (inst as any).instance_name || (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
+      const instToken = (inst as any).instance_token || "";
       const instTenantId = (inst as any).tenant_id;
 
-      // Call GET /instance/connect/{instanceName}
-      let connectResult = await fetchConnect(instName);
+      // Call POST /instance/connect with instance token
+      let connectResult = await fetchConnect(instName, instToken);
 
       // If 404, instance doesn't exist on UazapiGO — recreate it
       if (connectResult.status === 404) {
@@ -251,7 +255,14 @@ Deno.serve(async (req) => {
           );
         }
         // Try connect again after recreation
-        connectResult = await fetchConnect(instName);
+        // After recreation, re-fetch instance to get new token
+        const { data: updatedInst } = await adminSupabase
+          .from("zapi_instances")
+          .select("instance_token")
+          .eq("id", instance_db_id)
+          .single();
+        const newToken = (updatedInst as any)?.instance_token || "";
+        connectResult = await fetchConnect(instName, newToken);
       }
 
       const extracted = extractQr(connectResult.data);
