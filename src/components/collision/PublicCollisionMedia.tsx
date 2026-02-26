@@ -46,10 +46,18 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange }
     const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
     const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+    if (!projectId || !anonKey) {
+      toast({ title: "Configuração inválida do app", description: "Tente atualizar a página e enviar novamente.", variant: "destructive" });
+      return null;
+    }
+
     const formData = new FormData();
     formData.append("file", file, fileName);
     formData.append("service_request_id", serviceRequestId);
     formData.append("file_type", fileType);
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 45000);
 
     try {
       const res = await fetch(
@@ -58,6 +66,7 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange }
           method: "POST",
           headers: { apikey: anonKey },
           body: formData,
+          signal: controller.signal,
         }
       );
 
@@ -71,9 +80,16 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange }
 
       return data as UploadedFile;
     } catch (err) {
+      const isTimeout = err instanceof DOMException && err.name === "AbortError";
       console.error("[CollisionMedia] Network error:", err);
-      toast({ title: `Erro de rede ao enviar ${fileName}`, variant: "destructive" });
+      toast({
+        title: isTimeout ? `Tempo excedido ao enviar ${fileName}` : `Erro de rede ao enviar ${fileName}`,
+        description: isTimeout ? "A conexão demorou demais. Tente novamente." : undefined,
+        variant: "destructive",
+      });
       return null;
+    } finally {
+      window.clearTimeout(timeoutId);
     }
   };
 
