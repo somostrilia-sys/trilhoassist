@@ -506,6 +506,7 @@ export default function ServiceRequestDetail() {
     setSelectedProviderId("");
     setQuotedAmount("");
     setChargedAmount("");
+    setPaymentMethod("");
     setDispatchNotes("");
     setDispatchMode("existing");
     setQuickProvider({ name: "", document: "", phone: "", cep: "", street: "", address_number: "", neighborhood: "", city: "", state: "" });
