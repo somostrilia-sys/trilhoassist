@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Camera, Mic, Video, File, X, Loader2, Square, Circle } from "lucide-react";
+import { Camera, Mic, Video, File, X, Loader2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -18,87 +18,66 @@ interface UploadedFile {
 interface Props {
   serviceRequestId: string;
   onMediaChange?: (media: UploadedFile[]) => void;
-  requireAudio?: boolean;
-  requirePhotos?: boolean;
-  requireDocuments?: boolean;
 }
 
-export default function PublicCollisionMedia({
-  serviceRequestId,
-  onMediaChange,
-  requireAudio = true,
-  requirePhotos = true,
-  requireDocuments = true,
-}: Props) {
+export default function PublicCollisionMedia({ serviceRequestId, onMediaChange }: Props) {
   const { toast } = useToast();
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState<string | null>(null);
 
-  // Audio recording
-  const [recording, setRecording] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   const photoRef = useRef<HTMLInputElement>(null);
+  const audioRef = useRef<HTMLInputElement>(null);
   const docRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
-    };
-  }, []);
-
-  const uploadFile = async (file: Blob, fileName: string, fileType: string, mimeType: string) => {
-    const ext = fileName.split(".").pop() || "bin";
+  const uploadFile = async (file: globalThis.File, fileType: string) => {
+    const ext = file.name.split(".").pop() || "bin";
     const path = `${serviceRequestId}/${fileType}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
-    console.log("[CollisionMedia] Uploading to storage:", { path, fileType, mimeType, serviceRequestId });
+    console.log("[CollisionMedia] Uploading:", { path, fileType, size: file.size, mime: file.type });
 
     const { data, error } = await supabase.storage
       .from("collision-media")
-      .upload(path, file, { contentType: mimeType });
+      .upload(path, file, { contentType: file.type });
 
     if (error) {
-      console.error("[CollisionMedia] Storage upload error:", error);
-      toast({ title: `Erro ao enviar ${fileName}`, description: error.message, variant: "destructive" });
+      console.error("[CollisionMedia] Storage error:", error);
+      toast({ title: `Erro ao enviar ${file.name}`, description: error.message, variant: "destructive" });
       return null;
     }
 
-    console.log("[CollisionMedia] Storage upload success:", data.path);
-
+    console.log("[CollisionMedia] Storage OK:", data.path);
     const { data: urlData } = supabase.storage.from("collision-media").getPublicUrl(data.path);
 
-    console.log("[CollisionMedia] Inserting into collision_media table...");
+    console.log("[CollisionMedia] Inserting into table...");
     const { data: mediaRow, error: insertError } = await supabase
       .from("collision_media")
       .insert({
         service_request_id: serviceRequestId,
         file_url: urlData.publicUrl,
-        file_name: fileName,
+        file_name: file.name,
         file_type: fileType,
-        mime_type: mimeType,
-        file_size: file instanceof File ? file.size : (file as Blob).size,
+        mime_type: file.type,
+        file_size: file.size,
       })
       .select("id")
       .single();
 
     if (insertError) {
-      console.error("collision_media insert error:", insertError);
-      toast({ title: `Erro ao registrar ${fileName}`, description: insertError.message, variant: "destructive" });
+      console.error("[CollisionMedia] Insert error:", insertError);
+      toast({ title: `Erro ao registrar ${file.name}`, description: insertError.message, variant: "destructive" });
       return null;
     }
+
+    console.log("[CollisionMedia] Insert OK:", mediaRow?.id);
 
     return {
       id: mediaRow?.id,
       file_url: urlData.publicUrl,
-      file_name: fileName,
+      file_name: file.name,
       file_type: fileType as any,
-      mime_type: mimeType,
-      file_size: file instanceof File ? file.size : (file as Blob).size,
+      mime_type: file.type,
+      file_size: file.size,
     } as UploadedFile;
   };
 
@@ -106,7 +85,7 @@ export default function PublicCollisionMedia({
     setUploading(fileType);
     const newFiles: UploadedFile[] = [];
     for (const file of Array.from(files)) {
-      const result = await uploadFile(file, file.name, fileType, file.type);
+      const result = await uploadFile(file, fileType);
       if (result) newFiles.push(result);
     }
     setUploadedFiles((prev) => {
@@ -116,46 +95,6 @@ export default function PublicCollisionMedia({
     });
     setUploading(null);
     if (newFiles.length > 0) toast({ title: "Arquivo(s) enviado(s)!" });
-  };
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      chunksRef.current = [];
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        if (timerRef.current) clearInterval(timerRef.current);
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        setUploading("audio");
-        const result = await uploadFile(blob, `audio_${Date.now()}.webm`, "audio", "audio/webm");
-        if (result) {
-          setUploadedFiles((prev) => {
-            const updated = [...prev, result];
-            onMediaChange?.(updated);
-            return updated;
-          });
-          toast({ title: "Áudio gravado e enviado!" });
-        }
-        setUploading(null);
-        setRecordingTime(0);
-      };
-      mediaRecorderRef.current = recorder;
-      recorder.start();
-      setRecording(true);
-      setRecordingTime(0);
-      timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
-    } catch {
-      toast({ title: "Erro ao acessar microfone", description: "Permita o acesso ao microfone.", variant: "destructive" });
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
-      setRecording(false);
-    }
   };
 
   const handleRemove = async (file: UploadedFile, index: number) => {
@@ -174,13 +113,11 @@ export default function PublicCollisionMedia({
   const docs = uploadedFiles.filter((f) => f.file_type === "document");
   const videos = uploadedFiles.filter((f) => f.file_type === "video");
 
-  const formatTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
-
   return (
     <Card className="shadow-sm">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
-          <Camera className="h-4 w-4" /> Mídias da Colisão
+          <Upload className="h-4 w-4" /> Mídias da Colisão
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -195,9 +132,7 @@ export default function PublicCollisionMedia({
           <Badge variant={docs.length > 0 ? "default" : "destructive"}>
             {docs.length > 0 ? "✓" : "!"} Documentos {docs.length > 0 ? `(${docs.length})` : "(obrigatório)"}
           </Badge>
-          <Badge variant="outline">
-            Vídeos ({videos.length})
-          </Badge>
+          <Badge variant="outline">Vídeos ({videos.length})</Badge>
         </div>
 
         {/* Orientation text */}
@@ -212,44 +147,25 @@ export default function PublicCollisionMedia({
           </ul>
         </div>
 
-        {/* Audio recording */}
+        {/* Audio upload */}
         <div className="space-y-2">
-          <p className="text-sm font-medium">🎙️ Áudio (gravar relato)</p>
-          {recording ? (
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 text-destructive animate-pulse">
-                <Circle className="h-3 w-3 fill-destructive" />
-                <span className="text-sm font-mono">{formatTime(recordingTime)}</span>
-              </div>
-              <Button type="button" variant="destructive" size="sm" onClick={stopRecording} className="gap-1">
-                <Square className="h-3 w-3" /> Parar
-              </Button>
-            </div>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={startRecording}
-              disabled={uploading === "audio"}
-              className="gap-2"
-            >
-              {uploading === "audio" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
-              Gravar Áudio
-            </Button>
-          )}
+          <p className="text-sm font-medium">🎙️ Áudio (envie gravação do relato)</p>
+          <Button type="button" variant="outline" size="sm" onClick={() => audioRef.current?.click()} disabled={uploading === "audio"} className="gap-2">
+            {uploading === "audio" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
+            Selecionar Áudio
+          </Button>
+          <input ref={audioRef} type="file" accept="audio/*" multiple className="hidden"
+            onChange={(e) => { if (e.target.files?.length) { handleFileUpload(e.target.files, "audio"); e.target.value = ""; } }} />
         </div>
 
-        {/* Photo capture */}
+        {/* Photo upload */}
         <div className="space-y-2">
           <p className="text-sm font-medium">📷 Fotos do acidente</p>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => photoRef.current?.click()} disabled={uploading === "photo"} className="gap-2">
-              {uploading === "photo" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-              Tirar Foto / Galeria
-            </Button>
-          </div>
-          <input ref={photoRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
+          <Button type="button" variant="outline" size="sm" onClick={() => photoRef.current?.click()} disabled={uploading === "photo"} className="gap-2">
+            {uploading === "photo" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+            Selecionar Fotos
+          </Button>
+          <input ref={photoRef} type="file" accept="image/*" multiple className="hidden"
             onChange={(e) => { if (e.target.files?.length) { handleFileUpload(e.target.files, "photo"); e.target.value = ""; } }} />
         </div>
 
@@ -258,20 +174,20 @@ export default function PublicCollisionMedia({
           <p className="text-sm font-medium">📄 Documentos (CNH, docs do terceiro)</p>
           <Button type="button" variant="outline" size="sm" onClick={() => docRef.current?.click()} disabled={uploading === "document"} className="gap-2">
             {uploading === "document" ? <Loader2 className="h-4 w-4 animate-spin" /> : <File className="h-4 w-4" />}
-            Enviar Documento
+            Selecionar Documento
           </Button>
-          <input ref={docRef} type="file" accept="image/*,.pdf,.doc,.docx" capture="environment" multiple className="hidden"
+          <input ref={docRef} type="file" accept="image/*,.pdf,.doc,.docx" multiple className="hidden"
             onChange={(e) => { if (e.target.files?.length) { handleFileUpload(e.target.files, "document"); e.target.value = ""; } }} />
         </div>
 
-        {/* Video */}
+        {/* Video upload */}
         <div className="space-y-2">
           <p className="text-sm font-medium">🎥 Vídeo (recomendado)</p>
           <Button type="button" variant="outline" size="sm" onClick={() => videoRef.current?.click()} disabled={uploading === "video"} className="gap-2">
             {uploading === "video" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
-            Gravar Vídeo
+            Selecionar Vídeo
           </Button>
-          <input ref={videoRef} type="file" accept="video/*" capture="environment" className="hidden"
+          <input ref={videoRef} type="file" accept="video/*" multiple className="hidden"
             onChange={(e) => { if (e.target.files?.length) { handleFileUpload(e.target.files, "video"); e.target.value = ""; } }} />
         </div>
 
