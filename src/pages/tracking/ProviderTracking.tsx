@@ -104,7 +104,7 @@ export default function ProviderTracking() {
     watchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         latestPos.current = pos;
-        if (!gpsReady) setGpsReady(true);
+        setGpsReady(true);
       },
       (err) => {
         setGpsError(`Erro GPS: ${err.message}`);
@@ -131,7 +131,7 @@ export default function ProviderTracking() {
     );
 
     setTracking(true);
-  }, [sendPosition, gpsReady]);
+  }, [sendPosition]);
 
   const stopTracking = useCallback(() => {
     if (watchRef.current !== null) {
@@ -244,23 +244,27 @@ export default function ProviderTracking() {
     toast.success("Chegada registrada!");
   }, [dispatch]);
 
-  // Auto-detect arrival at origin (100m radius)
+  // Auto-detect arrival at origin (100m radius) — check on each GPS update
   useEffect(() => {
     if (!request?.origin_lat || !request?.origin_lng || !tracking || arrivedOrigin || autoArrivalRef.current) return;
     if (!latestPos.current) return;
 
-    const dist = haversineDistance(
-      latestPos.current.coords.latitude,
-      latestPos.current.coords.longitude,
-      request.origin_lat,
-      request.origin_lng
-    );
+    const checkInterval = setInterval(() => {
+      if (!latestPos.current || autoArrivalRef.current) return;
+      const dist = haversineDistance(
+        latestPos.current.coords.latitude,
+        latestPos.current.coords.longitude,
+        request.origin_lat,
+        request.origin_lng
+      );
+      if (dist <= 100) {
+        autoArrivalRef.current = true;
+        handleMarkArrival();
+      }
+    }, 10000);
 
-    if (dist <= 100) {
-      autoArrivalRef.current = true;
-      handleMarkArrival();
-    }
-  });
+    return () => clearInterval(checkInterval);
+  }, [request?.origin_lat, request?.origin_lng, tracking, arrivedOrigin, handleMarkArrival]);
 
   // Set arrived state from dispatch data
   useEffect(() => {
