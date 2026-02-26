@@ -368,6 +368,26 @@ Deno.serve(async (req) => {
 
       isConnected = ["connected", "open", "CONNECTED"].includes(state);
 
+      // Auto-reconnect if disconnected
+      if (!isConnected) {
+        console.log("check_status: disconnected, attempting auto-reconnect for:", instName);
+        try {
+          const reconnectResult = await fetchConnect(instName, instToken);
+          const reconnectState = reconnectResult.data?.state || reconnectResult.data?.instance?.state || "";
+          const reconnected = reconnectResult.data?.connected === true 
+            || reconnectResult.data?.loggedIn === true
+            || ["connected", "open", "CONNECTED"].includes(reconnectState)
+            || reconnectResult.data?.response === "Already connected";
+          if (reconnected) {
+            console.log("Auto-reconnect successful!");
+            isConnected = true;
+            state = "connected";
+          }
+        } catch (e) {
+          console.error("Auto-reconnect failed:", e);
+        }
+      }
+
       await adminSupabase
         .from("zapi_instances")
         .update({ connection_status: isConnected ? "connected" : "disconnected" })

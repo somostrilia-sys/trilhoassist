@@ -6,6 +6,92 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const json = (payload: unknown, status = 200) =>
+  new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Check UazapiGO connection status
+async function checkUazapiStatus(serverUrl: string, instName: string, instToken: string): Promise<boolean> {
+  try {
+    const resp = await fetch(`${serverUrl}/instance/connectionState/${instName}`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json", token: instToken },
+    });
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    const state = data.state || data.instance?.state || data.connectionState || data.status || "";
+    return ["connected", "open", "CONNECTED"].includes(state) || data.connected === true || data.loggedIn === true;
+  } catch {
+    return false;
+  }
+}
+
+// Try to reconnect UazapiGO instance
+async function reconnectUazapi(serverUrl: string, instName: string, instToken: string): Promise<boolean> {
+  try {
+    console.log("Attempting UazapiGO reconnect for:", instName);
+    const resp = await fetch(`${serverUrl}/instance/connect`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", token: instToken },
+      body: "{}",
+    });
+    const data = await resp.json();
+    const state = data.state || data.instance?.state || data.instance?.status || "";
+    const isConnected = data.connected === true || data.loggedIn === true
+      || ["connected", "open", "CONNECTED"].includes(state)
+      || data.response === "Already connected";
+    if (isConnected) {
+      console.log("UazapiGO reconnected successfully");
+      return true;
+    }
+    console.log("UazapiGO reconnect response (not yet connected):", JSON.stringify(data).slice(0, 200));
+    return false;
+  } catch (e) {
+    console.error("UazapiGO reconnect error:", e);
+    return false;
+  }
+}
+
+// Send text message with retry
+async function sendUazapiText(
+  serverUrl: string,
+  instToken: string,
+  recipient: string,
+  text: string,
+  maxRetries = 2
+): Promise<{ ok: boolean; result: any }> {
+  const sendUrl = `${serverUrl}/send/text`;
+  const headers: Record<string, string> = { "Content-Type": "application/json", token: instToken };
+  const body = JSON.stringify({ number: recipient, text });
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    console.log(`UazapiGO send-text attempt ${attempt}/${maxRetries} to:`, recipient);
+    try {
+      const resp = await fetch(sendUrl, { method: "POST", headers, body });
+      const result = await resp.json();
+      console.log(`UazapiGO send response (attempt ${attempt}):`, resp.status, JSON.stringify(result).slice(0, 300));
+
+      if (resp.ok) return { ok: true, result };
+
+      // If last attempt, return error
+      if (attempt === maxRetries) return { ok: false, result };
+
+      // Wait before retry
+      console.log("Send failed, retrying in 2s...");
+      await sleep(2000);
+    } catch (err) {
+      console.error(`Send attempt ${attempt} network error:`, err);
+      if (attempt === maxRetries) return { ok: false, result: { message: String(err) } };
+      await sleep(2000);
+    }
+  }
+  return { ok: false, result: { message: "Max retries exceeded" } };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -14,9 +100,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "Unauthorized" }, 401);
     }
 
     const supabase = createClient(
@@ -28,24 +112,18 @@ Deno.serve(async (req) => {
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
     if (userErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "Unauthorized" }, 401);
     }
 
     const userId = user.id;
     const { phone, message, conversation_id, template, group_id, tenant_id } = await req.json();
 
     if (!phone && !group_id) {
-      return new Response(JSON.stringify({ error: "phone or group_id is required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "phone or group_id is required" }, 400);
     }
 
     if (!message && !template) {
-      return new Response(JSON.stringify({ error: "message or template is required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "message or template is required" }, 400);
     }
 
     const adminSupabase = createClient(
@@ -58,12 +136,6 @@ Deno.serve(async (req) => {
     let serverUrl = "";
     let instanceName = "";
     let instanceDbId: string | null = null;
-    let apiType = "uazapi";
-
-    // Legacy Z-API fallback vars
-    let zapiInstanceId = "";
-    let zapiToken = "";
-    let zapiSecurityToken = "";
 
     if (tenant_id && userId) {
       const { data: operatorInstance } = await adminSupabase
@@ -75,46 +147,32 @@ Deno.serve(async (req) => {
         .single();
 
       if (operatorInstance) {
-        apiType = (operatorInstance as any).api_type || "uazapi";
         instanceToken = (operatorInstance as any).instance_token || "";
-        instanceName = (operatorInstance as any).evolution_instance_name || (operatorInstance as any).zapi_instance_id || "";
+        instanceName = (operatorInstance as any).evolution_instance_name || (operatorInstance as any).instance_name || "";
         instanceDbId = operatorInstance.id;
-
-        // Legacy Z-API fields
-        zapiInstanceId = operatorInstance.zapi_instance_id;
-        zapiToken = operatorInstance.zapi_token;
-        zapiSecurityToken = operatorInstance.zapi_security_token || "";
       }
     }
 
     // Get UazapiGO server URL from tenant
-    if ((apiType === "uazapi" || apiType === "evolution") && tenant_id) {
+    if (tenant_id) {
       const { data: tenantData } = await adminSupabase
         .from("tenants")
-        .select("uazapi_server_url, uazapi_admin_token")
+        .select("uazapi_server_url")
         .eq("id", tenant_id)
         .single();
       if (tenantData) {
         serverUrl = (tenantData as any).uazapi_server_url || "";
       }
-      if (!serverUrl) serverUrl = Deno.env.get("UAZAPI_SERVER_URL") || Deno.env.get("EVOLUTION_API_URL") || "";
+      if (!serverUrl) serverUrl = Deno.env.get("UAZAPI_SERVER_URL") || "";
     }
 
-    // Fallback: legacy Z-API tenant config
-    if (!instanceToken && !zapiInstanceId && tenant_id) {
-      const { data: tenant } = await adminSupabase
-        .from("tenants")
-        .select("zapi_instance_id, zapi_token, zapi_security_token")
-        .eq("id", tenant_id)
-        .single();
-
-      if (tenant) {
-        zapiInstanceId = (tenant as any).zapi_instance_id || "";
-        zapiToken = (tenant as any).zapi_token || "";
-        zapiSecurityToken = (tenant as any).zapi_security_token || "";
-        apiType = "zapi";
-      }
+    if (!instanceToken || !serverUrl || !instanceName) {
+      return json({
+        error: "WhatsApp não configurado. Vá em Integrações → WhatsApp e configure sua instância.",
+      }, 200);
     }
+
+    serverUrl = serverUrl.replace(/\/$/, "");
 
     let cleanPhone = (phone || "").replace(/\D/g, "");
     if (cleanPhone.length <= 11) {
@@ -124,72 +182,41 @@ Deno.serve(async (req) => {
     const textToSend = template ? (template.body_text || template.name || message) : message;
     const recipient = group_id || cleanPhone;
 
-    let result: any;
-
-    // ====== UAZAPI GO V2 ======
-    if ((apiType === "uazapi" || apiType === "evolution") && instanceToken && serverUrl && instanceName) {
-      serverUrl = serverUrl.replace(/\/$/, "");
-
-      const uazapiHeaders: Record<string, string> = {
-        "Content-Type": "application/json",
-        token: instanceToken,
-      };
-
-      // UazapiGO V2: POST /send/text with { number, text }
-      const sendUrl = `${serverUrl}/send/text`;
-      console.log("UazapiGO send-text:", sendUrl, "to:", recipient);
-
-      const uazapiResp = await fetch(sendUrl, {
-        method: "POST",
-        headers: uazapiHeaders,
-        body: JSON.stringify({
-          number: recipient,
-          text: textToSend,
-        }),
-      });
-
-      result = await uazapiResp.json();
-      console.log("UazapiGO send response:", uazapiResp.status, JSON.stringify(result));
-
-      if (!uazapiResp.ok) {
-        console.error("UazapiGO send error:", result);
-        const detail = result?.message || "Falha ao enviar mensagem";
-        return new Response(
-          JSON.stringify({ error: detail, details: result }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+    // ====== PRE-SEND: Check connection status and reconnect if needed ======
+    const isConnected = await checkUazapiStatus(serverUrl, instanceName, instanceToken);
+    if (!isConnected) {
+      console.log("UazapiGO not connected, attempting reconnect before send...");
+      const reconnected = await reconnectUazapi(serverUrl, instanceName, instanceToken);
+      if (reconnected) {
+        // Update DB status
+        if (instanceDbId) {
+          await adminSupabase.from("zapi_instances").update({ connection_status: "connected" }).eq("id", instanceDbId);
+        }
+      } else {
+        // Wait 3s and check once more
+        await sleep(3000);
+        const retryConnected = await checkUazapiStatus(serverUrl, instanceName, instanceToken);
+        if (!retryConnected) {
+          // Update DB to disconnected
+          if (instanceDbId) {
+            await adminSupabase.from("zapi_instances").update({ connection_status: "disconnected" }).eq("id", instanceDbId);
+          }
+          return json({
+            error: "WhatsApp desconectado. Reconexão automática falhou. Reconecte manualmente em Integrações.",
+          }, 200);
+        }
+        if (instanceDbId) {
+          await adminSupabase.from("zapi_instances").update({ connection_status: "connected" }).eq("id", instanceDbId);
+        }
       }
     }
-    // ====== Z-API (legacy) ======
-    else if (zapiInstanceId && zapiToken && zapiToken !== "uazapi") {
-      const zapiUrl = `https://api.z-api.io/instances/${zapiInstanceId}/token/${zapiToken}/send-text`;
-      const zapiHeaders: Record<string, string> = { "Content-Type": "application/json" };
-      if (zapiSecurityToken) {
-        zapiHeaders["Client-Token"] = zapiSecurityToken;
-      }
 
-      const response = await fetch(zapiUrl, {
-        method: "POST",
-        headers: zapiHeaders,
-        body: JSON.stringify({ phone: recipient, message: textToSend }),
-      });
+    // ====== SEND with retry (2 attempts) ======
+    const { ok, result } = await sendUazapiText(serverUrl, instanceToken, recipient, textToSend, 2);
 
-      result = await response.json();
-
-      if (!response.ok) {
-        console.error("Z-API error:", result);
-        return new Response(
-          JSON.stringify({ error: "Failed to send message", details: result }),
-          { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-    } else {
-      return new Response(
-        JSON.stringify({
-          error: "WhatsApp não configurado. Vá em Integrações → WhatsApp e configure sua instância.",
-        }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (!ok) {
+      const detail = result?.message || "Falha ao enviar mensagem";
+      return json({ error: detail, details: result }, 200);
     }
 
     // Save outbound message and update conversation
@@ -214,16 +241,12 @@ Deno.serve(async (req) => {
       await adminSupabase.from("whatsapp_conversations").update(convUpdate).eq("id", conversation_id);
     }
 
-    return new Response(JSON.stringify({
+    return json({
       success: true,
       message_id: result.messageId || result.zaapId || result.key?.id || result.id,
-    }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     console.error("Send WhatsApp error:", err);
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ error: (err as Error).message }, 500);
   }
 });

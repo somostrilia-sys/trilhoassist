@@ -99,6 +99,34 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
     });
   }, [instances, tenantId, queryClient]);
 
+  // Health-check polling every 60s — verifies real connection status and updates DB
+  const healthCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (!instances || (instances as any[]).length === 0 || !tenantId) return;
+
+    // Clear previous interval
+    if (healthCheckRef.current) clearInterval(healthCheckRef.current);
+
+    healthCheckRef.current = setInterval(async () => {
+      for (const inst of instances as any[]) {
+        try {
+          const { data } = await supabase.functions.invoke("evolution-api", {
+            body: { action: "check_status", tenant_id: tenantId, instance_db_id: inst.id },
+          });
+          const currentStatus = inst.connection_status;
+          const newStatus = data?.connected ? "connected" : "disconnected";
+          if (currentStatus !== newStatus) {
+            queryClient.invalidateQueries({ queryKey: ["uazapi-instances"] });
+          }
+        } catch { /* silent */ }
+      }
+    }, 60000);
+
+    return () => {
+      if (healthCheckRef.current) clearInterval(healthCheckRef.current);
+    };
+  }, [instances, tenantId, queryClient]);
+
   const assignedOperatorIds = (instances as any[]).map((i: any) => i.operator_id);
   const availableOperators = operators.filter((o: any) => !assignedOperatorIds.includes(o.id));
 
