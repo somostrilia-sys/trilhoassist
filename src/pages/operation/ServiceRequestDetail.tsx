@@ -191,6 +191,7 @@ export default function ServiceRequestDetail() {
   const [selectedProviderId, setSelectedProviderId] = useState("");
   const [quotedAmount, setQuotedAmount] = useState("");
   const [chargedAmount, setChargedAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
   const [dispatchNotes, setDispatchNotes] = useState("");
   const [dispatchMode, setDispatchMode] = useState<"existing" | "quick" | "external">("existing");
   const [quickProvider, setQuickProvider] = useState({
@@ -385,8 +386,8 @@ export default function ServiceRequestDetail() {
       toast.error("Preencha os campos obrigatórios", { description: "Razão Social e Telefone são obrigatórios para cadastro rápido." });
       return;
     }
-    if (!quotedAmount || !chargedAmount) {
-      toast.error("Preencha os valores obrigatórios", { description: "Valor do Prestador e Valor Cobrado são obrigatórios." });
+    if (!quotedAmount || !chargedAmount || !paymentMethod) {
+      toast.error("Preencha os valores obrigatórios", { description: "Valor cobrado do cliente e forma de pagamento são obrigatórios." });
       return;
     }
     setActionLoading(true);
@@ -461,6 +462,7 @@ export default function ServiceRequestDetail() {
       beneficiary_token: beneficiaryToken,
       provider_cost: parseFloat(quotedAmount),
       charged_amount: parseFloat(chargedAmount),
+      payment_method: paymentMethod,
     }).eq("id", id);
 
     await logEvent("dispatch", `Prestador acionado: ${finalProviderName} — Valor Prestador: R$ ${parseFloat(quotedAmount).toFixed(2)} — Valor Cobrado: R$ ${parseFloat(chargedAmount).toFixed(2)}${dispatchMode === "quick" ? " (cadastro rápido)" : ""}`, request.status, "dispatched");
@@ -476,7 +478,11 @@ export default function ServiceRequestDetail() {
         provider_name: finalProviderName,
         provider_phone: finalProviderPhone,
         provider_tracking_url: providerTrackingUrl,
-      });
+        // Extra fields used by some templates (kept permissive)
+        charged_amount: parseFloat(chargedAmount),
+        payment_method: paymentMethod,
+        estimated_km: request.estimated_km,
+      } as any);
     }
 
     // Notify beneficiary via WhatsApp: "prestador a caminho"
@@ -489,8 +495,10 @@ export default function ServiceRequestDetail() {
     // Send dispatch preview label to client WhatsApp group
     sendServiceLabel(id!, "dispatch_preview", {
       provider_id: finalProviderId,
-      quoted_amount: parseFloat(chargedAmount),
-    });
+      charged_amount: parseFloat(chargedAmount),
+      payment_method: paymentMethod,
+      estimated_km: request.estimated_km,
+    } as any);
 
     setActionLoading(false);
     toast.success("Prestador acionado!", { description: dispatchMode === "quick" ? "Prestador cadastrado e acionado. Links enviados via WhatsApp." : "Links de rastreamento enviados via WhatsApp." });
@@ -936,7 +944,7 @@ ${request.estimated_km ? `*DISTÂNCIA*: APROX ${Math.round(request.estimated_km)
         </Card>
       )}
 
-      {/* Financial & Payment */}
+      {/* Financial */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -948,135 +956,13 @@ ${request.estimated_km ? `*DISTÂNCIA*: APROX ${Math.round(request.estimated_km)
             <InfoRow label="Custo Prestador" value={`R$ ${Number(request.provider_cost || 0).toFixed(2)}`} />
             <InfoRow label="Valor Cobrado" value={`R$ ${Number(request.charged_amount || 0).toFixed(2)}`} />
           </div>
-          {/* Overdue payment alert */}
-          {request.payment_method === "invoiced" && !request.payment_received_at && request.status === "completed" && (() => {
-            const termDays = parseInt(request.payment_term || "0", 10);
-            if (!termDays || !request.completed_at) return null;
-            const dueDate = new Date(request.completed_at);
-            dueDate.setDate(dueDate.getDate() + termDays);
-            const now = new Date();
-            if (now > dueDate) {
-              const overdueDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-              return (
-                <Alert variant="destructive" className="mt-2">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Pagamento faturado vencido há <strong>{overdueDays} dia{overdueDays !== 1 ? "s" : ""}</strong> (vencimento: {format(dueDate, "dd/MM/yyyy")}). Nenhum recebimento registrado.
-                  </AlertDescription>
-                </Alert>
-              );
-            }
-            const remainingDays = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-            if (remainingDays <= 5) {
-              return (
-                <Alert className="mt-2 border-yellow-500/50 bg-yellow-50 text-yellow-800 dark:border-yellow-500/30 dark:bg-yellow-950 dark:text-yellow-200">
-                  <Clock className="h-4 w-4" />
-                  <AlertDescription>
-                    Pagamento faturado vence em <strong>{remainingDays} dia{remainingDays !== 1 ? "s" : ""}</strong> ({format(dueDate, "dd/MM/yyyy")}). Nenhum recebimento registrado.
-                  </AlertDescription>
-                </Alert>
-              );
-            }
-            return null;
-          })()}
-          <Separator />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Payment Method */}
-            <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">Forma de Pagamento</Label>
-              <Select
-                value={request.payment_method || ""}
-                onValueChange={async (val) => {
-                  const { error } = await supabase
-                    .from("service_requests")
-                    .update({ payment_method: val })
-                    .eq("id", id!);
-                  if (error) {
-                    toast.error("Erro ao salvar", { description: error.message });
-                  } else {
-                    await logEvent("payment_update", `Forma de pagamento definida: ${val === "cash" ? "À vista" : "Faturado"}`);
-                    toast.success("Forma de pagamento atualizada");
-                    loadData();
-                    loadEvents();
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">À vista</SelectItem>
-                  <SelectItem value="invoiced">Faturado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {/* Payment Term */}
-            <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">Prazo de Pagamento</Label>
-              <Input
-                placeholder="Ex: 30 dias, 15/30..."
-                defaultValue={request.payment_term || ""}
-                onBlur={async (e) => {
-                  const val = e.target.value.trim();
-                  if (val === (request.payment_term || "")) return;
-                  const { error } = await supabase
-                    .from("service_requests")
-                    .update({ payment_term: val || null })
-                    .eq("id", id!);
-                  if (error) {
-                    toast.error("Erro ao salvar", { description: error.message });
-                  } else {
-                    if (val) await logEvent("payment_update", `Prazo de pagamento definido: ${val}`);
-                    toast.success("Prazo atualizado");
-                    loadData();
-                    loadEvents();
-                  }
-                }}
-              />
-            </div>
-            {/* Payment Received Date */}
-            <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">Data de Recebimento</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !request.payment_received_at && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {request.payment_received_at
-                      ? format(new Date(request.payment_received_at), "dd/MM/yyyy")
-                      : "Selecione a data"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={request.payment_received_at ? new Date(request.payment_received_at) : undefined}
-                    onSelect={async (date) => {
-                      const val = date ? date.toISOString() : null;
-                      const { error } = await supabase
-                        .from("service_requests")
-                        .update({ payment_received_at: val })
-                        .eq("id", id!);
-                      if (error) {
-                        toast.error("Erro ao salvar", { description: error.message });
-                      } else {
-                        if (date) await logEvent("payment_update", `Data de recebimento definida: ${format(date, "dd/MM/yyyy")}`);
-                        toast.success("Data de recebimento atualizada");
-                        loadData();
-                        loadEvents();
-                      }
-                    }}
-                    className={cn("p-3 pointer-events-auto")}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+            <InfoRow label="Forma de pagamento" value={request.payment_method || "—"} />
+            <InfoRow label="Recebido em" value={request.payment_received_at ? new Date(request.payment_received_at).toLocaleDateString("pt-BR") : "—"} />
           </div>
+          <p className="text-xs text-muted-foreground">
+            Forma de pagamento e valor cobrado são definidos na etapa de <strong>Acionar Prestador</strong>.
+          </p>
         </CardContent>
       </Card>
 
@@ -1330,6 +1216,7 @@ ${request.estimated_km ? `*DISTÂNCIA*: APROX ${Math.round(request.estimated_km)
                                 longitude: request.origin_lng,
                                 radius: Number(externalSearchRadius) * 1000,
                                 keyword: externalSearchKeyword,
+                                tenant_id: request.tenant_id,
                               },
                             });
                             if (error) throw error;
@@ -1535,6 +1422,22 @@ ${request.estimated_km ? `*DISTÂNCIA*: APROX ${Math.round(request.estimated_km)
               <p className="text-xs text-muted-foreground">Valor cobrado do cliente</p>
             </div>
             <div className="space-y-2">
+              <Label>Forma de pagamento *</Label>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pix">PIX</SelectItem>
+                  <SelectItem value="credit_card">Cartão de Crédito</SelectItem>
+                  <SelectItem value="debit_card">Cartão de Débito</SelectItem>
+                  <SelectItem value="cash">Dinheiro</SelectItem>
+                  <SelectItem value="boleto">Boleto</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
               <Label>Observações</Label>
               <Textarea
                 placeholder="Instruções para o prestador..."
@@ -1551,7 +1454,7 @@ ${request.estimated_km ? `*DISTÂNCIA*: APROX ${Math.round(request.estimated_km)
               disabled={
                 (dispatchMode === "existing" && !selectedProviderId) ||
                 (dispatchMode === "quick" && (!quickProvider.name.trim() || !quickProvider.phone.trim())) ||
-                !quotedAmount || !chargedAmount || actionLoading
+                !quotedAmount || !chargedAmount || !paymentMethod || actionLoading
               }
             >
               {actionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}

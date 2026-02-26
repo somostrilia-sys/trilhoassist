@@ -189,9 +189,9 @@ export default function PublicCollisionMedia({
         </div>
 
         {/* Orientation text */}
-        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm space-y-1 text-amber-900">
+        <div className="rounded-md border border-border bg-muted/30 p-3 text-sm space-y-1">
           <p className="font-semibold">📋 Orientações:</p>
-          <ul className="list-disc list-inside space-y-0.5 text-xs">
+          <ul className="list-disc list-inside space-y-0.5 text-xs text-muted-foreground">
             <li>É <strong>obrigatório</strong> o envio de áudio relatando o ocorrido</li>
             <li>É <strong>obrigatório</strong> o envio de fotos do acidente</li>
             <li>O vídeo é <strong>recomendado</strong> para melhor análise</li>

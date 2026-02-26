@@ -1,6 +1,5 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { maskPhone } from "@/lib/masks";
-import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -64,6 +63,7 @@ export default function PublicServiceRequest() {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState<{ protocol: string; trackingUrl: string } | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [tenantId, setTenantId] = useState<string | null>(null);
   const [vehicleCategory, setVehicleCategory] = useState<VehicleCategory>("car");
   const [attendanceType, setAttendanceType] = useState<AttendanceType>("pane");
   const [needsTow, setNeedsTow] = useState<boolean | null>(null);
@@ -113,6 +113,7 @@ export default function PublicServiceRequest() {
           body: JSON.stringify({ action: "lookup_plate", plate: upper }),
         });
         const data = await res.json();
+        if (data?.beneficiary?.tenant_id) setTenantId(data.beneficiary.tenant_id);
         if (data.beneficiary) {
           setPlateLookupStatus("found");
           setForm((f) => ({
@@ -148,6 +149,23 @@ export default function PublicServiceRequest() {
       setPlateLookupStatus("idle");
     }
   }, []);
+
+  useEffect(() => {
+    // Best-effort: get a default tenant to allow Google Places autocomplete in the public form
+    (async () => {
+      if (tenantId) return;
+      try {
+        const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/public-service-request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+          body: JSON.stringify({ action: "get_default_tenant" }),
+        });
+        const data = await res.json();
+        if (data?.tenant_id) setTenantId(data.tenant_id);
+      } catch {}
+    })();
+  }, [tenantId]);
 
   const handleCategoryChange = (cat: VehicleCategory) => {
     setVehicleCategory(cat);
@@ -280,6 +298,7 @@ export default function PublicServiceRequest() {
       // If collision without tow, go to media upload step
       if (attendanceType === "collision" && !needsTow) {
         setCreatedRequestId(result.id);
+        setTenantId(result.tenant_id || tenantId);
         setSubmitted({
           protocol: result.protocol,
           trackingUrl: `${window.location.origin}/tracking/${result.beneficiary_token}`,
@@ -359,7 +378,7 @@ export default function PublicServiceRequest() {
             <p className="text-2xl font-mono font-bold text-primary">{submitted.protocol}</p>
 
             <a href={submitted.trackingUrl} className="block">
-              <Button className="w-full h-14 text-lg font-bold shadow-lg bg-green-600 hover:bg-green-700 text-white gap-2">
+              <Button className="w-full h-14 text-lg font-bold shadow-lg bg-primary text-primary-foreground hover:bg-primary/90 gap-2">
                 <Navigation className="h-5 w-5" />
                 Acompanhar Atendimento
                 <ArrowRight className="h-5 w-5" />
@@ -676,6 +695,7 @@ export default function PublicServiceRequest() {
                       error={errors.origin_address}
                       coords={originCoords}
                       disabled={!!originCoords && gpsLoading}
+                      tenantId={tenantId}
                     />
                   </div>
                   <Button
@@ -709,6 +729,7 @@ export default function PublicServiceRequest() {
                     placeholder="Digite o endereço de destino"
                     error={errors.destination_address}
                     coords={destinationCoords}
+                    tenantId={tenantId}
                   />
                 </div>
               )}
