@@ -1,5 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { maskPhone } from "@/lib/masks";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   User, Car, MapPin, CheckCircle2, Loader2,
   Navigation, Send, Search, AlertTriangle, FileText,
+  ShieldAlert, ArrowRight,
 } from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
 import CarVerification, { defaultCarVerification } from "@/components/service-request/CarVerification";
@@ -17,8 +19,10 @@ import MotorcycleVerification, { defaultMotorcycleVerification } from "@/compone
 import TruckVerification, { defaultTruckVerification } from "@/components/service-request/TruckVerification";
 import AddressAutocomplete from "@/components/service-request/AddressAutocomplete";
 import RouteDistanceDisplay from "@/components/service-request/RouteDistanceDisplay";
+import PublicCollisionMedia from "@/components/collision/PublicCollisionMedia";
 
 type VehicleCategory = "car" | "motorcycle" | "truck";
+type AttendanceType = "pane" | "collision";
 
 const serviceTypeOptions = [
   { value: "tow_light", label: "Reboque Leve" },
@@ -55,31 +59,14 @@ async function reverseGeocode(lat: number, lng: number): Promise<string> {
   }
 }
 
-async function lookupPlate(plate: string): Promise<{ model: string; year: string } | null> {
-  const clean = plate.replace(/[^A-Z0-9]/gi, "").toUpperCase();
-  if (clean.length < 7) return null;
-  try {
-    const res = await fetch(`https://brasilapi.com.br/api/fipe/preco/v1/${clean}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        const item = data[0];
-        return {
-          model: item.modelo || "",
-          year: item.anoModelo?.toString() || "",
-        };
-      }
-    }
-  } catch { /* fallback to manual */ }
-  return null;
-}
-
 export default function PublicServiceRequest() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState<{ protocol: string; trackingUrl: string } | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [vehicleCategory, setVehicleCategory] = useState<VehicleCategory>("car");
+  const [attendanceType, setAttendanceType] = useState<AttendanceType>("pane");
+  const [needsTow, setNeedsTow] = useState<boolean | null>(null);
   const [plateLookupStatus, setPlateLookupStatus] = useState<"idle" | "loading" | "found" | "not_found">("idle");
   const [gpsLoading, setGpsLoading] = useState(false);
   const [originCoords, setOriginCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -87,6 +74,10 @@ export default function PublicServiceRequest() {
   const [carVerification, setCarVerification] = useState(defaultCarVerification);
   const [motoVerification, setMotoVerification] = useState(defaultMotorcycleVerification);
   const [truckVerification, setTruckVerification] = useState(defaultTruckVerification);
+
+  // Collision media state
+  const [createdRequestId, setCreatedRequestId] = useState<string | null>(null);
+  const [collisionMediaFiles, setCollisionMediaFiles] = useState<any[]>([]);
 
   const [form, setForm] = useState({
     requester_name: "",
@@ -104,6 +95,7 @@ export default function PublicServiceRequest() {
 
   const update = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
+  // ═══ Plate search: beneficiary DB then FIPE ═══
   const handlePlateChange = useCallback(async (value: string) => {
     const upper = value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7);
     update("vehicle_plate", upper);
@@ -111,13 +103,47 @@ export default function PublicServiceRequest() {
 
     if (upper.length === 7) {
       setPlateLookupStatus("loading");
-      const result = await lookupPlate(upper);
-      if (result) {
-        setPlateLookupStatus("found");
-        setForm((f) => ({ ...f, vehicle_model: result.model, vehicle_year: result.year }));
-      } else {
-        setPlateLookupStatus("not_found");
-      }
+
+      // 1) Search beneficiary in DB via edge function (anon can't query beneficiaries directly)
+      try {
+        const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/public-service-request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+          body: JSON.stringify({ action: "lookup_plate", plate: upper }),
+        });
+        const data = await res.json();
+        if (data.beneficiary) {
+          setPlateLookupStatus("found");
+          setForm((f) => ({
+            ...f,
+            requester_name: f.requester_name || data.beneficiary.name || "",
+            requester_phone: f.requester_phone || (data.beneficiary.phone ? maskPhone(data.beneficiary.phone) : ""),
+            vehicle_model: data.beneficiary.vehicle_model || f.vehicle_model,
+            vehicle_year: data.beneficiary.vehicle_year ? String(data.beneficiary.vehicle_year) : f.vehicle_year,
+          }));
+          return;
+        }
+      } catch { /* continue to FIPE */ }
+
+      // 2) FIPE lookup
+      try {
+        const res = await fetch(`https://brasilapi.com.br/api/fipe/preco/v1/${upper}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setPlateLookupStatus("found");
+            setForm((f) => ({
+              ...f,
+              vehicle_model: f.vehicle_model || data[0].modelo || "",
+              vehicle_year: f.vehicle_year || (data[0].anoModelo ? String(data[0].anoModelo) : ""),
+            }));
+            return;
+          }
+        }
+      } catch { /* fallback to manual */ }
+
+      setPlateLookupStatus("not_found");
     } else {
       setPlateLookupStatus("idle");
     }
@@ -125,14 +151,16 @@ export default function PublicServiceRequest() {
 
   const handleCategoryChange = (cat: VehicleCategory) => {
     setVehicleCategory(cat);
-    if (cat === "motorcycle") update("service_type", "tow_motorcycle");
-    else if (cat === "truck") update("service_type", "tow_heavy");
-    else update("service_type", "tow_light");
+    if (attendanceType === "pane") {
+      if (cat === "motorcycle") update("service_type", "tow_motorcycle");
+      else if (cat === "truck") update("service_type", "tow_heavy");
+      else update("service_type", "tow_light");
+    }
   };
 
   const captureGPS = async () => {
     if (!navigator.geolocation) {
-      toast({ title: "GPS não disponível", description: "Seu dispositivo não suporta geolocalização.", variant: "destructive" });
+      toast({ title: "GPS não disponível", variant: "destructive" });
       return;
     }
     setGpsLoading(true);
@@ -155,6 +183,7 @@ export default function PublicServiceRequest() {
   };
 
   const validateChecklist = (): string | null => {
+    if (attendanceType === "collision") return null;
     const requiredByCategory: Record<VehicleCategory, { fields: string[]; data: Record<string, string> }> = {
       car: {
         fields: ["wheel_locked", "steering_locked", "armored", "vehicle_lowered", "carrying_cargo", "easy_access", "vehicle_location", "key_available", "documents_available", "has_passengers", "had_collision", "risk_area", "vehicle_starts"],
@@ -171,24 +200,36 @@ export default function PublicServiceRequest() {
     };
     const { fields, data } = requiredByCategory[vehicleCategory];
     const missing = fields.filter((f) => !data[f] || data[f].trim() === "");
-    return missing.length > 0 ? "Preencha todos os campos obrigatórios do checklist de verificação do veículo." : null;
+    return missing.length > 0 ? "Preencha todos os campos obrigatórios do checklist de verificação." : null;
   };
+
+  const effectiveServiceType = attendanceType === "collision"
+    ? (needsTow ? (vehicleCategory === "motorcycle" ? "tow_motorcycle" : vehicleCategory === "truck" ? "tow_heavy" : "tow_light") : "collision")
+    : form.service_type;
 
   const validate = (): Record<string, string> => {
     const errs: Record<string, string> = {};
     if (!form.requester_name.trim()) errs.requester_name = "Nome é obrigatório";
     if (!form.requester_phone.trim()) errs.requester_phone = "Telefone é obrigatório";
     if (!form.vehicle_plate.trim() || form.vehicle_plate.length < 7) errs.vehicle_plate = "Placa é obrigatória (7 caracteres)";
-    if (!form.service_type) errs.service_type = "Serviço é obrigatório";
-    if (!form.origin_address.trim()) errs.origin_address = "Endereço de origem é obrigatório";
-    const onSiteServices = ["locksmith", "tire_change", "battery"];
-    if (!onSiteServices.includes(form.service_type) && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório";
-    const checklistError = validateChecklist();
-    if (checklistError) errs.checklist = checklistError;
+    if (!form.vehicle_model.trim()) errs.vehicle_model = "Modelo do veículo é obrigatório";
+    if (!form.vehicle_year.trim()) errs.vehicle_year = "Ano do veículo é obrigatório";
+    if (!form.origin_address.trim()) errs.origin_address = attendanceType === "collision" ? "Local do ocorrido é obrigatório" : "Endereço de origem é obrigatório";
+
+    if (attendanceType === "pane") {
+      const onSiteServices = ["locksmith", "tire_change", "battery"];
+      if (!onSiteServices.includes(form.service_type) && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório";
+      const checklistError = validateChecklist();
+      if (checklistError) errs.checklist = checklistError;
+    } else {
+      if (needsTow === null) errs.needs_tow = "Informe se precisa de reboque";
+      if (needsTow && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório para reboque";
+    }
     return errs;
   };
 
   const getVerificationAnswers = () => {
+    if (attendanceType === "collision") return {};
     if (vehicleCategory === "car") return { category: "car", ...carVerification };
     if (vehicleCategory === "motorcycle") return { category: "motorcycle", ...motoVerification };
     return { category: "truck", ...truckVerification };
@@ -219,8 +260,8 @@ export default function PublicServiceRequest() {
             vehicle_model: form.vehicle_model,
             vehicle_year: form.vehicle_year,
             vehicle_category: vehicleCategory,
-            service_type: form.service_type,
-            event_type: form.event_type,
+            service_type: effectiveServiceType,
+            event_type: attendanceType === "collision" ? "accident" : form.event_type,
             origin_address: form.origin_address,
             origin_lat: originCoords?.lat || null,
             origin_lng: originCoords?.lng || null,
@@ -236,6 +277,18 @@ export default function PublicServiceRequest() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Erro ao enviar solicitação");
 
+      // If collision without tow, go to media upload step
+      if (attendanceType === "collision" && !needsTow) {
+        setCreatedRequestId(result.id);
+        setSubmitted({
+          protocol: result.protocol,
+          trackingUrl: `${window.location.origin}/tracking/${result.beneficiary_token}`,
+        });
+        setLoading(false);
+        toast({ title: "Solicitação criada! Agora envie as mídias obrigatórias." });
+        return;
+      }
+
       setSubmitted({
         protocol: result.protocol,
         trackingUrl: `${window.location.origin}/tracking/${result.beneficiary_token}`,
@@ -248,20 +301,75 @@ export default function PublicServiceRequest() {
     }
   };
 
+  // ═══ Collision media upload step ═══
+  if (createdRequestId && submitted && attendanceType === "collision" && !needsTow) {
+    const hasPhotos = collisionMediaFiles.some((f) => f.file_type === "photo");
+    const hasAudio = collisionMediaFiles.some((f) => f.file_type === "audio");
+    const hasDocs = collisionMediaFiles.some((f) => f.file_type === "document");
+    const allRequired = hasPhotos && hasAudio && hasDocs;
+
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <header className="bg-primary text-primary-foreground shadow-md">
+          <div className="max-w-lg mx-auto px-4 py-5 flex items-center gap-3">
+            <img src={logoTrilho} alt="Logo" className="h-10 w-auto rounded bg-white/90 p-1" />
+            <div>
+              <h1 className="text-lg font-bold">Registro de Colisão</h1>
+              <p className="text-xs opacity-80">Protocolo: {submitted.protocol}</p>
+            </div>
+          </div>
+        </header>
+        <main className="max-w-lg mx-auto px-4 py-6 space-y-5">
+          <PublicCollisionMedia
+            serviceRequestId={createdRequestId}
+            onMediaChange={setCollisionMediaFiles}
+          />
+
+          {!allRequired && (
+            <div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              Envie todas as mídias obrigatórias (fotos, áudio e documentos) para concluir.
+            </div>
+          )}
+
+          <Button
+            onClick={() => setCreatedRequestId(null)}
+            disabled={!allRequired}
+            className="w-full h-14 text-lg font-bold shadow-lg bg-green-600 hover:bg-green-700 text-white"
+          >
+            <CheckCircle2 className="h-6 w-6 mr-2" />
+            Concluir e Acompanhar Atendimento
+          </Button>
+        </main>
+      </div>
+    );
+  }
+
+  // ═══ Success screen ═══
   if (submitted) {
     return (
       <div className="min-h-screen bg-muted/30 flex items-center justify-center p-4">
         <Card className="max-w-md w-full shadow-lg">
-          <CardContent className="pt-8 text-center space-y-4">
-            <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-              <CheckCircle2 className="h-8 w-8 text-primary" />
+          <CardContent className="pt-8 text-center space-y-5">
+            <div className="mx-auto w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
+              <CheckCircle2 className="h-10 w-10 text-green-600" />
             </div>
             <h2 className="text-xl font-bold">Solicitação Enviada!</h2>
             <p className="text-muted-foreground">Seu protocolo é:</p>
             <p className="text-2xl font-mono font-bold text-primary">{submitted.protocol}</p>
-            <p className="text-sm text-muted-foreground">
-              Acompanhe o status do seu atendimento pelo link abaixo:
+
+            <a href={submitted.trackingUrl} className="block">
+              <Button className="w-full h-14 text-lg font-bold shadow-lg bg-green-600 hover:bg-green-700 text-white gap-2">
+                <Navigation className="h-5 w-5" />
+                Acompanhar Atendimento
+                <ArrowRight className="h-5 w-5" />
+              </Button>
+            </a>
+
+            <p className="text-xs text-muted-foreground">
+              Você poderá ver o status em tempo real e a localização do prestador quando disponível.
             </p>
+
             <Button
               variant="outline"
               onClick={() => {
@@ -272,9 +380,6 @@ export default function PublicServiceRequest() {
             >
               Copiar link de acompanhamento
             </Button>
-            <a href={submitted.trackingUrl} className="block">
-              <Button className="w-full">Acompanhar Atendimento</Button>
-            </a>
           </CardContent>
         </Card>
       </div>
@@ -295,7 +400,116 @@ export default function PublicServiceRequest() {
 
       <main className="max-w-lg mx-auto px-4 py-6">
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Dados do Solicitante */}
+
+          {/* ═══ Tipo de Atendimento ═══ */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
+                <ShieldAlert className="h-4 w-4" /> Tipo de Atendimento
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  type="button"
+                  variant={attendanceType === "pane" ? "default" : "outline"}
+                  onClick={() => { setAttendanceType("pane"); setNeedsTow(null); }}
+                  className="h-12 text-sm font-semibold"
+                >
+                  🔧 Pane
+                </Button>
+                <Button
+                  type="button"
+                  variant={attendanceType === "collision" ? "default" : "outline"}
+                  onClick={() => { setAttendanceType("collision"); setNeedsTow(null); }}
+                  className="h-12 text-sm font-semibold"
+                >
+                  💥 Colisão
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ═══ Veículo ═══ */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
+                <Car className="h-4 w-4" /> Veículo
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Categoria */}
+              <div className="space-y-1.5">
+                <Label className="text-sm">Tipo de Veículo *</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["car", "motorcycle", "truck"] as VehicleCategory[]).map((cat) => (
+                    <Button
+                      key={cat}
+                      type="button"
+                      variant={vehicleCategory === cat ? "default" : "outline"}
+                      onClick={() => handleCategoryChange(cat)}
+                      className="text-sm h-10"
+                    >
+                      {cat === "car" ? "🚗 Carro" : cat === "motorcycle" ? "🏍️ Moto" : "🚛 Caminhão"}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Placa */}
+              <div className="space-y-1.5">
+                <Label className="text-sm">Placa do Veículo *</Label>
+                <div className="relative">
+                  <Input
+                    value={form.vehicle_plate}
+                    onChange={(e) => handlePlateChange(e.target.value)}
+                    placeholder="ABC1D23"
+                    maxLength={7}
+                    className={`uppercase font-mono text-lg tracking-widest pr-10 ${errors.vehicle_plate ? "border-destructive" : ""}`}
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {plateLookupStatus === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                    {plateLookupStatus === "found" && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                    {plateLookupStatus === "not_found" && <Search className="h-4 w-4 text-muted-foreground" />}
+                  </div>
+                </div>
+                {errors.vehicle_plate && <p className="text-xs text-destructive">{errors.vehicle_plate}</p>}
+                {plateLookupStatus === "found" && (
+                  <p className="text-xs text-primary">✓ Dados encontrados: {form.vehicle_model} {form.vehicle_year}</p>
+                )}
+                {plateLookupStatus === "not_found" && (
+                  <p className="text-xs text-muted-foreground">Veículo não encontrado. Preencha manualmente.</p>
+                )}
+              </div>
+
+              {/* Model/Year */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Modelo *</Label>
+                  <Input
+                    value={form.vehicle_model}
+                    onChange={(e) => { update("vehicle_model", e.target.value); setErrors((p) => ({ ...p, vehicle_model: "" })); }}
+                    placeholder="Ex: Gol 1.0"
+                    className={errors.vehicle_model ? "border-destructive" : ""}
+                  />
+                  {errors.vehicle_model && <p className="text-xs text-destructive">{errors.vehicle_model}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Ano *</Label>
+                  <Input
+                    type="number"
+                    value={form.vehicle_year}
+                    onChange={(e) => { update("vehicle_year", e.target.value); setErrors((p) => ({ ...p, vehicle_year: "" })); }}
+                    placeholder="2024"
+                    className={errors.vehicle_year ? "border-destructive" : ""}
+                  />
+                  {errors.vehicle_year && <p className="text-xs text-destructive">{errors.vehicle_year}</p>}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ═══ Dados do Solicitante ═══ */}
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
@@ -335,154 +549,123 @@ export default function PublicServiceRequest() {
             </CardContent>
           </Card>
 
-          {/* Veículo */}
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
-                <Car className="h-4 w-4" /> Veículo
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <Label className="text-sm">Categoria *</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["car", "motorcycle", "truck"] as VehicleCategory[]).map((cat) => (
-                    <Button
-                      key={cat}
-                      type="button"
-                      variant={vehicleCategory === cat ? "default" : "outline"}
-                      onClick={() => handleCategoryChange(cat)}
-                      className="text-sm h-10"
-                    >
-                      {cat === "car" ? "🚗 Carro" : cat === "motorcycle" ? "🏍️ Moto" : "🚛 Caminhão"}
-                    </Button>
-                  ))}
+          {/* ═══ PANE: Motivo e Serviço ═══ */}
+          {attendanceType === "pane" && (
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
+                  <AlertTriangle className="h-4 w-4" /> Motivo da Pane / Serviço
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Motivo da Pane *</Label>
+                  <Select value={form.event_type} onValueChange={(v) => update("event_type", v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {eventTypeOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-sm">Placa do Veículo *</Label>
-                <div className="relative">
-                  <Input
-                    value={form.vehicle_plate}
-                    onChange={(e) => handlePlateChange(e.target.value)}
-                    placeholder="ABC1D23"
-                    maxLength={7}
-                    className={`uppercase font-mono text-lg tracking-widest pr-10 ${errors.vehicle_plate ? "border-destructive" : ""}`}
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    {plateLookupStatus === "loading" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                    {plateLookupStatus === "found" && <CheckCircle2 className="h-4 w-4 text-primary" />}
-                    {plateLookupStatus === "not_found" && <Search className="h-4 w-4 text-muted-foreground" />}
-                  </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Tipo de Serviço *</Label>
+                  <Select value={form.service_type} onValueChange={(v) => update("service_type", v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {serviceTypeOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                {errors.vehicle_plate && <p className="text-xs text-destructive">{errors.vehicle_plate}</p>}
-                {plateLookupStatus === "found" && (
-                  <p className="text-xs text-primary">✓ Veículo encontrado: {form.vehicle_model} {form.vehicle_year}</p>
-                )}
-                {plateLookupStatus === "not_found" && (
-                  <p className="text-xs text-muted-foreground">Veículo não encontrado. Preencha manualmente abaixo.</p>
-                )}
-              </div>
-
-              {(plateLookupStatus === "not_found" || plateLookupStatus === "idle") && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-sm">Modelo</Label>
-                    <Input
-                      value={form.vehicle_model}
-                      onChange={(e) => update("vehicle_model", e.target.value)}
-                      placeholder="Ex: Gol 1.0"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-sm">Ano</Label>
-                    <Input
-                      type="number"
-                      value={form.vehicle_year}
-                      onChange={(e) => update("vehicle_year", e.target.value)}
-                      placeholder="2024"
-                    />
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Motivo da Pane / Serviço */}
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
-                <AlertTriangle className="h-4 w-4" /> Motivo da Pane / Serviço
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <Label className="text-sm">Motivo da Pane *</Label>
-                <Select value={form.event_type} onValueChange={(v) => update("event_type", v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o motivo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {eventTypeOptions.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm">Tipo de Serviço *</Label>
-                <Select value={form.service_type} onValueChange={(v) => update("service_type", v)}>
-                  <SelectTrigger className={errors.service_type ? "border-destructive" : ""}>
-                    <SelectValue placeholder="Selecione o serviço" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {serviceTypeOptions.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.service_type && <p className="text-xs text-destructive">{errors.service_type}</p>}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Checklist de Verificação do Veículo */}
-          <div className={vehicleCategory !== "car" ? "hidden" : ""}>
-            <CarVerification
-              data={carVerification}
-              onChange={(field, value) => setCarVerification((prev) => ({ ...prev, [field]: value }))}
-            />
-          </div>
-          <div className={vehicleCategory !== "motorcycle" ? "hidden" : ""}>
-            <MotorcycleVerification
-              data={motoVerification}
-              onChange={(field, value) => setMotoVerification((prev) => ({ ...prev, [field]: value }))}
-            />
-          </div>
-          <div className={vehicleCategory !== "truck" ? "hidden" : ""}>
-            <TruckVerification
-              data={truckVerification}
-              onChange={(field, value) => setTruckVerification((prev) => ({ ...prev, [field]: value }))}
-            />
-          </div>
-          {errors.checklist && (
-            <div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              {errors.checklist}
-            </div>
+              </CardContent>
+            </Card>
           )}
 
-          {/* Endereços */}
+          {/* ═══ COLISÃO: Precisa de reboque? ═══ */}
+          {attendanceType === "collision" && (
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
+                  💥 Detalhes da Colisão
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-sm">Precisa de reboque? *</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant={needsTow === true ? "default" : "outline"}
+                      onClick={() => { setNeedsTow(true); setErrors((p) => ({ ...p, needs_tow: "" })); }}
+                      className="h-10"
+                    >
+                      ✅ Sim
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={needsTow === false ? "default" : "outline"}
+                      onClick={() => { setNeedsTow(false); setErrors((p) => ({ ...p, needs_tow: "" })); }}
+                      className="h-10"
+                    >
+                      ❌ Não
+                    </Button>
+                  </div>
+                  {errors.needs_tow && <p className="text-xs text-destructive">{errors.needs_tow}</p>}
+                </div>
+
+                {needsTow === false && (
+                  <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
+                    <p className="font-semibold mb-1">ℹ️ Registro de Colisão</p>
+                    <p className="text-xs">Após enviar a solicitação, você precisará enviar fotos, áudio e documentos obrigatórios.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ═══ Checklist (PANE only) ═══ */}
+          {attendanceType === "pane" && (
+            <>
+              <div className={vehicleCategory !== "car" ? "hidden" : ""}>
+                <CarVerification
+                  data={carVerification}
+                  onChange={(field, value) => setCarVerification((prev) => ({ ...prev, [field]: value }))}
+                />
+              </div>
+              <div className={vehicleCategory !== "motorcycle" ? "hidden" : ""}>
+                <MotorcycleVerification
+                  data={motoVerification}
+                  onChange={(field, value) => setMotoVerification((prev) => ({ ...prev, [field]: value }))}
+                />
+              </div>
+              <div className={vehicleCategory !== "truck" ? "hidden" : ""}>
+                <TruckVerification
+                  data={truckVerification}
+                  onChange={(field, value) => setTruckVerification((prev) => ({ ...prev, [field]: value }))}
+                />
+              </div>
+              {errors.checklist && (
+                <div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  {errors.checklist}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ═══ Localização ═══ */}
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
-                <MapPin className="h-4 w-4" /> Localização
+                <MapPin className="h-4 w-4" /> {attendanceType === "collision" ? "Local do Ocorrido" : "Localização"}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-sm">Endereço de Origem *</Label>
+                <Label className="text-sm">{attendanceType === "collision" ? "Local do Ocorrido" : "Endereço de Origem"} *</Label>
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <AddressAutocomplete
@@ -507,37 +690,34 @@ export default function PublicServiceRequest() {
                   </Button>
                 </div>
                 {originCoords && (
-                  <button
-                    type="button"
-                    className="text-xs text-primary underline"
-                    onClick={() => { setOriginCoords(null); update("origin_address", ""); }}
-                  >
+                  <button type="button" className="text-xs text-primary underline" onClick={() => { setOriginCoords(null); update("origin_address", ""); }}>
                     Limpar e digitar manualmente
                   </button>
                 )}
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-sm">Endereço de Destino {!["locksmith", "tire_change", "battery"].includes(form.service_type) ? "*" : ""}</Label>
-                <AddressAutocomplete
-                  value={form.destination_address}
-                  onChange={(v) => { update("destination_address", v); setErrors((p) => ({ ...p, destination_address: "" })); }}
-                  onPlaceSelect={(place) => setDestinationCoords({ lat: place.lat, lng: place.lng })}
-                  placeholder="Digite o endereço de destino"
-                  error={errors.destination_address}
-                  coords={destinationCoords}
-                />
-              </div>
+              {/* Destination - show for Pane (except on-site) or Collision with tow */}
+              {(attendanceType === "pane" || (attendanceType === "collision" && needsTow)) && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm">
+                    Endereço de Destino {attendanceType === "pane" && !["locksmith", "tire_change", "battery"].includes(form.service_type) ? "*" : needsTow ? "*" : ""}
+                  </Label>
+                  <AddressAutocomplete
+                    value={form.destination_address}
+                    onChange={(v) => { update("destination_address", v); setErrors((p) => ({ ...p, destination_address: "" })); }}
+                    onPlaceSelect={(place) => setDestinationCoords({ lat: place.lat, lng: place.lng })}
+                    placeholder="Digite o endereço de destino"
+                    error={errors.destination_address}
+                    coords={destinationCoords}
+                  />
+                </div>
+              )}
 
-              {/* Route Distance */}
-              <RouteDistanceDisplay
-                originCoords={originCoords}
-                destinationCoords={destinationCoords}
-              />
+              <RouteDistanceDisplay originCoords={originCoords} destinationCoords={destinationCoords} />
             </CardContent>
           </Card>
 
-          {/* Observações */}
+          {/* ═══ Observações ═══ */}
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
@@ -548,8 +728,8 @@ export default function PublicServiceRequest() {
               <Textarea
                 value={form.notes}
                 onChange={(e) => update("notes", e.target.value)}
-                placeholder="Informações adicionais sobre o atendimento..."
-                rows={4}
+                placeholder="Informações adicionais..."
+                rows={3}
               />
             </CardContent>
           </Card>
