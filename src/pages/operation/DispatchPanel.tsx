@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle, Clock, Siren, Volume2, VolumeX,
-  User, MapPin, Car, ExternalLink, CheckCircle2, Timer,
+  User, MapPin, Car, ExternalLink, CheckCircle2, Timer, PauseCircle, PlayCircle,
 } from "lucide-react";
 
 const serviceTypeMap: Record<string, string> = {
@@ -22,6 +22,7 @@ const statusLabels: Record<string, { label: string; variant: "default" | "second
   awaiting_dispatch: { label: "Aguard. Acionamento", variant: "secondary" },
   dispatched: { label: "Acionado", variant: "default" },
   in_progress: { label: "Em Andamento", variant: "default" },
+  paused: { label: "Pausado", variant: "destructive" },
 };
 
 function playSiren() {
@@ -75,6 +76,7 @@ export default function DispatchPanel() {
   const [alertLateMin, setAlertLateMin] = useState(10);
   const [loading, setLoading] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [pausedIds, setPausedIds] = useState<Set<string>>(new Set());
   const lastAlertRef = useRef<Set<string>>(new Set());
   const tickRef = useRef(0);
   const [tick, setTick] = useState(0);
@@ -176,7 +178,7 @@ export default function DispatchPanel() {
   useEffect(() => {
     if (!soundEnabled) return;
     const alertIds = items
-      .filter((i) => i.alertDispatch || i.alertLate)
+      .filter((i) => (i.alertDispatch || i.alertLate) && !pausedIds.has(i.request.id))
       .map((i) => i.request.id);
 
     const newAlerts = alertIds.filter((id) => !lastAlertRef.current.has(id));
@@ -246,9 +248,11 @@ export default function DispatchPanel() {
             <Card
               key={r.id}
               className={
-                hasAlert
-                  ? "border-destructive/50 bg-destructive/5 animate-pulse"
-                  : ""
+                pausedIds.has(r.id)
+                  ? "border-muted opacity-60"
+                  : hasAlert
+                    ? "border-destructive/50 bg-destructive/5 animate-pulse"
+                    : ""
               }
             >
               <CardHeader className="pb-2">
@@ -261,13 +265,19 @@ export default function DispatchPanel() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {/* Alerts */}
-                {item.alertDispatch && (
+                {pausedIds.has(r.id) && (
+                  <div className="flex items-center gap-2 text-xs font-medium bg-muted rounded px-2 py-1">
+                    <PauseCircle className="h-3.5 w-3.5" />
+                    Acionamento pausado
+                  </div>
+                )}
+                {item.alertDispatch && !pausedIds.has(r.id) && (
                   <div className="flex items-center gap-2 text-xs text-destructive font-medium bg-destructive/10 rounded px-2 py-1">
                     <AlertTriangle className="h-3.5 w-3.5" />
                     Sem acionamento há {formatElapsed(item.elapsedSinceCreation)}
                   </div>
                 )}
-                {item.alertLate && (
+                {item.alertLate && !pausedIds.has(r.id) && (
                   <div className="flex items-center gap-2 text-xs text-destructive font-medium bg-destructive/10 rounded px-2 py-1">
                     <AlertTriangle className="h-3.5 w-3.5" />
                     Prestador atrasado ({formatElapsed(item.elapsedSinceDispatch ?? 0)} / ETA {d.estimated_arrival_min}min)
@@ -315,11 +325,37 @@ export default function DispatchPanel() {
                     <Clock className="h-3 w-3" />
                     {formatElapsed(item.elapsedSinceCreation)}
                   </span>
-                  <Link to={`/operation/requests/${r.id}`}>
-                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1">
-                      <ExternalLink className="h-3 w-3" /> Ver
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs gap-1"
+                      onClick={() => {
+                        setPausedIds(prev => {
+                          const next = new Set(prev);
+                          if (next.has(r.id)) {
+                            next.delete(r.id);
+                            toast({ title: "Acionamento retomado", description: r.protocol });
+                          } else {
+                            next.add(r.id);
+                            toast({ title: "Acionamento pausado", description: r.protocol });
+                          }
+                          return next;
+                        });
+                      }}
+                    >
+                      {pausedIds.has(r.id) ? (
+                        <><PlayCircle className="h-3 w-3" /> Retomar</>
+                      ) : (
+                        <><PauseCircle className="h-3 w-3" /> Pausar</>
+                      )}
                     </Button>
-                  </Link>
+                    <Link to={`/operation/requests/${r.id}`}>
+                      <Button variant="ghost" size="sm" className="h-6 text-xs gap-1">
+                        <ExternalLink className="h-3 w-3" /> Ver
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
               </CardContent>
             </Card>
