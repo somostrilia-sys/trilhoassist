@@ -80,6 +80,25 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
     enabled: !!tenantId,
   });
 
+  // Auto-check real status when instances load
+  const autoCheckedRef = useRef(false);
+  useEffect(() => {
+    if (!instances || (instances as any[]).length === 0 || autoCheckedRef.current) return;
+    autoCheckedRef.current = true;
+    (instances as any[]).forEach(async (inst: any) => {
+      if (inst.connection_status === "connected") {
+        try {
+          const { data } = await supabase.functions.invoke("evolution-api", {
+            body: { action: "check_status", tenant_id: tenantId, instance_db_id: inst.id },
+          });
+          if (data && !data.connected) {
+            queryClient.invalidateQueries({ queryKey: ["uazapi-instances"] });
+          }
+        } catch { /* silent */ }
+      }
+    });
+  }, [instances, tenantId, queryClient]);
+
   const assignedOperatorIds = (instances as any[]).map((i: any) => i.operator_id);
   const availableOperators = operators.filter((o: any) => !assignedOperatorIds.includes(o.id));
 
