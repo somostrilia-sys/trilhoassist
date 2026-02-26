@@ -18,9 +18,10 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Plus, Users, CheckCircle, XCircle, Pencil, Link, ChevronDown, ShieldBan, ShieldCheck, MoreVertical } from "lucide-react";
+import { Search, Plus, Users, CheckCircle, XCircle, Pencil, Link, ChevronDown, ShieldBan, ShieldCheck, MoreVertical, FileSpreadsheet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { maskCNPJ, maskPhone } from "@/lib/masks";
+import ProviderImport from "@/components/import/ProviderImport";
 
 const SERVICE_LABELS: Record<string, string> = {
   tow_light: "Guincho Leve",
@@ -41,6 +42,7 @@ export default function ProvidersList() {
   const [search, setSearch] = useState("");
   const [blockDialog, setBlockDialog] = useState<{ id: string; name: string } | null>(null);
   const [blockReason, setBlockReason] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
 
   // Fetch user's tenant id
   const { data: tenantId } = useQuery({
@@ -179,6 +181,10 @@ export default function ProvidersList() {
           <p className="text-sm text-muted-foreground">Gerencie sua rede de prestadores de serviço</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => setImportOpen(true)}>
+            <FileSpreadsheet className="h-4 w-4" />
+            Importar Planilha
+          </Button>
           <Button
             variant="outline"
             className="gap-2"
@@ -405,6 +411,15 @@ export default function ProvidersList() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {tenantId && (
+        <ProviderImport
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          tenantId={tenantId}
+          onComplete={() => queryClient.invalidateQueries({ queryKey: ["admin-providers"] })}
+        />
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -16,9 +16,10 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Search, Plus, UserCheck, CheckCircle, XCircle, Pencil, MoreVertical, Car } from "lucide-react";
+import { Search, Plus, UserCheck, CheckCircle, XCircle, Pencil, MoreVertical, Car, FileSpreadsheet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { maskCPF, maskPhone } from "@/lib/masks";
+import BeneficiaryImport from "@/components/import/BeneficiaryImport";
 
 export default function BeneficiariesList() {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ export default function BeneficiariesList() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState<string>("all");
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: tenantId } = useQuery({
     queryKey: ["user-tenant-id", user?.id],
@@ -48,6 +50,24 @@ export default function BeneficiariesList() {
   });
 
   const clientIds = clients.map((c) => c.id);
+
+  // Fetch plans for import mapping
+  const { data: plans = [] } = useQuery({
+    queryKey: ["admin-plans-for-import", clientIds],
+    queryFn: async () => {
+      if (clientIds.length === 0) return [];
+      const { data, error } = await supabase.from("plans").select("id, name, client_id").in("client_id", clientIds);
+      if (error) throw error;
+      return data;
+    },
+    enabled: clientIds.length > 0,
+  });
+
+  const planMap = useMemo(() => {
+    const m = new Map<string, string>();
+    plans.forEach(p => m.set(p.name.toLowerCase().trim(), p.id));
+    return m;
+  }, [plans]);
 
   const { data: beneficiaries = [], isLoading } = useQuery({
     queryKey: ["admin-beneficiaries", clientIds],
@@ -95,10 +115,16 @@ export default function BeneficiariesList() {
           <h1 className="text-2xl font-bold">Beneficiários</h1>
           <p className="text-sm text-muted-foreground">Gerencie beneficiários e veículos</p>
         </div>
-        <Button className="gap-2" onClick={() => navigate("/business/beneficiaries/new")}>
-          <Plus className="h-4 w-4" />
-          Novo Beneficiário
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => setImportOpen(true)}>
+            <FileSpreadsheet className="h-4 w-4" />
+            Importar Planilha
+          </Button>
+          <Button className="gap-2" onClick={() => navigate("/business/beneficiaries/new")}>
+            <Plus className="h-4 w-4" />
+            Novo Beneficiário
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -242,6 +268,14 @@ export default function BeneficiariesList() {
           )}
         </CardContent>
       </Card>
+
+      <BeneficiaryImport
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        clientId={clientFilter !== "all" ? clientFilter : (clientIds[0] || "")}
+        planMap={planMap}
+        onComplete={() => queryClient.invalidateQueries({ queryKey: ["admin-beneficiaries"] })}
+      />
     </div>
   );
 }
