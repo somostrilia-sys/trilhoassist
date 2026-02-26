@@ -5,17 +5,48 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// ===== RATE LIMITER =====
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+function isRateLimited(ip: string, max = 60, windowMs = 60_000): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
+    return false;
+  }
+  entry.count++;
+  return entry.count > max;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Rate limiting
+  const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (isRateLimited(clientIp)) {
+    return new Response(JSON.stringify({ error: "Too many requests" }), {
+      status: 429,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   try {
     const url = new URL(req.url);
     const token = url.searchParams.get("token");
 
-    if (!token) {
+    // ===== TOKEN VALIDATION =====
+    if (!token || token.length < 10 || token.length > 100) {
       return new Response(JSON.stringify({ error: "Token is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Only allow alphanumeric + hyphens in token
+    if (!/^[a-zA-Z0-9\-]+$/.test(token)) {
+      return new Response(JSON.stringify({ error: "Invalid token format" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -26,10 +57,10 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Fetch the service request by share_token
+    // Fetch the service request by share_token (exclude sensitive fields)
     const { data: request, error: reqError } = await supabase
       .from("service_requests")
-      .select("id, protocol, requester_name, requester_phone, vehicle_plate, vehicle_model, vehicle_year, vehicle_category, service_type, event_type, origin_address, origin_lat, origin_lng, destination_address, destination_lat, destination_lng, notes, status, created_at, completed_at, share_token, clients(name)")
+      .select("id, protocol, requester_name, vehicle_plate, vehicle_model, vehicle_year, vehicle_category, service_type, event_type, origin_address, origin_lat, origin_lng, destination_address, destination_lat, destination_lng, notes, status, created_at, completed_at, share_token, clients(name)")
       .eq("share_token", token)
       .eq("service_type", "collision")
       .maybeSingle();

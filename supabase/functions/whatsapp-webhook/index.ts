@@ -3,8 +3,24 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-webhook-secret, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+// ===== RATE LIMITER (in-memory, per-isolate) =====
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 100; // max requests per window
+const RATE_WINDOW_MS = 60_000; // 1 minute
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > RATE_LIMIT;
+}
 
 // Regex for Brazilian vehicle plates: ABC1D23 (Mercosul) or ABC-1234 (old)
 const PLATE_REGEX = /\b([A-Z]{3}[\-\s]?\d[A-Z0-9]\d{2})\b/i;
@@ -20,6 +36,15 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // ===== RATE LIMITING =====
+  const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (isRateLimited(clientIp)) {
+    return new Response(JSON.stringify({ error: "Too many requests" }), {
+      status: 429,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   const url = new URL(req.url);
   const tenantSlug = url.searchParams.get("tenant");
   const source = url.searchParams.get("source");
@@ -29,19 +54,47 @@ Deno.serve(async (req) => {
     return new Response("ok", { status: 200, headers: corsHeaders });
   }
 
+  // ===== WEBHOOK SECRET VALIDATION =====
+  const webhookSecret = Deno.env.get("WEBHOOK_SECRET");
+  if (webhookSecret) {
+    const providedSecret = req.headers.get("x-webhook-secret");
+    if (providedSecret !== webhookSecret) {
+      console.warn("Webhook secret mismatch from IP:", clientIp);
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const payload = await req.json();
+    let payload: any;
+    try {
+      const bodyText = await req.text();
+      if (bodyText.length > 100_000) {
+        return new Response(JSON.stringify({ error: "Payload too large" }), {
+          status: 413,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      payload = JSON.parse(bodyText);
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // ========== UAZAPI GO EVENTS ==========
     return await handleUazapiWebhook(supabase, payload, tenantSlug, url);
   } catch (err) {
     console.error("Webhook error:", err);
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
+    return new Response(JSON.stringify({ error: "Internal error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -89,6 +142,14 @@ async function handleUazapiWebhook(supabase: any, payload: any, tenantSlug: stri
       });
     }
 
+    // Validate tenantSlug format (alphanumeric + hyphens only)
+    if (!/^[a-z0-9\-]{1,100}$/.test(tenantSlug)) {
+      return new Response(JSON.stringify({ error: "Invalid tenant slug" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Resolve tenant
     let tenantId = "";
     const { data: tenant } = await supabase
@@ -101,13 +162,17 @@ async function handleUazapiWebhook(supabase: any, payload: any, tenantSlug: stri
     if (tenant) {
       tenantId = tenant.id;
     } else {
-      const { data: tenantById } = await supabase
-        .from("tenants")
-        .select("id")
-        .eq("id", tenantSlug)
-        .eq("active", true)
-        .single();
-      if (tenantById) tenantId = tenantById.id;
+      // Try as UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (uuidRegex.test(tenantSlug)) {
+        const { data: tenantById } = await supabase
+          .from("tenants")
+          .select("id")
+          .eq("id", tenantSlug)
+          .eq("active", true)
+          .single();
+        if (tenantById) tenantId = tenantById.id;
+      }
     }
 
     if (!tenantId) {
@@ -186,7 +251,7 @@ async function processInboundMessage(
     });
   }
 
-  const cleanPhone = normalized.phone.replace(/\D/g, "");
+  const cleanPhone = normalized.phone.replace(/\D/g, "").slice(0, 20);
 
   // Find or create conversation
   let { data: conversation } = await supabase
@@ -212,7 +277,7 @@ async function processInboundMessage(
       .insert({
         tenant_id: tenantId,
         phone: cleanPhone,
-        contact_name: normalized.name || beneficiary?.name || null,
+        contact_name: (normalized.name || beneficiary?.name || "").slice(0, 200),
         beneficiary_id: beneficiary?.id || null,
         detected_plate: beneficiary?.vehicle_plate || null,
         detected_vehicle_model: beneficiary?.vehicle_model || null,
@@ -235,10 +300,10 @@ async function processInboundMessage(
   }
 
   // Smart extraction
-  const messageText = normalized.message || "";
+  const messageText = (normalized.message || "").slice(0, 5000);
   const updateFields: Record<string, any> = {
     last_message_at: new Date().toISOString(),
-    contact_name: normalized.name || conversation.contact_name,
+    contact_name: (normalized.name || conversation.contact_name || "").slice(0, 200),
   };
 
   if (!conversation.detected_plate && messageText) {
@@ -264,12 +329,15 @@ async function processInboundMessage(
   }
 
   if (normalized.latitude && normalized.longitude) {
-    if (!conversation.origin_lat) {
-      updateFields.origin_lat = normalized.latitude;
-      updateFields.origin_lng = normalized.longitude;
-    } else if (!conversation.destination_lat) {
-      updateFields.destination_lat = normalized.latitude;
-      updateFields.destination_lng = normalized.longitude;
+    // Validate coordinate ranges
+    if (Math.abs(normalized.latitude) <= 90 && Math.abs(normalized.longitude) <= 180) {
+      if (!conversation.origin_lat) {
+        updateFields.origin_lat = normalized.latitude;
+        updateFields.origin_lng = normalized.longitude;
+      } else if (!conversation.destination_lat) {
+        updateFields.destination_lat = normalized.latitude;
+        updateFields.destination_lng = normalized.longitude;
+      }
     }
   }
 
@@ -278,11 +346,11 @@ async function processInboundMessage(
     conversation_id: conversation.id,
     direction: "inbound",
     message_type: normalized.message_type || "text",
-    content: normalized.message || null,
-    media_url: normalized.media_url || null,
+    content: messageText || null,
+    media_url: normalized.media_url?.slice(0, 2000) || null,
     latitude: normalized.latitude || null,
     longitude: normalized.longitude || null,
-    external_id: normalized.external_id || null,
+    external_id: normalized.external_id?.slice(0, 200) || null,
     raw_payload: null,
   });
 
@@ -314,13 +382,11 @@ interface NormalizedMessage {
 }
 
 function normalizeUazapiPayload(payload: any): NormalizedMessage {
-  // UazapiGO V2 format: { event, data: { key: { remoteJid, fromMe, id }, message: {...}, pushName }, instance }
   const data = payload.data || payload;
   if (!data) return { phone: "" };
 
   const key = data.key;
   if (!key) {
-    // Fallback: direct phone field (alternative format)
     if (data.phone || payload.phone) {
       return {
         phone: (data.phone || payload.phone || "").replace(/\D/g, ""),

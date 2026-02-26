@@ -13,6 +13,22 @@ const json = (payload: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
+// ===== RATE LIMITER =====
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+function isRateLimited(ip: string, max = 30, windowMs = 60_000): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
+    return false;
+  }
+  entry.count++;
+  return entry.count > max;
+}
+
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const ALLOWED_MIME_PREFIXES = ["image/", "video/", "audio/", "application/pdf"];
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -20,6 +36,12 @@ serve(async (req) => {
 
   if (req.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
+  }
+
+  // Rate limiting
+  const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (isRateLimited(clientIp, 30)) {
+    return json({ error: "Muitas requisições. Aguarde." }, 429);
   }
 
   const contentType = req.headers.get("content-type") ?? "";
@@ -49,6 +71,27 @@ serve(async (req) => {
       return json({ error: "Invalid file_type" }, 400);
     }
 
+    // ===== FILE SIZE VALIDATION =====
+    if (file.size > MAX_FILE_SIZE) {
+      return json({ error: `Arquivo muito grande (máx ${MAX_FILE_SIZE / 1024 / 1024}MB)` }, 413);
+    }
+
+    if (file.size === 0) {
+      return json({ error: "Arquivo vazio" }, 400);
+    }
+
+    // ===== MIME TYPE VALIDATION =====
+    const mimeType = file.type || "application/octet-stream";
+    if (!ALLOWED_MIME_PREFIXES.some(p => mimeType.startsWith(p))) {
+      return json({ error: "Tipo de arquivo não permitido" }, 400);
+    }
+
+    // ===== SERVICE REQUEST ID VALIDATION =====
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(serviceRequestId)) {
+      return json({ error: "ID inválido" }, 400);
+    }
+
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -64,16 +107,18 @@ serve(async (req) => {
       return json({ error: "Invalid service request" }, 403);
     }
 
-    const ext = file.name.split(".").pop() || "bin";
+    // Sanitize file name
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 200);
+    const ext = safeName.split(".").pop() || "bin";
     const path = `${serviceRequestId}/${fileType}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
     const { data: storageData, error: storageError } = await supabaseAdmin.storage
       .from("collision-media")
-      .upload(path, file, { contentType: file.type || "application/octet-stream" });
+      .upload(path, file, { contentType: mimeType });
 
     if (storageError) {
       console.error("Storage error:", storageError);
-      return json({ error: "Storage upload failed", details: storageError.message }, 500);
+      return json({ error: "Storage upload failed" }, 500);
     }
 
     const { data: urlData } = supabaseAdmin.storage.from("collision-media").getPublicUrl(storageData.path);
@@ -83,9 +128,9 @@ serve(async (req) => {
       .insert({
         service_request_id: serviceRequestId,
         file_url: urlData.publicUrl,
-        file_name: file.name,
+        file_name: safeName,
         file_type: fileType,
-        mime_type: file.type,
+        mime_type: mimeType,
         file_size: file.size,
       })
       .select("id")
@@ -93,19 +138,19 @@ serve(async (req) => {
 
     if (insertError) {
       console.error("Insert error:", insertError);
-      return json({ error: "Database insert failed", details: insertError.message }, 500);
+      return json({ error: "Database insert failed" }, 500);
     }
 
     return json({
       id: mediaRow.id,
       file_url: urlData.publicUrl,
-      file_name: file.name,
+      file_name: safeName,
       file_type: fileType,
-      mime_type: file.type,
+      mime_type: mimeType,
       file_size: file.size,
     });
   } catch (err) {
     console.error("Unexpected error:", err);
-    return json({ error: "Internal error", details: String(err) }, 500);
+    return json({ error: "Internal error" }, 500);
   }
 });

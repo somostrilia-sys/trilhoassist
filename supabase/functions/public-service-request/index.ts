@@ -6,15 +6,39 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ===== RATE LIMITER =====
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+function isRateLimited(ip: string, max = 20, windowMs = 60_000): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
+    return false;
+  }
+  entry.count++;
+  return entry.count > max;
+}
+
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Rate limiting
+  const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (isRateLimited(clientIp, 20)) {
+    return new Response(
+      JSON.stringify({ error: "Muitas requisições. Aguarde um momento." }),
+      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   try {
     const body = await req.json();
 
-    // ═══ Get default tenant for public pages (Google Places key resolution) ═══
+    // ═══ Get default tenant for public pages ═══
     if (body.action === "get_default_tenant") {
       const supabaseAdmin = createClient(
         Deno.env.get("SUPABASE_URL")!,
@@ -33,13 +57,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ... keep existing code
-
-
-    // ═══ Plate lookup action (used by public form) ═══
+    // ═══ Plate lookup action ═══
     if (body.action === "lookup_plate") {
       const cleanPlate = (body.plate || "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
-      if (cleanPlate.length < 7) {
+      if (cleanPlate.length < 7 || cleanPlate.length > 8) {
         return new Response(JSON.stringify({ beneficiary: null }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -56,14 +77,22 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
+      // Don't expose beneficiary phone to public
       const tenant_id = (ben as any)?.clients?.tenant_id || null;
-
-      return new Response(JSON.stringify({ beneficiary: ben ? { ...ben, tenant_id } : null }), {
+      return new Response(JSON.stringify({ 
+        beneficiary: ben ? { 
+          id: ben.id, 
+          name: ben.name, 
+          vehicle_model: ben.vehicle_model, 
+          vehicle_year: ben.vehicle_year, 
+          tenant_id 
+        } : null 
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Validate required fields
+    // ===== VALIDATE REQUIRED FIELDS =====
     const { requester_name, requester_phone, origin_address, vehicle_plate, service_type, event_type } = body;
 
     if (!requester_name?.trim()) throw new Error("Nome do solicitante é obrigatório");
@@ -76,6 +105,12 @@ Deno.serve(async (req) => {
     if (origin_address.length > 500) throw new Error("Endereço muito longo");
     if (body.destination_address && body.destination_address.length > 500) throw new Error("Endereço de destino muito longo");
     if (body.notes && body.notes.length > 2000) throw new Error("Observações muito longas");
+    if (body.vehicle_model && body.vehicle_model.length > 100) throw new Error("Modelo do veículo muito longo");
+    if (body.requester_phone_secondary && body.requester_phone_secondary.length > 30) throw new Error("Telefone secundário inválido");
+
+    // Validate phone format
+    const cleanPhone = requester_phone.replace(/\D/g, "");
+    if (cleanPhone.length < 10 || cleanPhone.length > 15) throw new Error("Telefone inválido");
 
     // Validate enum values
     const validServiceTypes = [
@@ -94,19 +129,27 @@ Deno.serve(async (req) => {
       throw new Error("Tipo de evento inválido");
     }
 
+    // Validate coordinates if provided
+    if (body.origin_lat != null && (typeof body.origin_lat !== "number" || Math.abs(body.origin_lat) > 90)) {
+      throw new Error("Coordenada de origem inválida");
+    }
+    if (body.origin_lng != null && (typeof body.origin_lng !== "number" || Math.abs(body.origin_lng) > 180)) {
+      throw new Error("Coordenada de origem inválida");
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Look up beneficiary by plate to find client/plan
+    // Look up beneficiary by plate
     let beneficiaryId: string | null = null;
     let clientId: string | null = null;
     let planId: string | null = null;
     let tenantId: string | null = null;
 
     const cleanPlate = (vehicle_plate || "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
-    if (cleanPlate.length >= 7) {
+    if (cleanPlate.length >= 7 && cleanPlate.length <= 8) {
       const { data: ben } = await supabase
         .from("beneficiaries")
         .select("id, client_id, plan_id, clients(tenant_id)")
@@ -123,7 +166,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // If no tenant found via beneficiary, try to get a default tenant
     if (!tenantId) {
       const { data: defaultTenant } = await supabase
         .from("tenants")
@@ -135,29 +177,30 @@ Deno.serve(async (req) => {
     }
 
     const beneficiaryToken = crypto.randomUUID();
-
     const vehicleCategory = body.vehicle_category || "car";
+    const validCategories = ["car", "motorcycle", "truck", "van"];
+    const safeCategory = validCategories.includes(vehicleCategory) ? vehicleCategory : "car";
 
     const { data: inserted, error } = await supabase.from("service_requests").insert({
-      requester_name: requester_name.trim(),
-      requester_phone: requester_phone.trim(),
-      requester_phone_secondary: body.requester_phone_secondary?.trim() || null,
+      requester_name: requester_name.trim().slice(0, 200),
+      requester_phone: cleanPhone,
+      requester_phone_secondary: body.requester_phone_secondary?.replace(/\D/g, "").slice(0, 15) || null,
       vehicle_plate: cleanPlate || null,
-      vehicle_model: body.vehicle_model?.trim() || null,
+      vehicle_model: body.vehicle_model?.trim()?.slice(0, 100) || null,
       vehicle_year: body.vehicle_year ? parseInt(body.vehicle_year) : null,
       vehicle_lowered: !!body.vehicle_lowered,
       difficult_access: !!body.difficult_access,
       service_type: service_type || "tow_light",
       event_type: event_type || "other",
-      origin_address: origin_address.trim(),
+      origin_address: origin_address.trim().slice(0, 500),
       origin_lat: body.origin_lat || null,
       origin_lng: body.origin_lng || null,
-      destination_address: body.destination_address?.trim() || null,
+      destination_address: body.destination_address?.trim()?.slice(0, 500) || null,
       destination_lat: body.destination_lat || null,
       destination_lng: body.destination_lng || null,
-      notes: body.notes?.trim() || null,
+      notes: body.notes?.trim()?.slice(0, 2000) || null,
       protocol: "temp",
-      vehicle_category: vehicleCategory,
+      vehicle_category: safeCategory,
       verification_answers: body.verification_answers || {},
       beneficiary_token: beneficiaryToken,
       beneficiary_id: beneficiaryId,

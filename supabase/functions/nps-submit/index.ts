@@ -6,9 +6,31 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ===== RATE LIMITER =====
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+function isRateLimited(ip: string, max = 20, windowMs = 60_000): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
+    return false;
+  }
+  entry.count++;
+  return entry.count > max;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Rate limiting
+  const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (isRateLimited(clientIp)) {
+    return new Response(JSON.stringify({ error: "Muitas requisições" }), {
+      status: 429,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   const adminSupabase = createClient(
@@ -22,7 +44,15 @@ Deno.serve(async (req) => {
       const url = new URL(req.url);
       const token = url.searchParams.get("token");
 
-      if (!token || token.length < 10 || token.length > 100) {
+      if (!token || typeof token !== "string" || token.length < 10 || token.length > 100) {
+        return new Response(JSON.stringify({ valid: false, error: "Token inválido" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Only allow UUID-like tokens
+      if (!/^[a-zA-Z0-9\-]+$/.test(token)) {
         return new Response(JSON.stringify({ valid: false, error: "Token inválido" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -37,7 +67,6 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (existing) {
-        // Get tenant name for display
         const { data: sr } = await adminSupabase
           .from("service_requests")
           .select("tenant_id")
@@ -93,6 +122,13 @@ Deno.serve(async (req) => {
       const { token, score, comment } = await req.json();
 
       if (!token || typeof token !== "string" || token.length < 10 || token.length > 100) {
+        return new Response(JSON.stringify({ error: "Token inválido" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (!/^[a-zA-Z0-9\-]+$/.test(token)) {
         return new Response(JSON.stringify({ error: "Token inválido" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -155,8 +191,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      console.log(`NPS submitted: score=${score}, sr=${sr.id}`);
-
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -168,7 +202,7 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error("NPS error:", err);
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
+    return new Response(JSON.stringify({ error: "Erro interno" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
