@@ -2019,6 +2019,14 @@ export type Database = {
         Args: { _beneficiary_id: string; _service_type: string }
         Returns: Json
       }
+      dispatch_has_beneficiary_token: {
+        Args: { _dispatch_id: string }
+        Returns: boolean
+      }
+      dispatch_has_provider_token: {
+        Args: { _dispatch_id: string }
+        Returns: boolean
+      }
       get_user_tenant_ids: { Args: { _user_id: string }; Returns: string[] }
       has_role: {
         Args: {
@@ -2032,6 +2040,22 @@ export type Database = {
         Returns: boolean
       }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
+      provider_has_beneficiary_dispatch: {
+        Args: { _provider_id: string }
+        Returns: boolean
+      }
+      provider_has_provider_dispatch: {
+        Args: { _provider_id: string }
+        Returns: boolean
+      }
+      service_request_has_beneficiary_token: {
+        Args: { _service_request_id: string }
+        Returns: boolean
+      }
+      service_request_has_provider_dispatch: {
+        Args: { _service_request_id: string }
+        Returns: boolean
+      }
       user_belongs_to_tenant: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
