@@ -4,11 +4,13 @@
   <meta charset="utf-8">
   <title>Redirecionando...</title>
   <script>
-    // SPA fallback: redirect all 404s to index.html preserving the path
+    // SPA fallback: preserve the path for React Router
+    // This works by storing the path in sessionStorage and redirecting to index.html
+    // The app will then use the stored path to navigate correctly
     var path = window.location.pathname + window.location.search + window.location.hash;
-    window.location.replace('/' + '?redirect=' + encodeURIComponent(path));
+    sessionStorage.setItem('spa-redirect', path);
+    window.location.replace('/');
   </script>
-  <meta http-equiv="refresh" content="0;url=/">
 </head>
 <body>
   <p>Redirecionando...</p>

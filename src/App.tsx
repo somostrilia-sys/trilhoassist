@@ -1,8 +1,9 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
 import { ProviderLayout } from "@/components/ProviderLayout";
@@ -52,12 +53,26 @@ import IntegrationsPage from "./pages/settings/IntegrationsPage";
 
 const queryClient = new QueryClient();
 
+// Handle SPA 404 redirect from public/404.html
+function SpaRedirectHandler() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const redirectPath = sessionStorage.getItem('spa-redirect');
+    if (redirectPath) {
+      sessionStorage.removeItem('spa-redirect');
+      navigate(redirectPath, { replace: true });
+    }
+  }, [navigate]);
+  return null;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <SpaRedirectHandler />
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
