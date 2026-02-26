@@ -153,9 +153,10 @@ Deno.serve(async (req) => {
 
       if (!uazapiResp.ok) {
         console.error("UazapiGO send error:", result);
+        const detail = result?.message || "Falha ao enviar mensagem";
         return new Response(
-          JSON.stringify({ error: "Failed to send message", details: result }),
-          { status: uazapiResp.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: detail, details: result }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
     }
