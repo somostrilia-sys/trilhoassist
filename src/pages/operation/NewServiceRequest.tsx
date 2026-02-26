@@ -80,9 +80,13 @@ export default function NewServiceRequest() {
     origin_address: "",
     origin_number: "",
     origin_complement: "",
+    origin_city: "",
+    origin_uf: "",
     destination_address: "",
     destination_number: "",
     destination_complement: "",
+    destination_city: "",
+    destination_uf: "",
     notes: searchParams.get("notes") || "",
     estimated_km: "",
   });
@@ -260,9 +264,8 @@ export default function NewServiceRequest() {
   };
 
   const validateChecklist = (): string | null => {
-    // Checklist NOT required for collision (unless needsTow)
+    // Checklist NOT required for collision without tow
     if (attendanceType === "collision" && !needsTow) return null;
-    if (attendanceType === "collision") return null; // collision with tow uses its own checklist later
 
     const requiredByCategory: Record<VehicleCategory, { fields: string[]; data: Record<string, string> }> = {
       car: {
@@ -306,16 +309,27 @@ export default function NewServiceRequest() {
     if (!form.origin_address.trim())
       errs.origin_address = attendanceType === "collision" ? "Local do ocorrido é obrigatório" : "Endereço de origem é obrigatório";
 
+    // City is mandatory for origin
+    if (!form.origin_city.trim()) errs.origin_city = "Cidade de origem é obrigatória";
+
     if (attendanceType === "pane") {
       const onSiteServices = ["locksmith", "tire_change", "battery"];
       if (!onSiteServices.includes(form.service_type) && !form.destination_address.trim())
         errs.destination_address = "Endereço de destino é obrigatório";
+      if (!onSiteServices.includes(form.service_type) && !form.destination_city.trim())
+        errs.destination_city = "Cidade de destino é obrigatória";
       const checklistError = validateChecklist();
       if (checklistError) errs.checklist = checklistError;
     } else {
       // Collision
       if (needsTow === null) errs.needs_tow = "Informe se precisa de reboque";
       if (needsTow && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório para reboque";
+      if (needsTow && !form.destination_city.trim()) errs.destination_city = "Cidade de destino é obrigatória";
+      // Validate checklist for collision with tow
+      if (needsTow) {
+        const checklistError = validateChecklist();
+        if (checklistError) errs.checklist = checklistError;
+      }
     }
 
     return errs;
@@ -359,7 +373,7 @@ export default function NewServiceRequest() {
       beneficiary_id: beneficiaryFound?.id || null,
       protocol: "temp",
       vehicle_category: vehicleCategory,
-      verification_answers: attendanceType === "pane" ? getVerificationAnswers() as any : {} as any,
+      verification_answers: (attendanceType === "pane" || (attendanceType === "collision" && needsTow)) ? getVerificationAnswers() as any : {} as any,
       beneficiary_token: beneficiaryToken,
     }).select("id").single();
 
@@ -723,8 +737,8 @@ export default function NewServiceRequest() {
           </Card>
         )}
 
-        {/* ═══════════════ VERIFICAÇÃO DO VEÍCULO (somente pane) ═══════════════ */}
-        {attendanceType === "pane" && (
+        {/* ═══════════════ VERIFICAÇÃO DO VEÍCULO (pane OU colisão com reboque) ═══════════════ */}
+        {(attendanceType === "pane" || (isCollision && needsTow)) && (
           <>
             <div className={vehicleCategory !== "car" ? "hidden" : ""}>
               <CarVerification data={carVerification} onChange={(field, value) => setCarVerification((prev) => ({ ...prev, [field]: value }))} />
@@ -760,6 +774,8 @@ export default function NewServiceRequest() {
                   onChange={(v) => { update("origin_address", v); setErrors(prev => ({ ...prev, origin_address: "" })); }}
                   onPlaceSelect={(place) => {
                     setGeoCoords(prev => ({ ...prev, origin: { lat: place.lat, lng: place.lng } }));
+                    if (place.city) { update("origin_city", place.city); setErrors(prev => ({ ...prev, origin_city: "" })); }
+                    if (place.state) update("origin_uf", place.state);
                   }}
                   placeholder={isCollision ? "Local do acidente" : "Digite o endereço de origem"}
                   error={errors.origin_address}
@@ -782,6 +798,8 @@ export default function NewServiceRequest() {
                     onChange={(v) => { update("destination_address", v); setErrors(prev => ({ ...prev, destination_address: "" })); }}
                     onPlaceSelect={(place) => {
                       setGeoCoords(prev => ({ ...prev, destination: { lat: place.lat, lng: place.lng } }));
+                      if (place.city) { update("destination_city", place.city); setErrors(prev => ({ ...prev, destination_city: "" })); }
+                      if (place.state) update("destination_uf", place.state);
                     }}
                     placeholder="Digite o endereço de destino"
                     error={errors.destination_address}
@@ -792,28 +810,59 @@ export default function NewServiceRequest() {
               )}
             </div>
 
+            {/* Origin details */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label>Nº Origem</Label>
-                <Input value={form.origin_number} onChange={(e) => update("origin_number", e.target.value)} placeholder="Nº" />
+                <Input value={form.origin_number} onChange={(e) => update("origin_number", e.target.value)} placeholder="Nº ou S/N" />
               </div>
               <div className="space-y-2">
                 <Label>Referência Origem</Label>
                 <Input value={form.origin_complement} onChange={(e) => update("origin_complement", e.target.value)} placeholder="Próximo a..." />
               </div>
-              {(attendanceType === "pane" || (isCollision && needsTow)) && (
-                <>
-                  <div className="space-y-2">
-                    <Label>Nº Destino</Label>
-                    <Input value={form.destination_number} onChange={(e) => update("destination_number", e.target.value)} placeholder="Nº" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Referência Destino</Label>
-                    <Input value={form.destination_complement} onChange={(e) => update("destination_complement", e.target.value)} placeholder="Próximo a..." />
-                  </div>
-                </>
-              )}
+              <div className="space-y-2">
+                <Label>Cidade Origem *</Label>
+                <Input
+                  value={form.origin_city}
+                  onChange={(e) => { update("origin_city", e.target.value); setErrors(prev => ({ ...prev, origin_city: "" })); }}
+                  placeholder="Cidade"
+                  className={errors.origin_city ? "border-destructive" : ""}
+                />
+                {errors.origin_city && <p className="text-xs text-destructive">{errors.origin_city}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label>UF Origem</Label>
+                <Input value={form.origin_uf} onChange={(e) => update("origin_uf", e.target.value.toUpperCase())} placeholder="UF" maxLength={2} />
+              </div>
             </div>
+
+            {/* Destination details */}
+            {(attendanceType === "pane" || (isCollision && needsTow)) && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label>Nº Destino</Label>
+                  <Input value={form.destination_number} onChange={(e) => update("destination_number", e.target.value)} placeholder="Nº ou S/N" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Referência Destino</Label>
+                  <Input value={form.destination_complement} onChange={(e) => update("destination_complement", e.target.value)} placeholder="Próximo a..." />
+                </div>
+                <div className="space-y-2">
+                  <Label>Cidade Destino *</Label>
+                  <Input
+                    value={form.destination_city}
+                    onChange={(e) => { update("destination_city", e.target.value); setErrors(prev => ({ ...prev, destination_city: "" })); }}
+                    placeholder="Cidade"
+                    className={errors.destination_city ? "border-destructive" : ""}
+                  />
+                  {errors.destination_city && <p className="text-xs text-destructive">{errors.destination_city}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label>UF Destino</Label>
+                  <Input value={form.destination_uf} onChange={(e) => update("destination_uf", e.target.value.toUpperCase())} placeholder="UF" maxLength={2} />
+                </div>
+              </div>
+            )}
 
             {/* Route Distance */}
             {geoCoords.origin && geoCoords.destination && (
