@@ -146,6 +146,13 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "clients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       collision_media: {
@@ -310,6 +317,13 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "erp_field_mappings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       erp_sync_logs: {
@@ -368,6 +382,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "erp_sync_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -470,6 +491,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_closings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -586,6 +614,13 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       nps_responses: {
@@ -629,6 +664,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nps_responses_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -857,6 +899,13 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "provider_blacklist_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       provider_tracking: {
@@ -982,6 +1031,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "providers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -1207,6 +1263,13 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "service_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       tenants: {
@@ -1363,6 +1426,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_tenants_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -1535,6 +1605,13 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "whatsapp_conversations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       whatsapp_flow_steps: {
@@ -1609,6 +1686,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_flows_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -1699,6 +1783,13 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "whatsapp_quick_replies_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       whatsapp_templates: {
@@ -1753,6 +1844,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_templates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -1817,11 +1915,104 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "zapi_instances_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
     Views: {
-      [_ in never]: never
+      tenants_safe: {
+        Row: {
+          accent_color: string | null
+          active: boolean | null
+          address_number: string | null
+          alert_dispatch_minutes: number | null
+          alert_late_minutes: number | null
+          city: string | null
+          cnpj: string | null
+          created_at: string | null
+          custom_labels: Json | null
+          email: string | null
+          favicon_url: string | null
+          followup_max_retries: number | null
+          followup_timeout_minutes: number | null
+          id: string | null
+          logo_url: string | null
+          name: string | null
+          neighborhood: string | null
+          notification_settings: Json | null
+          phone: string | null
+          primary_color: string | null
+          secondary_color: string | null
+          slug: string | null
+          state: string | null
+          street: string | null
+          updated_at: string | null
+          zip_code: string | null
+        }
+        Insert: {
+          accent_color?: string | null
+          active?: boolean | null
+          address_number?: string | null
+          alert_dispatch_minutes?: number | null
+          alert_late_minutes?: number | null
+          city?: string | null
+          cnpj?: string | null
+          created_at?: string | null
+          custom_labels?: Json | null
+          email?: string | null
+          favicon_url?: string | null
+          followup_max_retries?: number | null
+          followup_timeout_minutes?: number | null
+          id?: string | null
+          logo_url?: string | null
+          name?: string | null
+          neighborhood?: string | null
+          notification_settings?: Json | null
+          phone?: string | null
+          primary_color?: string | null
+          secondary_color?: string | null
+          slug?: string | null
+          state?: string | null
+          street?: string | null
+          updated_at?: string | null
+          zip_code?: string | null
+        }
+        Update: {
+          accent_color?: string | null
+          active?: boolean | null
+          address_number?: string | null
+          alert_dispatch_minutes?: number | null
+          alert_late_minutes?: number | null
+          city?: string | null
+          cnpj?: string | null
+          created_at?: string | null
+          custom_labels?: Json | null
+          email?: string | null
+          favicon_url?: string | null
+          followup_max_retries?: number | null
+          followup_timeout_minutes?: number | null
+          id?: string | null
+          logo_url?: string | null
+          name?: string | null
+          neighborhood?: string | null
+          notification_settings?: Json | null
+          phone?: string | null
+          primary_color?: string | null
+          secondary_color?: string | null
+          slug?: string | null
+          state?: string | null
+          street?: string | null
+          updated_at?: string | null
+          zip_code?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       check_beneficiary_usage: {
