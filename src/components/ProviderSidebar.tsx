@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, Truck, DollarSign, LogOut,
+  LayoutDashboard, Truck, DollarSign, LogOut, FileText,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,6 +15,7 @@ const menuItems = [
   { title: "Dashboard", url: "/provider/dashboard", icon: LayoutDashboard },
   { title: "Meus Serviços", url: "/provider/services", icon: Truck },
   { title: "Financeiro", url: "/provider/financial", icon: DollarSign },
+  { title: "Notas Fiscais", url: "/provider/invoices", icon: FileText },
 ];
 
 export function ProviderSidebar() {
