@@ -7,10 +7,12 @@ import { ClipboardCheck } from "lucide-react";
 
 interface CarVerificationData {
   wheel_locked: string;
+  wheel_locked_count: string;
   steering_locked: string;
   armored: string;
   carrying_cargo: string;
   cargo_description: string;
+  cargo_photo_url: string;
   easy_access: string;
   vehicle_location: string;
   vehicle_location_other: string;
@@ -46,10 +48,12 @@ function YesNoToggle({ value, onChange, yesLabel = "Sim", noLabel = "Não" }: { 
 
 export const defaultCarVerification: CarVerificationData = {
   wheel_locked: "",
+  wheel_locked_count: "",
   steering_locked: "",
   armored: "",
   carrying_cargo: "",
   cargo_description: "",
+  cargo_photo_url: "",
   easy_access: "",
   vehicle_location: "",
   vehicle_location_other: "",
@@ -79,7 +83,25 @@ export default function CarVerification({ data, onChange }: Props) {
 
           <div className="space-y-2">
             <Label>Alguma roda está travada ou o veículo não se movimenta?</Label>
-            <YesNoToggle value={data.wheel_locked} onChange={(v) => onChange("wheel_locked", v)} />
+            <YesNoToggle value={data.wheel_locked} onChange={(v) => { onChange("wheel_locked", v); if (v === "no") onChange("wheel_locked_count", ""); }} />
+            {data.wheel_locked === "yes" && (
+              <div className="mt-2 space-y-1">
+                <Label className="text-sm">Quantas rodas estão travadas? *</Label>
+                <div className="flex gap-2 flex-wrap">
+                  {["1", "2", "3", "4", "nao_sei"].map((opt) => (
+                    <Button
+                      key={opt}
+                      type="button"
+                      size="sm"
+                      variant={data.wheel_locked_count === opt ? "default" : "outline"}
+                      onClick={() => onChange("wheel_locked_count", opt)}
+                    >
+                      {opt === "nao_sei" ? "Não sei" : opt}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -101,7 +123,28 @@ export default function CarVerification({ data, onChange }: Props) {
             <Label>O veículo está transportando carga ou excesso de peso?</Label>
             <YesNoToggle value={data.carrying_cargo} onChange={(v) => onChange("carrying_cargo", v)} />
             {data.carrying_cargo === "yes" && (
-              <Input placeholder="Qual tipo de carga?" value={data.cargo_description} onChange={(e) => onChange("cargo_description", e.target.value)} className="mt-2" />
+              <div className="mt-2 space-y-3">
+                <Input placeholder="Qual tipo de carga?" value={data.cargo_description} onChange={(e) => onChange("cargo_description", e.target.value)} />
+                <div className="space-y-1">
+                  <Label className="text-sm">Foto da carga *</Label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="block w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const url = URL.createObjectURL(file);
+                        onChange("cargo_photo_url", url);
+                      }
+                    }}
+                  />
+                  {data.cargo_photo_url && (
+                    <img src={data.cargo_photo_url} alt="Foto da carga" className="mt-2 max-h-40 rounded-md border object-cover" />
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
