@@ -67,7 +67,7 @@ export default function PublicCollisionMedia({
 
     const { data: urlData } = supabase.storage.from("collision-media").getPublicUrl(data.path);
 
-    const { data: mediaRow } = await supabase
+    const { data: mediaRow, error: insertError } = await supabase
       .from("collision_media")
       .insert({
         service_request_id: serviceRequestId,
@@ -79,6 +79,12 @@ export default function PublicCollisionMedia({
       })
       .select("id")
       .single();
+
+    if (insertError) {
+      console.error("collision_media insert error:", insertError);
+      toast({ title: `Erro ao registrar ${fileName}`, description: insertError.message, variant: "destructive" });
+      return null;
+    }
 
     return {
       id: mediaRow?.id,

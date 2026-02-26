@@ -1836,6 +1836,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_collision_with_share_token: {
+        Args: { _service_request_id: string }
+        Returns: boolean
+      }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       user_belongs_to_tenant: {
         Args: { _tenant_id: string; _user_id: string }
