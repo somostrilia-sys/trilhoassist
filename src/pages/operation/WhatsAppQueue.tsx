@@ -163,7 +163,10 @@ export default function WhatsAppQueue() {
       const { data, error } = await supabase.functions.invoke("send-whatsapp", {
         body: { phone: selectedConv.phone, message: replyText.trim(), conversation_id: selectedConv.id, tenant_id: tenantId },
       });
-      if (error) throw error;
+      if (error) {
+        const detail = data?.error || data?.details?.message || error.message;
+        throw new Error(detail || "Falha ao enviar mensagem");
+      }
       if (data?.error) throw new Error(data.error);
       setReplyText("");
       queryClient.invalidateQueries({ queryKey: ["whatsapp-messages"] });
