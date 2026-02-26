@@ -14,6 +14,28 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
 
+    // ═══ Get default tenant for public pages (Google Places key resolution) ═══
+    if (body.action === "get_default_tenant") {
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      const { data: defaultTenant } = await supabaseAdmin
+        .from("tenants")
+        .select("id")
+        .eq("active", true)
+        .limit(1)
+        .maybeSingle();
+
+      return new Response(
+        JSON.stringify({ tenant_id: defaultTenant?.id || null }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ... keep existing code
+
+
     // ═══ Plate lookup action (used by public form) ═══
     if (body.action === "lookup_plate") {
       const cleanPlate = (body.plate || "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
@@ -28,12 +50,15 @@ Deno.serve(async (req) => {
       );
       const { data: ben } = await supabaseAdmin
         .from("beneficiaries")
-        .select("id, name, phone, vehicle_model, vehicle_year")
+        .select("id, name, phone, vehicle_model, vehicle_year, clients(tenant_id)")
         .eq("vehicle_plate", cleanPlate)
         .eq("active", true)
         .limit(1)
         .maybeSingle();
-      return new Response(JSON.stringify({ beneficiary: ben || null }), {
+
+      const tenant_id = (ben as any)?.clients?.tenant_id || null;
+
+      return new Response(JSON.stringify({ beneficiary: ben ? { ...ben, tenant_id } : null }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -157,12 +182,13 @@ Deno.serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        id: inserted.id,
-        protocol: inserted.protocol,
-        beneficiary_token: beneficiaryToken,
-      }),
+       JSON.stringify({
+         success: true,
+         id: inserted.id,
+         protocol: inserted.protocol,
+         beneficiary_token: beneficiaryToken,
+         tenant_id: tenantId,
+       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
