@@ -55,8 +55,28 @@ export default function NewServiceRequest() {
   const originCoords = searchParams.get("origin_coords");
   const destinationCoords = searchParams.get("destination_coords");
 
+  const allowedServiceTypes = [
+    "tow_light",
+    "tow_heavy",
+    "tow_motorcycle",
+    "locksmith",
+    "tire_change",
+    "battery",
+    "fuel",
+    "lodging",
+    "other",
+    "collision",
+  ] as const;
+
+  const normalizeServiceType = (value: string | null) => {
+    const normalized = value?.trim();
+    return normalized && allowedServiceTypes.includes(normalized as (typeof allowedServiceTypes)[number])
+      ? normalized
+      : null;
+  };
+
   const paramCategory = searchParams.get("vehicle_category") as VehicleCategory | null;
-  const paramServiceType = searchParams.get("service_type");
+  const paramServiceType = normalizeServiceType(searchParams.get("service_type"));
   const initialCategory: VehicleCategory = paramCategory || (paramServiceType === "tow_motorcycle" ? "motorcycle" : paramServiceType === "tow_heavy" ? "truck" : "car");
 
   // ═══ Top-level: Pane vs Colisão ═══
@@ -294,10 +314,26 @@ export default function NewServiceRequest() {
     return null;
   };
 
-  // Determine effective service type for collision
-  const effectiveServiceType = attendanceType === "collision"
-    ? (needsTow ? (vehicleCategory === "motorcycle" ? "tow_motorcycle" : vehicleCategory === "truck" ? "tow_heavy" : "tow_light") : "collision")
-    : form.service_type;
+  const getPaneServiceType = () => {
+    const options = getServiceOptionsForEvent();
+    const current = form.service_type?.trim();
+
+    if (current && options.some((option) => option.value === current)) {
+      return current;
+    }
+
+    return options[0]?.value ?? getTowTypeForCategory();
+  };
+
+  const getEffectiveServiceType = () => {
+    if (attendanceType === "collision") {
+      return needsTow
+        ? (vehicleCategory === "motorcycle" ? "tow_motorcycle" : vehicleCategory === "truck" ? "tow_heavy" : "tow_light")
+        : "collision";
+    }
+
+    return getPaneServiceType();
+  };
 
   const validate = (): Record<string, string> => {
     const errs: Record<string, string> = {};
@@ -313,12 +349,17 @@ export default function NewServiceRequest() {
     if (!geoCoords.origin) errs.origin_geo = "Selecione o endereço nas sugestões para obter geolocalização";
 
     if (attendanceType === "pane") {
+      const selectedServiceType = getPaneServiceType();
+      if (!form.service_type?.trim()) {
+        errs.service_type = "Tipo de serviço é obrigatório";
+      }
+
       const onSiteServices = ["locksmith", "tire_change", "battery"];
-      if (!onSiteServices.includes(form.service_type) && !form.destination_address.trim())
+      if (!onSiteServices.includes(selectedServiceType) && !form.destination_address.trim())
         errs.destination_address = "Endereço de destino é obrigatório";
-      if (!onSiteServices.includes(form.service_type) && !form.destination_city.trim())
+      if (!onSiteServices.includes(selectedServiceType) && !form.destination_city.trim())
         errs.destination_city = "Cidade de destino é obrigatória";
-      if (!onSiteServices.includes(form.service_type) && !geoCoords.destination)
+      if (!onSiteServices.includes(selectedServiceType) && !geoCoords.destination)
         errs.destination_geo = "Selecione o endereço de destino nas sugestões para geolocalização";
       const checklistError = validateChecklist();
       if (checklistError) errs.checklist = checklistError;
@@ -346,6 +387,7 @@ export default function NewServiceRequest() {
     }
     setLoading(true);
 
+    const effectiveServiceType = getEffectiveServiceType();
     const beneficiaryToken = crypto.randomUUID();
 
     const { data: inserted, error } = await supabase.from("service_requests").insert({
@@ -489,7 +531,7 @@ export default function NewServiceRequest() {
               <Button
                 type="button"
                 variant={attendanceType === "pane" ? "default" : "outline"}
-                onClick={() => { setAttendanceType("pane"); setNeedsTow(null); }}
+                onClick={() => { setAttendanceType("pane"); setNeedsTow(null); update("service_type", getPaneServiceType()); }}
                 className="flex-1 h-14 text-base gap-2 flex-col py-2"
               >
                 <div className="flex items-center gap-2">
@@ -688,14 +730,22 @@ export default function NewServiceRequest() {
               </div>
               <div className="space-y-2">
                 <Label>Tipo de Serviço *</Label>
-                <Select value={form.service_type} onValueChange={(v) => update("service_type", v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select
+                  value={form.service_type}
+                  onValueChange={(v) => {
+                    if (!v?.trim()) return;
+                    update("service_type", v);
+                    setErrors((prev) => ({ ...prev, service_type: "" }));
+                  }}
+                >
+                  <SelectTrigger className={errors.service_type ? "border-destructive" : ""}><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {paneServiceOptions.map((opt) => (
                       <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.service_type && <p className="text-xs text-destructive">{errors.service_type}</p>}
               </div>
             </CardContent>
           </Card>
