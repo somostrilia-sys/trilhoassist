@@ -5,43 +5,66 @@ import { Loader2, Route } from "lucide-react";
 interface Props {
   originCoords: { lat: number; lng: number } | null;
   destinationCoords: { lat: number; lng: number } | null;
+  providerCoords?: { lat: number; lng: number } | null;
   onDistanceCalculated?: (km: number) => void;
 }
 
-async function calculateOSRMRoute(
-  origin: { lat: number; lng: number },
-  destination: { lat: number; lng: number }
-): Promise<{ distanceKm: number; durationMin: number } | null> {
+async function fetchOSRMDistance(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number }
+): Promise<{ km: number; min: number } | null> {
   try {
-    // Origin → Destination
-    const leg1Url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=false`;
-    // Destination → Origin (return)
-    const leg2Url = `https://router.project-osrm.org/route/v1/driving/${destination.lng},${destination.lat};${origin.lng},${origin.lat}?overview=false`;
-
-    const [res1, res2] = await Promise.all([fetch(leg1Url), fetch(leg2Url)]);
-    const [data1, data2] = await Promise.all([res1.json(), res2.json()]);
-
-    if (data1.code !== "Ok" || data2.code !== "Ok") return null;
-
-    const leg1Km = (data1.routes[0]?.distance || 0) / 1000;
-    const leg2Km = (data2.routes[0]?.distance || 0) / 1000;
-    const leg1Min = (data1.routes[0]?.duration || 0) / 60;
-    const leg2Min = (data2.routes[0]?.duration || 0) / 60;
-
-    // Total: Origem → Destino → Origem + 10km
-    const totalKm = leg1Km + leg2Km + 10;
-    const totalMin = leg1Min + leg2Min;
-
-    return { distanceKm: totalKm, durationMin: totalMin };
+    const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.code !== "Ok") return null;
+    return {
+      km: (data.routes[0]?.distance || 0) / 1000,
+      min: (data.routes[0]?.duration || 0) / 60,
+    };
   } catch (err) {
     console.error("OSRM route calculation error:", err);
     return null;
   }
 }
 
-export default function RouteDistanceDisplay({ originCoords, destinationCoords, onDistanceCalculated }: Props) {
+async function calculateRoute(
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number },
+  providerBase?: { lat: number; lng: number } | null
+): Promise<{ distanceKm: number; durationMin: number; description: string } | null> {
+  try {
+    if (providerBase) {
+      // Phase 2: Provider Base → Origin → Destination + provider return km
+      const [leg1, leg2, leg3] = await Promise.all([
+        fetchOSRMDistance(providerBase, origin),
+        fetchOSRMDistance(origin, destination),
+        fetchOSRMDistance(destination, providerBase),
+      ]);
+      if (!leg1 || !leg2 || !leg3) return null;
+      const totalKm = leg1.km + leg2.km + leg3.km;
+      const totalMin = leg1.min + leg2.min + leg3.min;
+      return { distanceKm: totalKm, durationMin: totalMin, description: "Base Prestador → Origem → Destino → Retorno Prestador" };
+    } else {
+      // Phase 1: Origin → Destination → Origin + 10km
+      const [leg1, leg2] = await Promise.all([
+        fetchOSRMDistance(origin, destination),
+        fetchOSRMDistance(destination, origin),
+      ]);
+      if (!leg1 || !leg2) return null;
+      const totalKm = leg1.km + leg2.km + 10;
+      const totalMin = leg1.min + leg2.min;
+      return { distanceKm: totalKm, durationMin: totalMin, description: "Origem → Destino → Retorno + 10 km" };
+    }
+  } catch (err) {
+    console.error("Route calculation error:", err);
+    return null;
+  }
+}
+
+export default function RouteDistanceDisplay({ originCoords, destinationCoords, providerCoords, onDistanceCalculated }: Props) {
   const [loading, setLoading] = useState(false);
-  const [routeData, setRouteData] = useState<{ distanceKm: number; durationMin: number } | null>(null);
+  const [routeData, setRouteData] = useState<{ distanceKm: number; durationMin: number; description: string } | null>(null);
 
   useEffect(() => {
     if (!originCoords || !destinationCoords) {
@@ -52,7 +75,7 @@ export default function RouteDistanceDisplay({ originCoords, destinationCoords, 
     let cancelled = false;
     const calc = async () => {
       setLoading(true);
-      const result = await calculateOSRMRoute(originCoords, destinationCoords);
+      const result = await calculateRoute(originCoords, destinationCoords, providerCoords);
       if (!cancelled) {
         setRouteData(result);
         setLoading(false);
@@ -63,7 +86,7 @@ export default function RouteDistanceDisplay({ originCoords, destinationCoords, 
     };
     calc();
     return () => { cancelled = true; };
-  }, [originCoords?.lat, originCoords?.lng, destinationCoords?.lat, destinationCoords?.lng]);
+  }, [originCoords?.lat, originCoords?.lng, destinationCoords?.lat, destinationCoords?.lng, providerCoords?.lat, providerCoords?.lng]);
 
   if (!originCoords || !destinationCoords) return null;
 
@@ -100,7 +123,7 @@ export default function RouteDistanceDisplay({ originCoords, destinationCoords, 
         </Badge>
       </div>
       <p className="text-xs text-muted-foreground">
-        Origem → Destino → Retorno + 10 km
+        {routeData.description}
       </p>
     </div>
   );
