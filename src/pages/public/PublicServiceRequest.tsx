@@ -23,20 +23,9 @@ import PublicCollisionMedia from "@/components/collision/PublicCollisionMedia";
 type VehicleCategory = "car" | "motorcycle" | "truck";
 type AttendanceType = "pane" | "collision";
 
-const serviceTypeOptions = [
-  { value: "tow_light", label: "Reboque Leve" },
-  { value: "tow_heavy", label: "Reboque Pesado" },
-  { value: "tow_motorcycle", label: "Reboque Moto" },
-  { value: "locksmith", label: "Chaveiro" },
-  { value: "tire_change", label: "Troca de Pneu" },
-  { value: "battery", label: "Bateria" },
-  { value: "fuel", label: "Combustível" },
-  { value: "other", label: "Outro" },
-];
-
+// Motivos de pane — SEM "Acidente"
 const eventTypeOptions = [
   { value: "mechanical_failure", label: "Pane Mecânica" },
-  { value: "accident", label: "Acidente" },
   { value: "theft", label: "Roubo/Furto" },
   { value: "flat_tire", label: "Pneu Furado" },
   { value: "locked_out", label: "Chave Trancada" },
@@ -45,16 +34,23 @@ const eventTypeOptions = [
   { value: "other", label: "Outro" },
 ];
 
-async function reverseGeocode(lat: number, lng: number): Promise<string> {
+async function reverseGeocode(lat: number, lng: number): Promise<{ address: string; city: string; state: string }> {
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
       { headers: { "Accept-Language": "pt-BR" } }
     );
     const data = await res.json();
-    return data.display_name || `${lat}, ${lng}`;
+    const addr = data.address || {};
+    const city = addr.city || addr.town || addr.village || addr.municipality || "";
+    const state = addr.state || "";
+    return {
+      address: data.display_name || `${lat}, ${lng}`,
+      city,
+      state,
+    };
   } catch {
-    return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    return { address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`, city: "", state: "" };
   }
 }
 
@@ -89,11 +85,55 @@ export default function PublicServiceRequest() {
     service_type: "tow_light",
     event_type: "mechanical_failure",
     origin_address: "",
+    origin_city: "",
+    origin_uf: "",
     destination_address: "",
+    destination_city: "",
+    destination_uf: "",
     notes: "",
   });
 
   const update = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
+
+  // ═══ Service options driven by event_type (motivo) ═══
+  const getTowTypeForCategory = (): string => {
+    if (vehicleCategory === "motorcycle") return "tow_motorcycle";
+    if (vehicleCategory === "truck") return "tow_heavy";
+    return "tow_light";
+  };
+
+  const getTowLabelForCategory = (): string => {
+    if (vehicleCategory === "motorcycle") return "Reboque Moto";
+    if (vehicleCategory === "truck") return "Reboque Pesado";
+    return "Reboque Leve";
+  };
+
+  const getServiceOptionsForEvent = (): { value: string; label: string }[] => {
+    const towOption = { value: getTowTypeForCategory(), label: getTowLabelForCategory() };
+    switch (form.event_type) {
+      case "locked_out":
+        return [{ value: "locksmith", label: "Chaveiro" }, towOption];
+      case "battery_dead":
+        return [{ value: "battery", label: "Recarga de Bateria" }, towOption];
+      case "flat_tire":
+        return [{ value: "tire_change", label: "Troca de Pneu" }, towOption];
+      case "fuel_empty":
+        return [{ value: "fuel", label: "Auxílio Combustível" }, towOption];
+      default:
+        return [towOption];
+    }
+  };
+
+  // Auto-select service when event_type changes
+  useEffect(() => {
+    if (attendanceType !== "pane") return;
+    const options = getServiceOptionsForEvent();
+    if (!options.find(o => o.value === form.service_type)) {
+      update("service_type", options[0].value);
+    }
+  }, [form.event_type, vehicleCategory, attendanceType]);
+
+  const paneServiceOptions = getServiceOptionsForEvent();
 
   // ═══ Plate search: beneficiary DB then FIPE ═══
   const handlePlateChange = useCallback(async (value: string) => {
@@ -104,7 +144,6 @@ export default function PublicServiceRequest() {
     if (upper.length === 7) {
       setPlateLookupStatus("loading");
 
-      // 1) Search beneficiary in DB via edge function (anon can't query beneficiaries directly)
       try {
         const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
         const res = await fetch(`https://${projectId}.supabase.co/functions/v1/public-service-request`, {
@@ -127,7 +166,6 @@ export default function PublicServiceRequest() {
         }
       } catch { /* continue to FIPE */ }
 
-      // 2) FIPE lookup
       try {
         const res = await fetch(`https://brasilapi.com.br/api/fipe/preco/v1/${upper}`);
         if (res.ok) {
@@ -151,9 +189,8 @@ export default function PublicServiceRequest() {
   }, []);
 
   useEffect(() => {
-    // Best-effort: get a default tenant to allow Google Places autocomplete in the public form
+    if (tenantId) return;
     (async () => {
-      if (tenantId) return;
       try {
         const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
         const res = await fetch(`https://${projectId}.supabase.co/functions/v1/public-service-request`, {
@@ -186,9 +223,14 @@ export default function PublicServiceRequest() {
       async (pos) => {
         const { latitude, longitude } = pos.coords;
         setOriginCoords({ lat: latitude, lng: longitude });
-        const address = await reverseGeocode(latitude, longitude);
-        setForm((f) => ({ ...f, origin_address: address }));
-        setErrors((p) => ({ ...p, origin_address: "" }));
+        const geo = await reverseGeocode(latitude, longitude);
+        setForm((f) => ({
+          ...f,
+          origin_address: geo.address,
+          origin_city: geo.city,
+          origin_uf: geo.state,
+        }));
+        setErrors((p) => ({ ...p, origin_address: "", origin_city: "" }));
         setGpsLoading(false);
         toast({ title: "Localização capturada!" });
       },
@@ -200,8 +242,20 @@ export default function PublicServiceRequest() {
     );
   };
 
+  const getVerificationAnswers = () => {
+    // Return checklist for pane OR collision with tow
+    if (attendanceType === "collision" && !needsTow) return {};
+    if (vehicleCategory === "car") return { category: "car", ...carVerification };
+    if (vehicleCategory === "motorcycle") return { category: "motorcycle", ...motoVerification };
+    return { category: "truck", ...truckVerification };
+  };
+
   const validateChecklist = (): string | null => {
-    if (attendanceType === "collision") return null;
+    // Checklist NOT required for collision without tow
+    if (attendanceType === "collision" && !needsTow) return null;
+    // Also not required for pane without tow (on-site services)
+    if (attendanceType === "pane" && ["locksmith", "tire_change", "battery", "fuel"].includes(form.service_type)) return null;
+
     const requiredByCategory: Record<VehicleCategory, { fields: string[]; data: Record<string, string> }> = {
       car: {
         fields: ["wheel_locked", "steering_locked", "armored", "vehicle_lowered", "carrying_cargo", "easy_access", "vehicle_location", "key_available", "documents_available", "has_passengers", "had_collision", "risk_area", "vehicle_starts"],
@@ -218,7 +272,14 @@ export default function PublicServiceRequest() {
     };
     const { fields, data } = requiredByCategory[vehicleCategory];
     const missing = fields.filter((f) => !data[f] || data[f].trim() === "");
-    return missing.length > 0 ? "Preencha todos os campos obrigatórios do checklist de verificação." : null;
+    if (missing.length > 0) return "Preencha todos os campos obrigatórios do checklist de verificação.";
+
+    // Conditional: if wheel_locked=yes, wheel_locked_count is required (car only)
+    if (vehicleCategory === "car" && (carVerification as any).wheel_locked === "yes" && !(carVerification as any).wheel_locked_count) {
+      return "Informe quantas rodas estão travadas.";
+    }
+
+    return null;
   };
 
   const effectiveServiceType = attendanceType === "collision"
@@ -233,24 +294,27 @@ export default function PublicServiceRequest() {
     if (!form.vehicle_model.trim()) errs.vehicle_model = "Modelo do veículo é obrigatório";
     if (!form.vehicle_year.trim()) errs.vehicle_year = "Ano do veículo é obrigatório";
     if (!form.origin_address.trim()) errs.origin_address = attendanceType === "collision" ? "Local do ocorrido é obrigatório" : "Endereço de origem é obrigatório";
+    
+    // City mandatory
+    if (!form.origin_city.trim()) errs.origin_city = "Cidade de origem é obrigatória";
 
     if (attendanceType === "pane") {
-      const onSiteServices = ["locksmith", "tire_change", "battery"];
+      const onSiteServices = ["locksmith", "tire_change", "battery", "fuel"];
       if (!onSiteServices.includes(form.service_type) && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório";
+      if (!onSiteServices.includes(form.service_type) && !form.destination_city.trim()) errs.destination_city = "Cidade de destino é obrigatória";
       const checklistError = validateChecklist();
       if (checklistError) errs.checklist = checklistError;
     } else {
       if (needsTow === null) errs.needs_tow = "Informe se precisa de reboque";
       if (needsTow && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório para reboque";
+      if (needsTow && !form.destination_city.trim()) errs.destination_city = "Cidade de destino é obrigatória";
+      // Validate checklist for collision with tow
+      if (needsTow) {
+        const checklistError = validateChecklist();
+        if (checklistError) errs.checklist = checklistError;
+      }
     }
     return errs;
-  };
-
-  const getVerificationAnswers = () => {
-    if (attendanceType === "collision") return {};
-    if (vehicleCategory === "car") return { category: "car", ...carVerification };
-    if (vehicleCategory === "motorcycle") return { category: "motorcycle", ...motoVerification };
-    return { category: "truck", ...truckVerification };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -405,6 +469,14 @@ export default function PublicServiceRequest() {
     );
   }
 
+  // Whether to show checklist
+  const showChecklist = attendanceType === "pane" || (attendanceType === "collision" && needsTow === true);
+  // Whether destination is needed
+  const onSiteServices = ["locksmith", "tire_change", "battery", "fuel"];
+  const needsDestination = attendanceType === "pane" 
+    ? !onSiteServices.includes(form.service_type) 
+    : (attendanceType === "collision" && needsTow === true);
+
   return (
     <div className="min-h-screen bg-muted/30">
       <header className="bg-primary text-primary-foreground shadow-md">
@@ -433,15 +505,16 @@ export default function PublicServiceRequest() {
                   type="button"
                   variant={attendanceType === "pane" ? "default" : "outline"}
                   onClick={() => { setAttendanceType("pane"); setNeedsTow(null); }}
-                  className="h-12 text-sm font-semibold"
+                  className="h-14 text-sm font-semibold flex-col gap-0.5"
                 >
-                  🔧 Pane
+                  <span>🔧 Pane</span>
+                  <span className="text-[10px] font-normal opacity-70">Demais problemas</span>
                 </Button>
                 <Button
                   type="button"
                   variant={attendanceType === "collision" ? "default" : "outline"}
                   onClick={() => { setAttendanceType("collision"); setNeedsTow(null); }}
-                  className="h-12 text-sm font-semibold"
+                  className="h-14 text-sm font-semibold"
                 >
                   💥 Colisão
                 </Button>
@@ -457,7 +530,6 @@ export default function PublicServiceRequest() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Categoria */}
               <div className="space-y-1.5">
                 <Label className="text-sm">Tipo de Veículo *</Label>
                 <div className="grid grid-cols-3 gap-2">
@@ -475,7 +547,6 @@ export default function PublicServiceRequest() {
                 </div>
               </div>
 
-              {/* Placa */}
               <div className="space-y-1.5">
                 <Label className="text-sm">Placa do Veículo *</Label>
                 <div className="relative">
@@ -501,7 +572,6 @@ export default function PublicServiceRequest() {
                 )}
               </div>
 
-              {/* Model/Year */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-sm">Modelo *</Label>
@@ -568,7 +638,7 @@ export default function PublicServiceRequest() {
             </CardContent>
           </Card>
 
-          {/* ═══ PANE: Motivo e Serviço ═══ */}
+          {/* ═══ PANE: Motivo e Serviço (filtrado por motivo) ═══ */}
           {attendanceType === "pane" && (
             <Card className="shadow-sm">
               <CardHeader className="pb-3">
@@ -593,7 +663,7 @@ export default function PublicServiceRequest() {
                   <Select value={form.service_type} onValueChange={(v) => update("service_type", v)}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
-                      {serviceTypeOptions.map((opt) => (
+                      {paneServiceOptions.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                       ))}
                     </SelectContent>
@@ -645,8 +715,8 @@ export default function PublicServiceRequest() {
             </Card>
           )}
 
-          {/* ═══ Checklist (PANE only) ═══ */}
-          {attendanceType === "pane" && (
+          {/* ═══ Checklist (PANE ou COLISÃO COM REBOQUE) ═══ */}
+          {showChecklist && (
             <>
               <div className={vehicleCategory !== "car" ? "hidden" : ""}>
                 <CarVerification
@@ -690,7 +760,12 @@ export default function PublicServiceRequest() {
                     <AddressAutocomplete
                       value={form.origin_address}
                       onChange={(v) => { update("origin_address", v); setErrors((p) => ({ ...p, origin_address: "" })); }}
-                      onPlaceSelect={(place) => setOriginCoords({ lat: place.lat, lng: place.lng })}
+                      onPlaceSelect={(place) => {
+                        setOriginCoords({ lat: place.lat, lng: place.lng });
+                        if (place.city) update("origin_city", place.city);
+                        if (place.state) update("origin_uf", place.state);
+                        setErrors((p) => ({ ...p, origin_city: "" }));
+                      }}
                       placeholder="Digite o endereço ou use o GPS"
                       error={errors.origin_address}
                       coords={originCoords}
@@ -710,28 +785,55 @@ export default function PublicServiceRequest() {
                   </Button>
                 </div>
                 {originCoords && (
-                  <button type="button" className="text-xs text-primary underline" onClick={() => { setOriginCoords(null); update("origin_address", ""); }}>
+                  <button type="button" className="text-xs text-primary underline" onClick={() => { setOriginCoords(null); update("origin_address", ""); update("origin_city", ""); update("origin_uf", ""); }}>
                     Limpar e digitar manualmente
                   </button>
                 )}
               </div>
 
-              {/* Destination - show for Pane (except on-site) or Collision with tow */}
-              {(attendanceType === "pane" || (attendanceType === "collision" && needsTow)) && (
-                <div className="space-y-1.5">
-                  <Label className="text-sm">
-                    Endereço de Destino {attendanceType === "pane" && !["locksmith", "tire_change", "battery"].includes(form.service_type) ? "*" : needsTow ? "*" : ""}
-                  </Label>
-                  <AddressAutocomplete
-                    value={form.destination_address}
-                    onChange={(v) => { update("destination_address", v); setErrors((p) => ({ ...p, destination_address: "" })); }}
-                    onPlaceSelect={(place) => setDestinationCoords({ lat: place.lat, lng: place.lng })}
-                    placeholder="Digite o endereço de destino"
-                    error={errors.destination_address}
-                    coords={destinationCoords}
-                    tenantId={tenantId}
-                  />
-                </div>
+              {/* City field - mandatory */}
+              <div className="space-y-1.5">
+                <Label className="text-sm">Cidade *</Label>
+                <Input
+                  value={form.origin_city}
+                  onChange={(e) => { update("origin_city", e.target.value); setErrors((p) => ({ ...p, origin_city: "" })); }}
+                  placeholder="Ex: São Paulo"
+                  className={errors.origin_city ? "border-destructive" : ""}
+                />
+                {errors.origin_city && <p className="text-xs text-destructive">{errors.origin_city}</p>}
+              </div>
+
+              {/* Destination */}
+              {needsDestination && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Endereço de Destino *</Label>
+                    <AddressAutocomplete
+                      value={form.destination_address}
+                      onChange={(v) => { update("destination_address", v); setErrors((p) => ({ ...p, destination_address: "" })); }}
+                      onPlaceSelect={(place) => {
+                        setDestinationCoords({ lat: place.lat, lng: place.lng });
+                        if (place.city) update("destination_city", place.city);
+                        if (place.state) update("destination_uf", place.state);
+                        setErrors((p) => ({ ...p, destination_city: "" }));
+                      }}
+                      placeholder="Digite o endereço de destino"
+                      error={errors.destination_address}
+                      coords={destinationCoords}
+                      tenantId={tenantId}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Cidade de Destino *</Label>
+                    <Input
+                      value={form.destination_city}
+                      onChange={(e) => { update("destination_city", e.target.value); setErrors((p) => ({ ...p, destination_city: "" })); }}
+                      placeholder="Ex: Campinas"
+                      className={errors.destination_city ? "border-destructive" : ""}
+                    />
+                    {errors.destination_city && <p className="text-xs text-destructive">{errors.destination_city}</p>}
+                  </div>
+                </>
               )}
 
               <RouteDistanceDisplay originCoords={originCoords} destinationCoords={destinationCoords} />
