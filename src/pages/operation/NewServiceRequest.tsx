@@ -308,24 +308,28 @@ export default function NewServiceRequest() {
     if (!form.vehicle_year.trim()) errs.vehicle_year = "Ano do veículo é obrigatório";
     if (!form.origin_address.trim())
       errs.origin_address = attendanceType === "collision" ? "Local do ocorrido é obrigatório" : "Endereço de origem é obrigatório";
-
-    // City is mandatory for origin
+    if (!form.origin_number.trim()) errs.origin_number = "Número é obrigatório (ou S/N)";
     if (!form.origin_city.trim()) errs.origin_city = "Cidade de origem é obrigatória";
+    if (!geoCoords.origin) errs.origin_geo = "Selecione o endereço nas sugestões para obter geolocalização";
 
     if (attendanceType === "pane") {
       const onSiteServices = ["locksmith", "tire_change", "battery"];
       if (!onSiteServices.includes(form.service_type) && !form.destination_address.trim())
         errs.destination_address = "Endereço de destino é obrigatório";
+      if (!onSiteServices.includes(form.service_type) && !form.destination_number.trim())
+        errs.destination_number = "Número de destino é obrigatório (ou S/N)";
       if (!onSiteServices.includes(form.service_type) && !form.destination_city.trim())
         errs.destination_city = "Cidade de destino é obrigatória";
+      if (!onSiteServices.includes(form.service_type) && !geoCoords.destination)
+        errs.destination_geo = "Selecione o endereço de destino nas sugestões para geolocalização";
       const checklistError = validateChecklist();
       if (checklistError) errs.checklist = checklistError;
     } else {
-      // Collision
       if (needsTow === null) errs.needs_tow = "Informe se precisa de reboque";
       if (needsTow && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório para reboque";
+      if (needsTow && !form.destination_number.trim()) errs.destination_number = "Número de destino é obrigatório (ou S/N)";
       if (needsTow && !form.destination_city.trim()) errs.destination_city = "Cidade de destino é obrigatória";
-      // Validate checklist for collision with tow
+      if (needsTow && !geoCoords.destination) errs.destination_geo = "Selecione o endereço de destino para geolocalização";
       if (needsTow) {
         const checklistError = validateChecklist();
         if (checklistError) errs.checklist = checklistError;
@@ -782,6 +786,7 @@ export default function NewServiceRequest() {
                   tenantId={tenantId}
                   coords={geoCoords.origin}
                 />
+                {errors.origin_geo && <p className="text-xs text-destructive mt-1">{errors.origin_geo}</p>}
               </div>
               {/* Destination: show when pane (non-on-site) or collision with tow */}
               {(attendanceType === "pane" || (isCollision && needsTow)) && (
@@ -806,6 +811,7 @@ export default function NewServiceRequest() {
                     tenantId={tenantId}
                     coords={geoCoords.destination}
                   />
+                  {errors.destination_geo && <p className="text-xs text-destructive mt-1">{errors.destination_geo}</p>}
                 </div>
               )}
             </div>
@@ -813,8 +819,9 @@ export default function NewServiceRequest() {
             {/* Origin details */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="space-y-2">
-                <Label>Nº Origem</Label>
-                <Input value={form.origin_number} onChange={(e) => update("origin_number", e.target.value)} placeholder="Nº ou S/N" />
+                <Label>Nº Origem *</Label>
+                <Input value={form.origin_number} onChange={(e) => { update("origin_number", e.target.value); setErrors(prev => ({ ...prev, origin_number: "" })); }} placeholder="Nº ou S/N" className={errors.origin_number ? "border-destructive" : ""} />
+                {errors.origin_number && <p className="text-xs text-destructive">{errors.origin_number}</p>}
               </div>
               <div className="space-y-2">
                 <Label>Referência Origem</Label>
@@ -840,8 +847,9 @@ export default function NewServiceRequest() {
             {(attendanceType === "pane" || (isCollision && needsTow)) && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="space-y-2">
-                  <Label>Nº Destino</Label>
-                  <Input value={form.destination_number} onChange={(e) => update("destination_number", e.target.value)} placeholder="Nº ou S/N" />
+                  <Label>Nº Destino *</Label>
+                  <Input value={form.destination_number} onChange={(e) => { update("destination_number", e.target.value); setErrors(prev => ({ ...prev, destination_number: "" })); }} placeholder="Nº ou S/N" className={errors.destination_number ? "border-destructive" : ""} />
+                  {errors.destination_number && <p className="text-xs text-destructive">{errors.destination_number}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label>Referência Destino</Label>
