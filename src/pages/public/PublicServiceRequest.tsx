@@ -67,6 +67,7 @@ export default function PublicServiceRequest() {
   const [gpsLoading, setGpsLoading] = useState(false);
   const [originCoords, setOriginCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [gpsReminderShown, setGpsReminderShown] = useState(false);
   const [carVerification, setCarVerification] = useState(defaultCarVerification);
   const [motoVerification, setMotoVerification] = useState(defaultMotorcycleVerification);
   const [truckVerification, setTruckVerification] = useState(defaultTruckVerification);
@@ -324,6 +325,17 @@ export default function PublicServiceRequest() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // GPS reminder: if no coords and reminder not yet shown, prompt user
+    if (!originCoords && !gpsReminderShown) {
+      setGpsReminderShown(true);
+      toast({
+        title: "📍 Localização não compartilhada",
+        description: "Você ainda não compartilhou sua localização. Toque no botão de GPS para facilitar o atendimento, ou envie assim mesmo.",
+      });
+      return;
+    }
+
     const validationErrors = validate();
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) {
@@ -758,42 +770,58 @@ export default function PublicServiceRequest() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <Label className="text-sm">{attendanceType === "collision" ? "Local do Ocorrido" : "Endereço de Origem"} *</Label>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <AddressAutocomplete
-                      value={form.origin_address}
-                      onChange={(v) => { update("origin_address", v); setErrors((p) => ({ ...p, origin_address: "" })); }}
-                      onPlaceSelect={(place) => {
-                        setOriginCoords({ lat: place.lat, lng: place.lng });
-                        if (place.city) update("origin_city", place.city);
-                        if (place.state) update("origin_uf", place.state);
-                        setErrors((p) => ({ ...p, origin_city: "" }));
-                      }}
-                      placeholder="Digite o endereço ou use o GPS"
-                      error={errors.origin_address}
-                      coords={originCoords}
-                      disabled={!!originCoords && gpsLoading}
-                      tenantId={tenantId}
-                    />
-                  </div>
+              {/* ═══ Prominent GPS Button ═══ */}
+              {!originCoords && (
+                <div className="space-y-2">
                   <Button
                     type="button"
-                    variant={originCoords ? "default" : "outline"}
                     onClick={captureGPS}
                     disabled={gpsLoading}
-                    className="shrink-0 px-3"
-                    title="Usar minha localização"
+                    className="w-full h-14 text-base font-semibold gap-3 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg animate-pulse hover:animate-none transition-all"
                   >
-                    {gpsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Navigation className="h-4 w-4" />}
+                    {gpsLoading ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      <Navigation className="h-6 w-6" />
+                    )}
+                    {gpsLoading ? "Capturando localização..." : "Toque aqui para compartilhar sua localização atual"}
                   </Button>
+                  <p className="text-xs text-muted-foreground text-center px-2">
+                    📍 Use este botão para enviar automaticamente sua localização. Isso ajuda o prestador a chegar mais rápido até você.
+                  </p>
                 </div>
-                {originCoords && (
-                  <button type="button" className="text-xs text-primary underline" onClick={() => { setOriginCoords(null); update("origin_address", ""); update("origin_number", ""); update("origin_city", ""); update("origin_uf", ""); }}>
-                    Limpar e digitar manualmente
+              )}
+
+              {originCoords && (
+                <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-emerald-800">Localização capturada com sucesso!</p>
+                    <p className="text-xs text-emerald-600">{form.origin_address || `${originCoords.lat.toFixed(5)}, ${originCoords.lng.toFixed(5)}`}</p>
+                  </div>
+                  <button type="button" className="text-xs text-emerald-700 underline shrink-0" onClick={() => { setOriginCoords(null); setGpsReminderShown(false); update("origin_address", ""); update("origin_number", ""); update("origin_city", ""); update("origin_uf", ""); }}>
+                    Limpar
                   </button>
-                )}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">{attendanceType === "collision" ? "Local do Ocorrido" : "Endereço de Origem"} *</Label>
+                <AddressAutocomplete
+                  value={form.origin_address}
+                  onChange={(v) => { update("origin_address", v); setErrors((p) => ({ ...p, origin_address: "" })); }}
+                  onPlaceSelect={(place) => {
+                    setOriginCoords({ lat: place.lat, lng: place.lng });
+                    if (place.city) update("origin_city", place.city);
+                    if (place.state) update("origin_uf", place.state);
+                    setErrors((p) => ({ ...p, origin_city: "" }));
+                  }}
+                  placeholder="Ou digite o endereço manualmente"
+                  error={errors.origin_address}
+                  coords={originCoords}
+                  disabled={!!originCoords && gpsLoading}
+                  tenantId={tenantId}
+                />
                 {errors.origin_geo && <p className="text-xs text-destructive mt-1">{errors.origin_geo}</p>}
               </div>
 
