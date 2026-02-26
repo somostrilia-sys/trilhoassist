@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Car, Loader2, AlertCircle, Clock, Bell, CheckCircle2 } from "lucide-react";
+import { MapPin, Loader2, AlertCircle, Clock, Bell, CheckCircle2 } from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -53,7 +53,11 @@ export default function BeneficiaryTracking() {
   const [isNearby, setIsNearby] = useState(false);
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
   const [beneficiaryArrived, setBeneficiaryArrived] = useState(false);
+  const [waitingLocation, setWaitingLocation] = useState(false);
+  const [etaText, setEtaText] = useState<string | null>(null);
   const notifiedRef = useRef(false);
+  const waitingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const etaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -90,7 +94,6 @@ export default function BeneficiaryTracking() {
         setDispatch(d);
         setProviderName((d as any).providers?.name || "Prestador");
 
-        // Get latest tracking position
         const { data: track } = await supabase
           .from("provider_tracking")
           .select("latitude, longitude, created_at")
@@ -109,12 +112,13 @@ export default function BeneficiaryTracking() {
     load();
   }, [token]);
 
-  // Subscribe to realtime tracking updates
+  // Subscribe to Realtime: postgres_changes + broadcast channel
   useEffect(() => {
-    if (!dispatch?.id) return;
+    if (!dispatch?.id || !request?.id) return;
 
-    const channel = supabase
-      .channel(`tracking-${dispatch.id}`)
+    // 1. Postgres changes (fallback, reliable)
+    const pgChannel = supabase
+      .channel(`tracking-pg-${dispatch.id}`)
       .on(
         "postgres_changes",
         {
@@ -127,14 +131,48 @@ export default function BeneficiaryTracking() {
           const { latitude, longitude, created_at } = payload.new;
           setProviderPos({ lat: latitude, lng: longitude });
           setLastUpdate(new Date(created_at));
+          resetWaitingTimer();
         }
       )
       .subscribe();
 
+    // 2. Broadcast channel (instant, low latency)
+    const broadcastChannel = supabase
+      .channel(`provider-location-${request.id}`)
+      .on("broadcast", { event: "location" }, (payload: any) => {
+        const { lat, lng, ts } = payload.payload;
+        if (lat && lng) {
+          setProviderPos({ lat, lng });
+          setLastUpdate(new Date(ts));
+          resetWaitingTimer();
+        }
+      })
+      .subscribe();
+
+    // Start waiting timer
+    startWaitingTimer();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(pgChannel);
+      supabase.removeChannel(broadcastChannel);
+      if (waitingTimerRef.current) clearTimeout(waitingTimerRef.current);
     };
-  }, [dispatch?.id]);
+  }, [dispatch?.id, request?.id]);
+
+  const startWaitingTimer = useCallback(() => {
+    if (waitingTimerRef.current) clearTimeout(waitingTimerRef.current);
+    waitingTimerRef.current = setTimeout(() => {
+      setWaitingLocation(true);
+    }, 30000);
+  }, []);
+
+  const resetWaitingTimer = useCallback(() => {
+    setWaitingLocation(false);
+    if (waitingTimerRef.current) clearTimeout(waitingTimerRef.current);
+    waitingTimerRef.current = setTimeout(() => {
+      setWaitingLocation(true);
+    }, 30000);
+  }, []);
 
   // Initialize map
   useEffect(() => {
@@ -150,10 +188,9 @@ export default function BeneficiaryTracking() {
       attribution: "&copy; OpenStreetMap",
     }).addTo(map);
 
-    // Origin marker (only if coordinates exist)
     if (request.origin_lat && request.origin_lng) {
       const originIcon = L.divIcon({
-        html: `<div style="background:#22c55e;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)"></div>`,
+        html: `<div style="background:hsl(var(--primary));width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)"></div>`,
         iconSize: [14, 14],
         iconAnchor: [7, 7],
         className: "",
@@ -171,14 +208,17 @@ export default function BeneficiaryTracking() {
     };
   }, [request]);
 
-  // Update provider marker
+  // Update provider marker with car/motorcycle icon
   useEffect(() => {
     if (!mapInstanceRef.current || !providerPos) return;
 
+    const isMoto = request?.service_type === "tow_motorcycle" || request?.vehicle_category === "motorcycle";
+    const vehicleEmoji = isMoto ? "🏍️" : "🚗";
+
     const providerIcon = L.divIcon({
-      html: `<div style="background:#3b82f6;width:16px;height:16px;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4);animation:pulse 2s infinite"></div>`,
-      iconSize: [16, 16],
-      iconAnchor: [8, 8],
+      html: `<div style="font-size:24px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4))">${vehicleEmoji}</div>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
       className: "",
     });
 
@@ -190,13 +230,13 @@ export default function BeneficiaryTracking() {
         .bindPopup(providerName || "Prestador");
     }
 
-    // Fit bounds to show both markers
+    // Fit bounds
     const bounds = L.latLngBounds([
       [providerPos.lat, providerPos.lng],
       [request?.origin_lat || providerPos.lat, request?.origin_lng || providerPos.lng],
     ]);
     mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50] });
-  }, [providerPos, providerName, request?.origin_lat, request?.origin_lng]);
+  }, [providerPos, providerName, request?.origin_lat, request?.origin_lng, request?.service_type, request?.vehicle_category]);
 
   // Proximity check
   useEffect(() => {
@@ -209,6 +249,27 @@ export default function BeneficiaryTracking() {
       playNotificationSound();
       if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
     }
+  }, [providerPos, request?.origin_lat, request?.origin_lng]);
+
+  // ETA estimation via simple speed calculation (debounced)
+  useEffect(() => {
+    if (!providerPos || !request?.origin_lat || !request?.origin_lng) return;
+    if (etaDebounceRef.current) clearTimeout(etaDebounceRef.current);
+    etaDebounceRef.current = setTimeout(() => {
+      const dist = haversineDistance(providerPos.lat, providerPos.lng, request.origin_lat, request.origin_lng);
+      // Estimate ETA assuming avg 40km/h in urban areas
+      const avgSpeedKmH = 40;
+      const etaMin = Math.round((dist / avgSpeedKmH) * 60);
+      if (etaMin <= 1) {
+        setEtaText("Chegando...");
+      } else if (etaMin < 60) {
+        setEtaText(`~${etaMin} min`);
+      } else {
+        const h = Math.floor(etaMin / 60);
+        const m = etaMin % 60;
+        setEtaText(`~${h}h${m > 0 ? ` ${m}min` : ""}`);
+      }
+    }, 1000);
   }, [providerPos, request?.origin_lat, request?.origin_lng]);
 
   // Set arrived state from dispatch data
@@ -275,6 +336,12 @@ export default function BeneficiaryTracking() {
                 <span className="font-medium">{providerName}</span>
               </p>
             )}
+            {etaText && distanceKm !== null && distanceKm > 0.05 && (
+              <p className="text-sm">
+                <span className="text-muted-foreground">Tempo estimado:</span>{" "}
+                <span className="font-semibold text-primary">{etaText}</span>
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -289,6 +356,18 @@ export default function BeneficiaryTracking() {
                   {distanceKm !== null && `A ${(distanceKm * 1000).toFixed(0)}m de distância`}
                 </p>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Waiting for location warning */}
+        {waitingLocation && !providerPos && dispatch && (
+          <Card className="border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+            <CardContent className="pt-4 flex items-center gap-3">
+              <Clock className="h-5 w-5 text-amber-600" />
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                Aguardando localização do prestador...
+              </p>
             </CardContent>
           </Card>
         )}
@@ -320,7 +399,7 @@ export default function BeneficiaryTracking() {
               <p className="text-sm text-muted-foreground">Nenhum prestador acionado ainda.</p>
             )}
 
-            {!providerPos && dispatch && (
+            {!providerPos && dispatch && !waitingLocation && (
               <p className="text-sm text-muted-foreground">Aguardando localização do prestador...</p>
             )}
 
@@ -332,10 +411,12 @@ export default function BeneficiaryTracking() {
 
             {providerPos && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
+                <span className="text-lg">
+                  {request?.service_type === "tow_motorcycle" || request?.vehicle_category === "motorcycle" ? "🏍️" : "🚗"}
+                </span>
                 <span>Prestador em movimento</span>
-                <span className="ml-auto">
-                  <div className="w-3 h-3 rounded-full bg-green-500 inline-block mr-1" />
+                <span className="ml-auto flex items-center gap-1">
+                  <div className="w-3 h-3 rounded-full bg-primary inline-block" />
                   Sua localização
                 </span>
               </div>
@@ -351,7 +432,7 @@ export default function BeneficiaryTracking() {
           </Button>
         )}
         {beneficiaryArrived && (
-          <div className="flex items-center justify-center gap-2 text-sm text-success font-medium py-2">
+          <div className="flex items-center justify-center gap-2 text-sm text-green-600 font-medium py-2">
             <CheckCircle2 className="h-5 w-5" />
             Chegada do prestador confirmada
           </div>
