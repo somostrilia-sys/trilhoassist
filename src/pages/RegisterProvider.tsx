@@ -57,7 +57,7 @@ export default function RegisterProvider() {
     queryKey: ["tenant-public", tenantSlug],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("tenants")
+        .from("tenants_safe")
         .select("name, logo_url, primary_color, slug")
         .eq("slug", tenantSlug!)
         .eq("active", true)

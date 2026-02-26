@@ -82,7 +82,7 @@ export default function UsersManagement() {
     queryKey: ["tenants-list"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("tenants")
+        .from("tenants_safe")
         .select("id, name")
         .eq("active", true)
         .order("name");
