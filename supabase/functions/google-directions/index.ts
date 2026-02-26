@@ -6,13 +6,28 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ===== RATE LIMITER =====
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+function isRateLimited(ip: string, max = 60, windowMs = 60_000): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
+    return false;
+  }
+  entry.count++;
+  return entry.count > max;
+}
+
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function getGoogleApiKey(tenantId?: string): Promise<string> {
   const adminSupabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  if (!tenantId) return "";
+  if (!tenantId || !uuidRegex.test(tenantId)) return "";
 
   const { data: tenant } = await adminSupabase
     .from("tenants")
@@ -26,11 +41,20 @@ async function getGoogleApiKey(tenantId?: string): Promise<string> {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // Rate limiting
+  const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (isRateLimited(clientIp)) {
+    return new Response(JSON.stringify({ success: false, error: "Too many requests" }), {
+      status: 429,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const body = await req.json();
     const { tenant_id, origin, destination } = body || {};
 
-    if (!tenant_id) {
+    if (!tenant_id || typeof tenant_id !== "string") {
       return new Response(JSON.stringify({ success: false, error: "tenant_id é obrigatório" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -44,6 +68,24 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Validate coordinate ranges
+    const coords = [origin.lat, origin.lng, destination.lat, destination.lng];
+    for (const c of coords) {
+      if (typeof c !== "number" || isNaN(c)) {
+        return new Response(JSON.stringify({ success: false, error: "Coordenadas inválidas" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+    if (Math.abs(origin.lat) > 90 || Math.abs(destination.lat) > 90 ||
+        Math.abs(origin.lng) > 180 || Math.abs(destination.lng) > 180) {
+      return new Response(JSON.stringify({ success: false, error: "Coordenadas fora do intervalo" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const apiKey = await getGoogleApiKey(tenant_id);
     if (!apiKey) {
       return new Response(JSON.stringify({ success: false, error: "Google API Key não configurada no tenant" }), {
@@ -52,7 +94,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Route: origin -> destination -> origin (via waypoints)
     const url = new URL("https://maps.googleapis.com/maps/api/directions/json");
     url.searchParams.set("origin", `${origin.lat},${origin.lng}`);
     url.searchParams.set("destination", `${origin.lat},${origin.lng}`);
@@ -66,7 +107,7 @@ Deno.serve(async (req) => {
 
     if (data.status !== "OK") {
       return new Response(
-        JSON.stringify({ success: false, error: `Google Directions: ${data.status}`, details: data.error_message || null }),
+        JSON.stringify({ success: false, error: `Google Directions: ${data.status}` }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
