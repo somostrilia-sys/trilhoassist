@@ -15,6 +15,9 @@ interface PlaceResult {
   name: string;
   lat: number;
   lng: number;
+  city?: string;
+  state?: string;
+  address_components?: Array<{ long_name: string; short_name: string; types: string[] }>;
 }
 
 interface Props {
@@ -127,7 +130,16 @@ export default function AddressAutocomplete({
       const data = await res.json();
       if (data.success && data.place) {
         onChange(data.place.formatted_address);
-        onPlaceSelect(data.place);
+        // Extract city and state from address_components
+        const components = data.place.address_components || [];
+        const cityComp = components.find((c: any) => c.types?.includes("administrative_area_level_2")) 
+          || components.find((c: any) => c.types?.includes("locality"));
+        const stateComp = components.find((c: any) => c.types?.includes("administrative_area_level_1"));
+        onPlaceSelect({
+          ...data.place,
+          city: cityComp?.long_name || "",
+          state: stateComp?.short_name || "",
+        });
       }
       // Rotate session token after place details call
       sessionTokenRef.current = crypto.randomUUID();
