@@ -14,6 +14,30 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
 
+    // ═══ Plate lookup action (used by public form) ═══
+    if (body.action === "lookup_plate") {
+      const cleanPlate = (body.plate || "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
+      if (cleanPlate.length < 7) {
+        return new Response(JSON.stringify({ beneficiary: null }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      const { data: ben } = await supabaseAdmin
+        .from("beneficiaries")
+        .select("id, name, phone, vehicle_model, vehicle_year")
+        .eq("vehicle_plate", cleanPlate)
+        .eq("active", true)
+        .limit(1)
+        .maybeSingle();
+      return new Response(JSON.stringify({ beneficiary: ben || null }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Validate required fields
     const { requester_name, requester_phone, origin_address, vehicle_plate, service_type, event_type } = body;
 
