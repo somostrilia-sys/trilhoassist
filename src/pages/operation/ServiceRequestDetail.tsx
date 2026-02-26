@@ -439,7 +439,8 @@ export default function ServiceRequestDetail() {
 
     // Generate tokens
     const providerToken = crypto.randomUUID();
-    const beneficiaryToken = crypto.randomUUID();
+    // Reuse existing beneficiary_token if already set (created at service request creation)
+    const beneficiaryToken = request.beneficiary_token || crypto.randomUUID();
 
     const { data: newDispatch, error: dErr } = await supabase.from("dispatches").insert({
       service_request_id: id,
@@ -456,14 +457,17 @@ export default function ServiceRequestDetail() {
       return;
     }
 
-    // Update service request with beneficiary token and financial values
-    await supabase.from("service_requests").update({
+    // Update service request with financial values; only set beneficiary_token if not already present
+    const updatePayload: any = {
       status: "dispatched",
-      beneficiary_token: beneficiaryToken,
       provider_cost: parseFloat(quotedAmount),
       charged_amount: parseFloat(chargedAmount),
       payment_method: paymentMethod,
-    }).eq("id", id);
+    };
+    if (!request.beneficiary_token) {
+      updatePayload.beneficiary_token = beneficiaryToken;
+    }
+    await supabase.from("service_requests").update(updatePayload).eq("id", id);
 
     await logEvent("dispatch", `Prestador acionado: ${finalProviderName} — Valor Prestador: R$ ${parseFloat(quotedAmount).toFixed(2)} — Valor Cobrado: R$ ${parseFloat(chargedAmount).toFixed(2)}${dispatchMode === "quick" ? " (cadastro rápido)" : ""}`, request.status, "dispatched");
 
