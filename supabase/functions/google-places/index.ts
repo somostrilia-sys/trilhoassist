@@ -147,7 +147,7 @@ async function handlePlaceDetails(body: any) {
 
   const url = new URL('https://maps.googleapis.com/maps/api/place/details/json');
   url.searchParams.set('place_id', place_id);
-  url.searchParams.set('fields', 'formatted_address,geometry,name,address_components');
+  url.searchParams.set('fields', 'formatted_address,geometry,name,address_components,formatted_phone_number,international_phone_number');
   url.searchParams.set('language', 'pt-BR');
   url.searchParams.set('key', apiKey);
   if (sessiontoken && typeof sessiontoken === 'string' && sessiontoken.length <= 200) {
@@ -174,6 +174,7 @@ async function handlePlaceDetails(body: any) {
         lat: result.geometry?.location?.lat,
         lng: result.geometry?.location?.lng,
         address_components: result.address_components,
+        phone: result.formatted_phone_number || result.international_phone_number || null,
       },
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -15,7 +15,7 @@ import {
   Share2, Truck, XCircle, PlayCircle, CheckCircle2, Loader2, Clock, History,
   FilePlus2, RotateCcw, Send, Camera, Mic, Video, File, Link as LinkIcon,
   DollarSign, CalendarIcon, AlertCircle, Search, ChevronsUpDown, Check,
-  ClipboardCopy,
+  ClipboardCopy, Phone, Star, MapPinned,
 } from "lucide-react";
 import { Command, CommandInput, CommandList, CommandEmpty, CommandItem, CommandGroup } from "@/components/ui/command";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -1278,43 +1278,109 @@ ${request.estimated_km ? `*DISTÂNCIA*: APROX ${Math.round(request.estimated_km)
                     )}
 
                     {externalResults.length > 0 && (
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
-                        <p className="text-xs text-muted-foreground">{externalResults.length} resultado(s) — clique para usar no cadastro rápido</p>
+                      <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                        <p className="text-xs text-muted-foreground">{externalResults.length} resultado(s) encontrado(s)</p>
                         {externalResults.map((place) => (
                           <div
                             key={place.place_id}
-                            className="border rounded-md p-3 cursor-pointer hover:bg-accent/50 transition-colors"
-                            onClick={() => {
-                              setQuickProvider(prev => ({
-                                ...prev,
-                                name: place.name,
-                                street: place.address || "",
-                                city: "",
-                                state: "",
-                              }));
-                              setDispatchMode("quick");
-                              toast.info("Dados preenchidos no cadastro rápido", { description: "Complete telefone e outros dados para acionar." });
-                            }}
+                            className="border rounded-lg p-3 hover:bg-accent/30 transition-colors space-y-2"
                           >
                             <div className="flex justify-between items-start gap-2">
                               <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm truncate">{place.name}</p>
-                                <p className="text-xs text-muted-foreground truncate">{place.address}</p>
+                                <p className="font-semibold text-sm">{place.name}</p>
+                                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                  <MapPinned className="h-3 w-3 shrink-0" />
+                                  <span className="truncate">{place.address}</span>
+                                </p>
                               </div>
-                              <div className="text-right shrink-0">
-                                <Badge variant="outline" className="text-xs">
+                              <div className="text-right shrink-0 space-y-1">
+                                <Badge variant="outline" className="text-xs font-mono">
                                   {place.distance_km.toFixed(1)} km
                                 </Badge>
                                 {place.rating && (
-                                  <p className="text-xs text-muted-foreground mt-1">⭐ {place.rating} ({place.user_ratings_total})</p>
+                                  <p className="text-xs flex items-center justify-end gap-0.5">
+                                    <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
+                                    {place.rating} <span className="text-muted-foreground">({place.user_ratings_total})</span>
+                                  </p>
                                 )}
                               </div>
                             </div>
+
+                            {/* Phone section */}
+                            {place._phone ? (
+                              <a
+                                href={`tel:${place._phone}`}
+                                className="flex items-center gap-2 bg-primary/10 text-primary rounded-md px-3 py-2 font-semibold text-sm hover:bg-primary/20 transition-colors"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Phone className="h-4 w-4" />
+                                {place._phone}
+                              </a>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full gap-2 text-xs"
+                                disabled={place._phoneLoading}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  // Fetch phone via place details
+                                  setExternalResults(prev => prev.map(p =>
+                                    p.place_id === place.place_id ? { ...p, _phoneLoading: true } : p
+                                  ));
+                                  try {
+                                    const { data, error } = await supabase.functions.invoke("google-places", {
+                                      body: {
+                                        action: "place_details",
+                                        place_id: place.place_id,
+                                        tenant_id: request.tenant_id,
+                                      },
+                                    });
+                                    const phone = data?.place?.phone || null;
+                                    setExternalResults(prev => prev.map(p =>
+                                      p.place_id === place.place_id
+                                        ? { ...p, _phone: phone, _phoneLoading: false, _phoneError: !phone }
+                                        : p
+                                    ));
+                                    if (!phone) toast.info("Telefone não disponível no Google para este local.");
+                                  } catch {
+                                    setExternalResults(prev => prev.map(p =>
+                                      p.place_id === place.place_id ? { ...p, _phoneLoading: false, _phoneError: true } : p
+                                    ));
+                                  }
+                                }}
+                              >
+                                {place._phoneLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Phone className="h-3 w-3" />}
+                                {place._phoneError ? "Telefone indisponível" : "Buscar Telefone"}
+                              </Button>
+                            )}
+
                             {place.open_now != null && (
-                              <p className={`text-xs mt-1 ${place.open_now ? "text-green-600" : "text-red-500"}`}>
-                                {place.open_now ? "Aberto agora" : "Fechado"}
+                              <p className={`text-xs ${place.open_now ? "text-green-600" : "text-destructive"}`}>
+                                {place.open_now ? "✓ Aberto agora" : "✗ Fechado"}
                               </p>
                             )}
+
+                            {/* Action to use in quick registration */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-full text-xs gap-1"
+                              onClick={() => {
+                                setQuickProvider(prev => ({
+                                  ...prev,
+                                  name: place.name,
+                                  phone: place._phone ? maskPhone(place._phone.replace(/\D/g, "")) : prev.phone,
+                                  street: place.address || "",
+                                  city: "",
+                                  state: "",
+                                }));
+                                setDispatchMode("quick");
+                                toast.info("Dados preenchidos no cadastro rápido", { description: "Complete os dados e acione." });
+                              }}
+                            >
+                              Usar no Cadastro Rápido →
+                            </Button>
                           </div>
                         ))}
                       </div>
