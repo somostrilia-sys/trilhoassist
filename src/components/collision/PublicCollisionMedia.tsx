@@ -1,10 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Camera, Mic, Video, File, X, Loader2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 
 interface UploadedFile {
   id?: string;
@@ -30,55 +29,39 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange }
   const docRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
 
-  const uploadFile = async (file: globalThis.File, fileType: string) => {
-    const ext = file.name.split(".").pop() || "bin";
-    const path = `${serviceRequestId}/${fileType}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  const uploadFile = async (file: globalThis.File, fileType: string): Promise<UploadedFile | null> => {
+    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+    const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-    console.log("[CollisionMedia] Uploading:", { path, fileType, size: file.size, mime: file.type });
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("service_request_id", serviceRequestId);
+    formData.append("file_type", fileType);
 
-    const { data, error } = await supabase.storage
-      .from("collision-media")
-      .upload(path, file, { contentType: file.type });
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/collision-upload`,
+        {
+          method: "POST",
+          headers: { apikey: anonKey },
+          body: formData,
+        }
+      );
 
-    if (error) {
-      console.error("[CollisionMedia] Storage error:", error);
-      toast({ title: `Erro ao enviar ${file.name}`, description: error.message, variant: "destructive" });
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("[CollisionMedia] Upload error:", data);
+        toast({ title: `Erro ao enviar ${file.name}`, description: data.details || data.error, variant: "destructive" });
+        return null;
+      }
+
+      return data as UploadedFile;
+    } catch (err) {
+      console.error("[CollisionMedia] Network error:", err);
+      toast({ title: `Erro de rede ao enviar ${file.name}`, variant: "destructive" });
       return null;
     }
-
-    console.log("[CollisionMedia] Storage OK:", data.path);
-    const { data: urlData } = supabase.storage.from("collision-media").getPublicUrl(data.path);
-
-    console.log("[CollisionMedia] Inserting into table...");
-    const { data: mediaRow, error: insertError } = await supabase
-      .from("collision_media")
-      .insert({
-        service_request_id: serviceRequestId,
-        file_url: urlData.publicUrl,
-        file_name: file.name,
-        file_type: fileType,
-        mime_type: file.type,
-        file_size: file.size,
-      })
-      .select("id")
-      .single();
-
-    if (insertError) {
-      console.error("[CollisionMedia] Insert error:", insertError);
-      toast({ title: `Erro ao registrar ${file.name}`, description: insertError.message, variant: "destructive" });
-      return null;
-    }
-
-    console.log("[CollisionMedia] Insert OK:", mediaRow?.id);
-
-    return {
-      id: mediaRow?.id,
-      file_url: urlData.publicUrl,
-      file_name: file.name,
-      file_type: fileType as any,
-      mime_type: file.type,
-      file_size: file.size,
-    } as UploadedFile;
   };
 
   const handleFileUpload = async (files: FileList, fileType: string) => {
@@ -98,9 +81,7 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange }
   };
 
   const handleRemove = async (file: UploadedFile, index: number) => {
-    if (file.id) await supabase.from("collision_media").delete().eq("id", file.id);
-    const urlParts = file.file_url.split("/collision-media/");
-    if (urlParts[1]) await supabase.storage.from("collision-media").remove([urlParts[1]]);
+    // Just remove from local state — admin can manage via dashboard
     setUploadedFiles((prev) => {
       const updated = prev.filter((_, i) => i !== index);
       onMediaChange?.(updated);

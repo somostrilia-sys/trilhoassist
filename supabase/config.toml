@@ -36,3 +36,6 @@ verify_jwt = false
 [functions.evolution-api]
 verify_jwt = false
 
+[functions.collision-upload]
+verify_jwt = false
+
