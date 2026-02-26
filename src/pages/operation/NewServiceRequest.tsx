@@ -260,8 +260,9 @@ export default function NewServiceRequest() {
   };
 
   const validateChecklist = (): string | null => {
-    // Checklist NOT required for collision
-    if (attendanceType === "collision") return null;
+    // Checklist NOT required for collision (unless needsTow)
+    if (attendanceType === "collision" && !needsTow) return null;
+    if (attendanceType === "collision") return null; // collision with tow uses its own checklist later
 
     const requiredByCategory: Record<VehicleCategory, { fields: string[]; data: Record<string, string> }> = {
       car: {
@@ -279,7 +280,14 @@ export default function NewServiceRequest() {
     };
     const { fields, data } = requiredByCategory[vehicleCategory];
     const missing = fields.filter((f) => !data[f] || data[f].trim() === "");
-    return missing.length > 0 ? "Preencha todos os campos obrigatórios do checklist de verificação do veículo." : null;
+    if (missing.length > 0) return "Preencha todos os campos obrigatórios do checklist de verificação do veículo.";
+    
+    // Conditional: if wheel_locked=yes, wheel_locked_count is required (car only)
+    if (vehicleCategory === "car" && (carVerification as any).wheel_locked === "yes" && !(carVerification as any).wheel_locked_count) {
+      return "Informe quantas rodas estão travadas.";
+    }
+    
+    return null;
   };
 
   // Determine effective service type for collision
@@ -399,17 +407,48 @@ export default function NewServiceRequest() {
     }
   };
 
-  const paneServiceTypeOptions = [
-    { value: "tow_light", label: "Reboque Leve" },
-    { value: "tow_heavy", label: "Reboque Pesado" },
-    { value: "tow_motorcycle", label: "Reboque Moto" },
-    { value: "locksmith", label: "Chaveiro" },
-    { value: "tire_change", label: "Troca de Pneu" },
-    { value: "battery", label: "Bateria" },
-    { value: "fuel", label: "Combustível" },
-    { value: "lodging", label: "Hospedagem" },
-    { value: "other", label: "Outro" },
-  ];
+  // ═══ Service options driven by event_type (motivo) ═══
+  const getTowTypeForCategory = (): string => {
+    if (vehicleCategory === "motorcycle") return "tow_motorcycle";
+    if (vehicleCategory === "truck") return "tow_heavy";
+    return "tow_light";
+  };
+
+  const getTowLabelForCategory = (): string => {
+    if (vehicleCategory === "motorcycle") return "Reboque Moto";
+    if (vehicleCategory === "truck") return "Reboque Pesado";
+    return "Reboque Leve";
+  };
+
+  const getServiceOptionsForEvent = (): { value: string; label: string }[] => {
+    const towOption = { value: getTowTypeForCategory(), label: getTowLabelForCategory() };
+    
+    switch (form.event_type) {
+      case "locked_out":
+        return [{ value: "locksmith", label: "Chaveiro" }, towOption];
+      case "battery_dead":
+        return [{ value: "battery", label: "Recarga de Bateria" }, towOption];
+      case "flat_tire":
+        return [{ value: "tire_change", label: "Troca de Pneu" }, towOption];
+      case "fuel_empty":
+        return [{ value: "fuel", label: "Auxílio Combustível" }, towOption];
+      default:
+        // mechanical_failure, theft, other → only tow
+        return [towOption];
+    }
+  };
+
+  // Auto-select service when event_type changes
+  useEffect(() => {
+    if (attendanceType !== "pane") return;
+    const options = getServiceOptionsForEvent();
+    // If current service is not in the new options, auto-select first
+    if (!options.find(o => o.value === form.service_type)) {
+      update("service_type", options[0].value);
+    }
+  }, [form.event_type, vehicleCategory, attendanceType]);
+
+  const paneServiceOptions = getServiceOptionsForEvent();
 
   const isCollision = attendanceType === "collision";
 
@@ -433,10 +472,13 @@ export default function NewServiceRequest() {
                 type="button"
                 variant={attendanceType === "pane" ? "default" : "outline"}
                 onClick={() => { setAttendanceType("pane"); setNeedsTow(null); }}
-                className="flex-1 h-14 text-base gap-2"
+                className="flex-1 h-14 text-base gap-2 flex-col py-2"
               >
-                <AlertTriangle className="h-5 w-5" />
-                Pane / Assistência
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5" />
+                  Pane
+                </div>
+                <span className="text-xs font-normal opacity-70">Demais problemas</span>
               </Button>
               <Button
                 type="button"
@@ -617,7 +659,6 @@ export default function NewServiceRequest() {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="mechanical_failure">Pane Mecânica</SelectItem>
-                    <SelectItem value="accident">Acidente</SelectItem>
                     <SelectItem value="theft">Roubo/Furto</SelectItem>
                     <SelectItem value="flat_tire">Pneu Furado</SelectItem>
                     <SelectItem value="locked_out">Chave Trancada</SelectItem>
@@ -632,7 +673,7 @@ export default function NewServiceRequest() {
                 <Select value={form.service_type} onValueChange={(v) => update("service_type", v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {paneServiceTypeOptions.map((opt) => (
+                    {paneServiceOptions.map((opt) => (
                       <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -851,9 +892,9 @@ export default function NewServiceRequest() {
                   <span>Solicitante:</span><span className="font-medium text-foreground">{form.requester_name || "—"}</span>
                   <span>Veículo:</span><span className="font-medium text-foreground">{form.vehicle_plate || "—"} {form.vehicle_model}</span>
                   <span>Categoria:</span><span className="font-medium text-foreground">{vehicleCategory === "car" ? "Carro" : vehicleCategory === "motorcycle" ? "Moto" : "Caminhão"}</span>
-                  {!isCollision && (
+                   {!isCollision && (
                     <>
-                      <span>Serviço:</span><span className="font-medium text-foreground">{paneServiceTypeOptions.find(o => o.value === form.service_type)?.label || "—"}</span>
+                      <span>Serviço:</span><span className="font-medium text-foreground">{paneServiceOptions.find(o => o.value === form.service_type)?.label || "—"}</span>
                     </>
                   )}
                   {isCollision && needsTow !== null && (

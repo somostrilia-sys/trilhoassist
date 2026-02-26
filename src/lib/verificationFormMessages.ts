@@ -11,6 +11,7 @@ export interface VerificationQuestion {
 
 export const CAR_QUESTIONS: VerificationQuestion[] = [
   { field: "wheel_locked", label: "Alguma roda está travada ou o veículo não se movimenta?", type: "yes_no" },
+  { field: "wheel_locked_count", label: "Se sim, quantas rodas estão travadas? (1/2/3/4/não sei)", type: "text" },
   { field: "steering_locked", label: "O veículo está com a direção travada?", type: "yes_no" },
   { field: "armored", label: "O veículo é blindado?", type: "yes_no" },
   { field: "vehicle_lowered", label: "O veículo é rebaixado?", type: "yes_no" },
