@@ -467,6 +467,30 @@ export default function ServiceRequestDetail() {
     if (!request.beneficiary_token) {
       updatePayload.beneficiary_token = beneficiaryToken;
     }
+
+    // Phase 2: Recalculate km with provider base if provider has coordinates
+    const selectedProvider = providers.find(p => p.id === finalProviderId);
+    if (selectedProvider?.latitude && selectedProvider?.longitude && request.origin_lat && request.origin_lng && request.destination_lat && request.destination_lng) {
+      try {
+        const fetchDist = async (from: {lat:number,lng:number}, to: {lat:number,lng:number}) => {
+          const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`;
+          const res = await fetch(url);
+          const data = await res.json();
+          if (data.code !== "Ok") return 0;
+          return (data.routes[0]?.distance || 0) / 1000;
+        };
+        const provBase = { lat: selectedProvider.latitude, lng: selectedProvider.longitude };
+        const orig = { lat: request.origin_lat, lng: request.origin_lng };
+        const dest = { lat: request.destination_lat, lng: request.destination_lng };
+        const [leg1, leg2, leg3] = await Promise.all([
+          fetchDist(provBase, orig),
+          fetchDist(orig, dest),
+          fetchDist(dest, provBase),
+        ]);
+        updatePayload.estimated_km = leg1 + leg2 + leg3;
+      } catch { /* keep existing estimated_km */ }
+    }
+
     await supabase.from("service_requests").update(updatePayload).eq("id", id);
 
     await logEvent("dispatch", `Prestador acionado: ${finalProviderName} — Valor Prestador: R$ ${parseFloat(quotedAmount).toFixed(2)} — Valor Cobrado: R$ ${parseFloat(chargedAmount).toFixed(2)}${dispatchMode === "quick" ? " (cadastro rápido)" : ""}`, request.status, "dispatched");
@@ -819,8 +843,8 @@ ${request.estimated_km ? `*DISTÂNCIA*: APROX ${Math.round(request.estimated_km)
         </CardContent>
       </Card>
 
-      {/* Verification Checklist */}
-      {verificationEntries.length > 0 && (
+      {/* Verification Checklist - only for tow services */}
+      {verificationEntries.length > 0 && !["locksmith", "tire_change", "battery"].includes(request.service_type) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">

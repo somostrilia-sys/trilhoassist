@@ -157,22 +157,24 @@ export default function CarVerification({ data, onChange }: Props) {
             <YesNoToggle value={data.easy_access} onChange={(v) => onChange("easy_access", v)} />
           </div>
 
-          <div className="space-y-2">
-            <Label>O veículo está em:</Label>
-            <Select value={data.vehicle_location} onValueChange={(v) => onChange("vehicle_location", v)}>
-              <SelectTrigger><SelectValue placeholder="Selecione o local" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="underground_garage">Garagem subterrânea</SelectItem>
-                <SelectItem value="parking">Estacionamento</SelectItem>
-                <SelectItem value="highway">Rodovia</SelectItem>
-                <SelectItem value="difficult_access">Local de difícil acesso (terra, lama, declive)</SelectItem>
-                <SelectItem value="other">Outro</SelectItem>
-              </SelectContent>
-            </Select>
-            {data.vehicle_location === "other" && (
-              <Input placeholder="Descreva o local" value={data.vehicle_location_other} onChange={(e) => onChange("vehicle_location_other", e.target.value)} className="mt-2" />
-            )}
-          </div>
+          {data.easy_access === "no" && (
+            <div className="space-y-2">
+              <Label>O veículo está em:</Label>
+              <Select value={data.vehicle_location} onValueChange={(v) => onChange("vehicle_location", v)}>
+                <SelectTrigger><SelectValue placeholder="Selecione o local" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="underground_garage">Garagem subterrânea</SelectItem>
+                  <SelectItem value="parking">Estacionamento</SelectItem>
+                  <SelectItem value="highway">Rodovia</SelectItem>
+                  <SelectItem value="difficult_access">Local de difícil acesso (terra, lama, declive)</SelectItem>
+                  <SelectItem value="other">Outro</SelectItem>
+                </SelectContent>
+              </Select>
+              {data.vehicle_location === "other" && (
+                <Input placeholder="Descreva o local" value={data.vehicle_location_other} onChange={(e) => onChange("vehicle_location_other", e.target.value)} className="mt-2" />
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>Há restrição de altura no local (ex: garagem)?</Label>
