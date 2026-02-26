@@ -56,17 +56,23 @@ export default function PublicCollisionMedia({
     const ext = fileName.split(".").pop() || "bin";
     const path = `${serviceRequestId}/${fileType}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
+    console.log("[CollisionMedia] Uploading to storage:", { path, fileType, mimeType, serviceRequestId });
+
     const { data, error } = await supabase.storage
       .from("collision-media")
       .upload(path, file, { contentType: mimeType });
 
     if (error) {
+      console.error("[CollisionMedia] Storage upload error:", error);
       toast({ title: `Erro ao enviar ${fileName}`, description: error.message, variant: "destructive" });
       return null;
     }
 
+    console.log("[CollisionMedia] Storage upload success:", data.path);
+
     const { data: urlData } = supabase.storage.from("collision-media").getPublicUrl(data.path);
 
+    console.log("[CollisionMedia] Inserting into collision_media table...");
     const { data: mediaRow, error: insertError } = await supabase
       .from("collision_media")
       .insert({
