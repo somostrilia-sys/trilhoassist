@@ -908,6 +908,69 @@ export type Database = {
           },
         ]
       }
+      provider_invoices: {
+        Row: {
+          created_at: string
+          dispatch_id: string
+          file_name: string
+          file_size: number | null
+          file_url: string
+          id: string
+          observation: string | null
+          provider_id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+          uploaded_at: string
+        }
+        Insert: {
+          created_at?: string
+          dispatch_id: string
+          file_name: string
+          file_size?: number | null
+          file_url: string
+          id?: string
+          observation?: string | null
+          provider_id: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          uploaded_at?: string
+        }
+        Update: {
+          created_at?: string
+          dispatch_id?: string
+          file_name?: string
+          file_size?: number | null
+          file_url?: string
+          id?: string
+          observation?: string | null
+          provider_id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          uploaded_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_invoices_dispatch_id_fkey"
+            columns: ["dispatch_id"]
+            isOneToOne: false
+            referencedRelation: "dispatches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_invoices_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       provider_tracking: {
         Row: {
           accuracy: number | null

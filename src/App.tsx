@@ -33,6 +33,7 @@ import PublicServiceRequest from "./pages/public/PublicServiceRequest";
 import ProviderDashboard from "./pages/provider/ProviderDashboard";
 import ProviderServices from "./pages/provider/ProviderServices";
 import ProviderFinancial from "./pages/provider/ProviderFinancial";
+import ProviderInvoices from "./pages/provider/ProviderInvoices";
 import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientRequests from "./pages/client/ClientRequests";
 import ClientPlates from "./pages/client/ClientPlates";
@@ -97,6 +98,7 @@ const App = () => (
               <Route path="/provider/dashboard" element={<ProviderDashboard />} />
               <Route path="/provider/services" element={<ProviderServices />} />
               <Route path="/provider/financial" element={<ProviderFinancial />} />
+              <Route path="/provider/invoices" element={<ProviderInvoices />} />
             </Route>
 
             {/* Client/Association Portal */}

@@ -31,6 +31,7 @@ import { sendServiceLabel } from "@/lib/serviceLabel";
 import { sendAutoNotify } from "@/lib/autoNotify";
 import { maskPhone, maskCPF, maskCNPJ, maskCEP, unmask } from "@/lib/masks";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ProviderInvoiceReview } from "@/components/provider/ProviderInvoiceReview";
 
 const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   open: { label: "Aberto", variant: "default" },
@@ -994,6 +995,11 @@ ${request.estimated_km ? `*DISTÂNCIA*: APROX ${Math.round(request.estimated_km)
           </p>
         </CardContent>
       </Card>
+
+      {/* Provider Invoice / NF */}
+      {dispatchId && (
+        <ProviderInvoiceReview dispatchId={dispatchId} />
+      )}
 
       {/* Timeline / History */}
       <Card>
