@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Loader2, AlertCircle, Clock, Bell, CheckCircle2 } from "lucide-react";
+import { MapPin, Loader2, AlertCircle, Clock, Bell, CheckCircle2, Navigation } from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -35,11 +35,69 @@ function playNotificationSound() {
   } catch {}
 }
 
+function playArrivalSound() {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    // Two-tone celebration sound
+    [880, 1100].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = "sine";
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.3);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.3 + 0.5);
+      osc.start(ctx.currentTime + i * 0.3);
+      osc.stop(ctx.currentTime + i * 0.3 + 0.5);
+    });
+  } catch {}
+}
+
+async function fetchRouteCoords(
+  fromLat: number, fromLng: number, toLat: number, toLng: number
+): Promise<[number, number][] | null> {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.routes?.[0]?.geometry?.coordinates) {
+      return data.routes[0].geometry.coordinates as [number, number][];
+    }
+  } catch (err) {
+    console.error("OSRM route fetch failed:", err);
+  }
+  return null;
+}
+
 const serviceTypeMap: Record<string, string> = {
   tow_light: "Reboque Leve", tow_heavy: "Reboque Pesado", tow_motorcycle: "Reboque Moto",
   locksmith: "Chaveiro", tire_change: "Troca de Pneu", battery: "Bateria",
   fuel: "Combustível", lodging: "Hospedagem", collision: "Colisão", other: "Outro",
 };
+
+// Smooth marker animation
+function animateMarker(marker: L.Marker, newLatLng: L.LatLng, duration = 1000) {
+  const start = marker.getLatLng();
+  const startTime = performance.now();
+  
+  function step(currentTime: number) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    // Ease-out cubic
+    const eased = 1 - Math.pow(1 - progress, 3);
+    
+    const lat = start.lat + (newLatLng.lat - start.lat) * eased;
+    const lng = start.lng + (newLatLng.lng - start.lng) * eased;
+    marker.setLatLng([lat, lng]);
+    
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    }
+  }
+  
+  requestAnimationFrame(step);
+}
 
 export default function BeneficiaryTracking() {
   const { token } = useParams<{ token: string }>();
@@ -53,16 +111,21 @@ export default function BeneficiaryTracking() {
   const [isNearby, setIsNearby] = useState(false);
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
   const [beneficiaryArrived, setBeneficiaryArrived] = useState(false);
+  const [providerArrived, setProviderArrived] = useState(false);
   const [waitingLocation, setWaitingLocation] = useState(false);
   const [etaText, setEtaText] = useState<string | null>(null);
+  const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
   const notifiedRef = useRef(false);
+  const arrivalNotifiedRef = useRef(false);
   const waitingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const etaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const routeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const providerMarkerRef = useRef<L.Marker | null>(null);
   const originMarkerRef = useRef<L.Marker | null>(null);
+  const routePolylineRef = useRef<L.Polyline | null>(null);
 
   // Load data
   useEffect(() => {
@@ -93,6 +156,7 @@ export default function BeneficiaryTracking() {
       if (d) {
         setDispatch(d);
         setProviderName((d as any).providers?.name || "Prestador");
+        if (d.provider_arrived_at) setProviderArrived(true);
 
         const { data: track } = await supabase
           .from("provider_tracking")
@@ -112,11 +176,11 @@ export default function BeneficiaryTracking() {
     load();
   }, [token]);
 
-  // Subscribe to Realtime: postgres_changes + broadcast channel
+  // Subscribe to Realtime: postgres_changes + broadcast channel + dispatch updates
   useEffect(() => {
     if (!dispatch?.id || !request?.id) return;
 
-    // 1. Postgres changes (fallback, reliable)
+    // 1. Postgres changes for tracking (fallback, reliable)
     const pgChannel = supabase
       .channel(`tracking-pg-${dispatch.id}`)
       .on(
@@ -149,12 +213,39 @@ export default function BeneficiaryTracking() {
       })
       .subscribe();
 
+    // 3. Dispatch updates (provider_arrived_at)
+    const dispatchChannel = supabase
+      .channel(`dispatch-updates-${dispatch.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "dispatches",
+          filter: `id=eq.${dispatch.id}`,
+        },
+        (payload: any) => {
+          const updated = payload.new;
+          if (updated.provider_arrived_at && !arrivalNotifiedRef.current) {
+            arrivalNotifiedRef.current = true;
+            setProviderArrived(true);
+            playArrivalSound();
+            if ("vibrate" in navigator) navigator.vibrate([200, 100, 200, 100, 200]);
+          }
+          if (updated.status) {
+            setDispatch((prev: any) => ({ ...prev, ...updated }));
+          }
+        }
+      )
+      .subscribe();
+
     // Start waiting timer
     startWaitingTimer();
 
     return () => {
       supabase.removeChannel(pgChannel);
       supabase.removeChannel(broadcastChannel);
+      supabase.removeChannel(dispatchChannel);
       if (waitingTimerRef.current) clearTimeout(waitingTimerRef.current);
     };
   }, [dispatch?.id, request?.id]);
@@ -183,21 +274,30 @@ export default function BeneficiaryTracking() {
     const centerLng = request.origin_lng || -47.88;
     const zoom = request.origin_lat ? 14 : 5;
 
-    const map = L.map(mapRef.current).setView([centerLat, centerLng], zoom);
+    const map = L.map(mapRef.current, {
+      zoomControl: false,
+    }).setView([centerLat, centerLng], zoom);
+
+    // Add zoom control to bottom-right for mobile friendliness
+    L.control.zoom({ position: "bottomright" }).addTo(map);
+
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "&copy; OpenStreetMap",
     }).addTo(map);
 
     if (request.origin_lat && request.origin_lng) {
       const originIcon = L.divIcon({
-        html: `<div style="background:hsl(var(--primary));width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)"></div>`,
-        iconSize: [14, 14],
-        iconAnchor: [7, 7],
+        html: `<div style="position:relative">
+          <div style="width:18px;height:18px;border-radius:50%;background:hsl(var(--primary));border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)"></div>
+          <div style="position:absolute;top:-2px;left:-2px;width:22px;height:22px;border-radius:50%;border:2px solid hsl(var(--primary));opacity:0.4;animation:pulse-ring 2s ease-out infinite"></div>
+        </div>`,
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
         className: "",
       });
       originMarkerRef.current = L.marker([request.origin_lat, request.origin_lng], { icon: originIcon })
         .addTo(map)
-        .bindPopup("Localização do cliente");
+        .bindPopup(`<b>📍 Localização do veículo</b><br/>${request.origin_address || ""}`);
     }
 
     mapInstanceRef.current = map;
@@ -205,10 +305,12 @@ export default function BeneficiaryTracking() {
     return () => {
       map.remove();
       mapInstanceRef.current = null;
+      providerMarkerRef.current = null;
+      routePolylineRef.current = null;
     };
   }, [request]);
 
-  // Update provider marker with car/motorcycle icon
+  // Update provider marker with smooth animation
   useEffect(() => {
     if (!mapInstanceRef.current || !providerPos) return;
 
@@ -216,27 +318,70 @@ export default function BeneficiaryTracking() {
     const vehicleEmoji = isMoto ? "🏍️" : "🚗";
 
     const providerIcon = L.divIcon({
-      html: `<div style="font-size:24px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4))">${vehicleEmoji}</div>`,
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
+      html: `<div style="font-size:28px;line-height:1;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.4));transition:transform 0.3s ease">${vehicleEmoji}</div>`,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
       className: "",
     });
 
+    const newLatLng = L.latLng(providerPos.lat, providerPos.lng);
+
     if (providerMarkerRef.current) {
-      providerMarkerRef.current.setLatLng([providerPos.lat, providerPos.lng]);
+      // Smooth animation to new position
+      animateMarker(providerMarkerRef.current, newLatLng);
     } else {
-      providerMarkerRef.current = L.marker([providerPos.lat, providerPos.lng], { icon: providerIcon })
+      providerMarkerRef.current = L.marker([providerPos.lat, providerPos.lng], { 
+        icon: providerIcon,
+        zIndexOffset: 1000,
+      })
         .addTo(mapInstanceRef.current)
-        .bindPopup(providerName || "Prestador");
+        .bindPopup(`<b>${providerName || "Prestador"}</b>`);
     }
 
-    // Fit bounds
-    const bounds = L.latLngBounds([
-      [providerPos.lat, providerPos.lng],
-      [request?.origin_lat || providerPos.lat, request?.origin_lng || providerPos.lng],
-    ]);
-    mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50] });
+    // Fit bounds to show both points
+    if (request?.origin_lat && request?.origin_lng) {
+      const bounds = L.latLngBounds([
+        [providerPos.lat, providerPos.lng],
+        [request.origin_lat, request.origin_lng],
+      ]);
+      mapInstanceRef.current.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
+    }
   }, [providerPos, providerName, request?.origin_lat, request?.origin_lng, request?.service_type, request?.vehicle_category]);
+
+  // Update route polyline (debounced)
+  useEffect(() => {
+    if (!providerPos || !request?.origin_lat || !request?.origin_lng || !mapInstanceRef.current) return;
+    
+    if (routeDebounceRef.current) clearTimeout(routeDebounceRef.current);
+    routeDebounceRef.current = setTimeout(async () => {
+      const coords = await fetchRouteCoords(
+        providerPos.lat, providerPos.lng,
+        request.origin_lat, request.origin_lng
+      );
+      
+      if (!coords || !mapInstanceRef.current) return;
+
+      // Convert [lng, lat] to [lat, lng] for Leaflet
+      const latLngs: [number, number][] = coords.map(([lng, lat]) => [lat, lng]);
+
+      if (routePolylineRef.current) {
+        routePolylineRef.current.setLatLngs(latLngs);
+      } else {
+        routePolylineRef.current = L.polyline(latLngs, {
+          color: "hsl(220, 70%, 50%)",
+          weight: 4,
+          opacity: 0.7,
+          dashArray: "8, 6",
+          lineCap: "round",
+          lineJoin: "round",
+        }).addTo(mapInstanceRef.current);
+      }
+    }, 3000); // Update route every 3 seconds max
+
+    return () => {
+      if (routeDebounceRef.current) clearTimeout(routeDebounceRef.current);
+    };
+  }, [providerPos, request?.origin_lat, request?.origin_lng]);
 
   // Proximity check
   useEffect(() => {
@@ -251,15 +396,37 @@ export default function BeneficiaryTracking() {
     }
   }, [providerPos, request?.origin_lat, request?.origin_lng]);
 
-  // ETA estimation via simple speed calculation (debounced)
+  // ETA estimation via OSRM duration or simple speed
   useEffect(() => {
     if (!providerPos || !request?.origin_lat || !request?.origin_lng) return;
     if (etaDebounceRef.current) clearTimeout(etaDebounceRef.current);
-    etaDebounceRef.current = setTimeout(() => {
+    etaDebounceRef.current = setTimeout(async () => {
+      // Try OSRM for accurate ETA
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${providerPos.lng},${providerPos.lat};${request.origin_lng},${request.origin_lat}?overview=false`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.routes?.[0]?.duration) {
+          const mins = Math.round(data.routes[0].duration / 60);
+          setEtaMinutes(mins);
+          if (mins <= 1) {
+            setEtaText("Chegando...");
+          } else if (mins < 60) {
+            setEtaText(`~${mins} min`);
+          } else {
+            const h = Math.floor(mins / 60);
+            const m = mins % 60;
+            setEtaText(`~${h}h${m > 0 ? ` ${m}min` : ""}`);
+          }
+          return;
+        }
+      } catch {}
+
+      // Fallback: simple speed estimation
       const dist = haversineDistance(providerPos.lat, providerPos.lng, request.origin_lat, request.origin_lng);
-      // Estimate ETA assuming avg 40km/h in urban areas
       const avgSpeedKmH = 40;
       const etaMin = Math.round((dist / avgSpeedKmH) * 60);
+      setEtaMinutes(etaMin);
       if (etaMin <= 1) {
         setEtaText("Chegando...");
       } else if (etaMin < 60) {
@@ -269,13 +436,14 @@ export default function BeneficiaryTracking() {
         const m = etaMin % 60;
         setEtaText(`~${h}h${m > 0 ? ` ${m}min` : ""}`);
       }
-    }, 1000);
+    }, 2000);
   }, [providerPos, request?.origin_lat, request?.origin_lng]);
 
   // Set arrived state from dispatch data
   useEffect(() => {
     if (dispatch?.beneficiary_arrived_at) setBeneficiaryArrived(true);
-  }, [dispatch?.beneficiary_arrived_at]);
+    if (dispatch?.provider_arrived_at) setProviderArrived(true);
+  }, [dispatch?.beneficiary_arrived_at, dispatch?.provider_arrived_at]);
 
   const handleBeneficiaryArrival = useCallback(async () => {
     if (!dispatch) return;
@@ -288,8 +456,9 @@ export default function BeneficiaryTracking() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Carregando acompanhamento...</p>
       </div>
     );
   }
@@ -303,32 +472,68 @@ export default function BeneficiaryTracking() {
     );
   }
 
+  const isCompleted = dispatch?.status === "completed";
+
   return (
     <div className="min-h-screen bg-background">
       <style>{`
-        @keyframes pulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.4); }
-          50% { box-shadow: 0 0 0 12px rgba(59,130,246,0); }
+        @keyframes pulse-ring {
+          0% { transform: scale(1); opacity: 0.4; }
+          100% { transform: scale(2.5); opacity: 0; }
+        }
+        @keyframes slide-in {
+          from { transform: translateY(-20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        .arrival-alert {
+          animation: slide-in 0.5s ease-out;
         }
       `}</style>
 
-      <div className="bg-primary text-primary-foreground p-4">
+      {/* Header */}
+      <div className="bg-primary text-primary-foreground p-4 shadow-md">
         <div className="max-w-lg mx-auto flex items-center gap-3">
           <img src={logoTrilho} alt="Logo" className="h-8 w-8 rounded" />
-          <div>
+          <div className="flex-1">
             <h1 className="text-lg font-bold">Acompanhamento</h1>
             <p className="text-xs opacity-80">{request?.protocol}</p>
           </div>
+          {providerPos && !providerArrived && (
+            <div className="flex items-center gap-1.5 bg-primary-foreground/20 rounded-full px-3 py-1">
+              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-xs font-medium">Ao vivo</span>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="max-w-lg mx-auto p-4 space-y-4">
-        {/* Service info */}
+        {/* Provider arrived alert */}
+        {providerArrived && !isCompleted && (
+          <Card className="border-green-500 border-2 bg-green-50 dark:bg-green-950/30 arrival-alert">
+            <CardContent className="pt-4 flex items-center gap-3">
+              <div className="bg-green-500 text-white rounded-full p-2">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="font-bold text-green-700 dark:text-green-400 text-sm">
+                  O prestador chegou ao local!
+                </p>
+                <p className="text-xs text-green-600 dark:text-green-500">
+                  {providerName} está no ponto de atendimento
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Service info + ETA */}
         <Card>
-          <CardContent className="pt-4 space-y-2">
+          <CardContent className="pt-4 space-y-3">
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="secondary">{serviceTypeMap[request?.service_type] || request?.service_type}</Badge>
               {request?.vehicle_plate && <Badge variant="outline">{request.vehicle_plate}</Badge>}
+              {isCompleted && <Badge className="bg-green-500 text-white">Concluído</Badge>}
             </div>
             {providerName && (
               <p className="text-sm">
@@ -336,20 +541,27 @@ export default function BeneficiaryTracking() {
                 <span className="font-medium">{providerName}</span>
               </p>
             )}
-            {etaText && distanceKm !== null && distanceKm > 0.05 && (
-              <p className="text-sm">
-                <span className="text-muted-foreground">Tempo estimado:</span>{" "}
-                <span className="font-semibold text-primary">{etaText}</span>
-              </p>
+            {etaText && distanceKm !== null && distanceKm > 0.05 && !providerArrived && (
+              <div className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
+                <div className="bg-primary/10 rounded-full p-2">
+                  <Navigation className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-primary">{etaText}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {distanceKm < 1 ? `${(distanceKm * 1000).toFixed(0)}m restantes` : `${distanceKm.toFixed(1)}km restantes`}
+                  </p>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
 
         {/* Nearby alert */}
-        {isNearby && (
-          <Card className="border-primary bg-primary/10 animate-pulse">
+        {isNearby && !providerArrived && (
+          <Card className="border-primary bg-primary/10">
             <CardContent className="pt-4 flex items-center gap-3">
-              <Bell className="h-6 w-6 text-primary" />
+              <Bell className="h-6 w-6 text-primary animate-bounce" />
               <div>
                 <p className="font-bold text-primary text-sm">Prestador muito próximo!</p>
                 <p className="text-xs text-muted-foreground">
@@ -373,15 +585,15 @@ export default function BeneficiaryTracking() {
         )}
 
         {/* Map */}
-        <Card>
-          <CardContent className="pt-4 space-y-3">
-            <div className="flex items-center justify-between">
+        <Card className="overflow-hidden">
+          <CardContent className="p-0">
+            <div className="px-4 pt-4 pb-2 flex items-center justify-between">
               <h3 className="font-semibold text-sm flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                Localização do prestador
+                <MapPin className="h-4 w-4 text-primary" />
+                {providerArrived ? "Prestador no local" : "Localização em tempo real"}
               </h3>
               <div className="flex items-center gap-2">
-                {distanceKm !== null && (
+                {distanceKm !== null && !providerArrived && (
                   <Badge variant={isNearby ? "default" : "outline"} className="text-xs">
                     {distanceKm < 1 ? `${(distanceKm * 1000).toFixed(0)}m` : `${distanceKm.toFixed(1)}km`}
                   </Badge>
@@ -396,36 +608,48 @@ export default function BeneficiaryTracking() {
             </div>
 
             {!providerPos && !dispatch && (
-              <p className="text-sm text-muted-foreground">Nenhum prestador acionado ainda.</p>
+              <p className="text-sm text-muted-foreground px-4 pb-3">Nenhum prestador acionado ainda.</p>
             )}
 
             {!providerPos && dispatch && !waitingLocation && (
-              <p className="text-sm text-muted-foreground">Aguardando localização do prestador...</p>
+              <div className="flex items-center gap-2 px-4 pb-3">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Aguardando localização do prestador...</p>
+              </div>
             )}
 
             <div
               ref={mapRef}
-              className="w-full rounded-lg overflow-hidden"
-              style={{ height: 350 }}
+              className="w-full"
+              style={{ height: 380 }}
             />
 
-            {providerPos && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="text-lg">
-                  {request?.service_type === "tow_motorcycle" || request?.vehicle_category === "motorcycle" ? "🏍️" : "🚗"}
+            {/* Map legend */}
+            <div className="px-4 py-3 flex items-center gap-4 text-xs text-muted-foreground border-t">
+              {providerPos && (
+                <span className="flex items-center gap-1.5">
+                  <span className="text-lg">
+                    {request?.service_type === "tow_motorcycle" || request?.vehicle_category === "motorcycle" ? "🏍️" : "🚗"}
+                  </span>
+                  Prestador
                 </span>
-                <span>Prestador em movimento</span>
-                <span className="ml-auto flex items-center gap-1">
-                  <div className="w-3 h-3 rounded-full bg-primary inline-block" />
-                  Sua localização
+              )}
+              <span className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-primary" />
+                Seu veículo
+              </span>
+              {providerPos && (
+                <span className="flex items-center gap-1.5">
+                  <div className="w-4 h-0.5 bg-blue-500" style={{ borderTop: "2px dashed" }} />
+                  Rota
                 </span>
-              </div>
-            )}
+              )}
+            </div>
           </CardContent>
         </Card>
 
         {/* Beneficiary arrival confirmation */}
-        {dispatch && !beneficiaryArrived && (
+        {dispatch && !beneficiaryArrived && !isCompleted && (
           <Button onClick={handleBeneficiaryArrival} className="w-full gap-2" size="lg">
             <CheckCircle2 className="h-4 w-4" />
             Confirmar que o prestador chegou
