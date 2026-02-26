@@ -220,7 +220,6 @@ export default function Dashboard() {
     { label: "Acionamentos", value: String(kpiData.totalDispatches), icon: Send, color: "text-info" },
     { label: "Abertos", value: String(kpiData.openRequests), icon: AlertCircle, color: "text-accent" },
     { label: "Em andamento", value: String(kpiData.inProgressRequests), icon: Clock, color: "text-primary" },
-    { label: "Faturado", value: formatCurrency(kpiData.totalRevenue), icon: DollarSign, color: "text-success" },
     { label: "Custo Prestadores", value: formatCurrency(kpiData.totalCost), icon: Banknote, color: "text-destructive" },
   ];
 
@@ -287,7 +286,7 @@ export default function Dashboard() {
       </div>
 
       {/* KPIs — Row 1: Operacionais */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {kpiCards.map((kpi) => (
           <Card key={kpi.label} className="kpi-card hover:shadow-md">
             <CardContent className="p-4">
@@ -405,48 +404,92 @@ export default function Dashboard() {
           .filter((r) => r.origin_lat && r.origin_lng)
           .map((r) => [Number(r.origin_lat), Number(r.origin_lng), 1]);
 
-        // Aggregate origins
+        // Extract city from address string
+        const extractCity = (address: string): string => {
+          if (!address) return "Desconhecida";
+          // Try pattern "City - ST" or "City-ST" at the end
+          const parts = address.split(",").map((p) => p.trim());
+          // Look for part with " - XX" pattern (city - state)
+          for (let i = parts.length - 1; i >= 0; i--) {
+            const match = parts[i].match(/^([A-Za-zÀ-ÿ\s.]+)\s*[-–]\s*[A-Z]{2}/);
+            if (match) return match[1].trim();
+          }
+          // Fallback: second to last part (often city in Brazilian addresses)
+          if (parts.length >= 3) return parts[parts.length - 2].trim();
+          if (parts.length >= 2) return parts[parts.length - 1].trim();
+          return address.trim();
+        };
+
+        // Aggregate origins and destinations by CITY
         const originCounts: Record<string, number> = {};
         const destCounts: Record<string, number> = {};
         requests.forEach((r) => {
-          if (r.origin_address) originCounts[r.origin_address] = (originCounts[r.origin_address] || 0) + 1;
-          if (r.destination_address) destCounts[r.destination_address] = (destCounts[r.destination_address] || 0) + 1;
+          if (r.origin_address) {
+            const city = extractCity(r.origin_address);
+            originCounts[city] = (originCounts[city] || 0) + 1;
+          }
+          if (r.destination_address) {
+            const city = extractCity(r.destination_address);
+            destCounts[city] = (destCounts[city] || 0) + 1;
+          }
         });
         const topOrigins = Object.entries(originCounts).sort((a, b) => b[1] - a[1]).slice(0, 15);
         const topDests = Object.entries(destCounts).sort((a, b) => b[1] - a[1]).slice(0, 15);
 
+        // Build destination heat points
+        const destHeatPoints: [number, number, number][] = requests
+          .filter((r) => r.destination_lat && r.destination_lng)
+          .map((r) => [Number(r.destination_lat), Number(r.destination_lng), 1]);
+
         return (
           <>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Mapa de Calor — Origens dos Atendimentos</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {heatPoints.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-12">Nenhuma coordenada registrada</p>
-                ) : (
-                  <Suspense fallback={<div className="h-[450px] flex items-center justify-center text-muted-foreground">Carregando mapa…</div>}>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Mapa de Calor — Origens</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {heatPoints.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-12">Nenhuma coordenada registrada</p>
+                  ) : (
+                    <Suspense fallback={<div className="h-[400px] flex items-center justify-center text-muted-foreground">Carregando mapa…</div>}>
                       <ServiceHeatmap points={heatPoints} />
                     </Suspense>
-                )}
-              </CardContent>
-            </Card>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Mapa de Calor — Destinos</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {destHeatPoints.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-12">Nenhuma coordenada registrada</p>
+                  ) : (
+                    <Suspense fallback={<div className="h-[400px] flex items-center justify-center text-muted-foreground">Carregando mapa…</div>}>
+                      <ServiceHeatmap points={destHeatPoints} />
+                    </Suspense>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Top Origens</CardTitle>
+                  <CardTitle className="text-base">Top Origens (Cidade)</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   {topOrigins.length === 0 ? (
                     <p className="text-muted-foreground text-center py-8">Sem dados</p>
                   ) : (
                     <div className="divide-y divide-border">
-                      {topOrigins.map(([address, count], i) => (
+                      {topOrigins.map(([city, count], i) => (
                         <div key={i} className="flex items-center justify-between px-6 py-3">
                           <div className="flex items-center gap-3 min-w-0">
                             <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{i + 1}</span>
-                            <span className="text-sm truncate">{address}</span>
+                            <span className="text-sm truncate">{city}</span>
                           </div>
                           <span className="text-sm font-semibold text-primary shrink-0 ml-2">{count}</span>
                         </div>
@@ -458,18 +501,18 @@ export default function Dashboard() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Top Destinos</CardTitle>
+                  <CardTitle className="text-base">Top Destinos (Cidade)</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   {topDests.length === 0 ? (
                     <p className="text-muted-foreground text-center py-8">Sem dados</p>
                   ) : (
                     <div className="divide-y divide-border">
-                      {topDests.map(([address, count], i) => (
+                      {topDests.map(([city, count], i) => (
                         <div key={i} className="flex items-center justify-between px-6 py-3">
                           <div className="flex items-center gap-3 min-w-0">
                             <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{i + 1}</span>
-                            <span className="text-sm truncate">{address}</span>
+                            <span className="text-sm truncate">{city}</span>
                           </div>
                           <span className="text-sm font-semibold text-primary shrink-0 ml-2">{count}</span>
                         </div>
