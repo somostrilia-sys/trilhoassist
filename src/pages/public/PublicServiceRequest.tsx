@@ -85,9 +85,11 @@ export default function PublicServiceRequest() {
     service_type: "tow_light",
     event_type: "mechanical_failure",
     origin_address: "",
+    origin_number: "",
     origin_city: "",
     origin_uf: "",
     destination_address: "",
+    destination_number: "",
     destination_city: "",
     destination_uf: "",
     notes: "",
@@ -294,21 +296,24 @@ export default function PublicServiceRequest() {
     if (!form.vehicle_model.trim()) errs.vehicle_model = "Modelo do veículo é obrigatório";
     if (!form.vehicle_year.trim()) errs.vehicle_year = "Ano do veículo é obrigatório";
     if (!form.origin_address.trim()) errs.origin_address = attendanceType === "collision" ? "Local do ocorrido é obrigatório" : "Endereço de origem é obrigatório";
-    
-    // City mandatory
+    if (!form.origin_number.trim()) errs.origin_number = "Número é obrigatório (ou S/N)";
     if (!form.origin_city.trim()) errs.origin_city = "Cidade de origem é obrigatória";
+    if (!originCoords) errs.origin_geo = "Selecione o endereço nas sugestões ou use o GPS para geolocalização";
 
     if (attendanceType === "pane") {
       const onSiteServices = ["locksmith", "tire_change", "battery", "fuel"];
       if (!onSiteServices.includes(form.service_type) && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório";
+      if (!onSiteServices.includes(form.service_type) && !form.destination_number.trim()) errs.destination_number = "Número de destino é obrigatório (ou S/N)";
       if (!onSiteServices.includes(form.service_type) && !form.destination_city.trim()) errs.destination_city = "Cidade de destino é obrigatória";
+      if (!onSiteServices.includes(form.service_type) && !destinationCoords) errs.destination_geo = "Selecione o endereço de destino nas sugestões para geolocalização";
       const checklistError = validateChecklist();
       if (checklistError) errs.checklist = checklistError;
     } else {
       if (needsTow === null) errs.needs_tow = "Informe se precisa de reboque";
       if (needsTow && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório para reboque";
+      if (needsTow && !form.destination_number.trim()) errs.destination_number = "Número de destino é obrigatório (ou S/N)";
       if (needsTow && !form.destination_city.trim()) errs.destination_city = "Cidade de destino é obrigatória";
-      // Validate checklist for collision with tow
+      if (needsTow && !destinationCoords) errs.destination_geo = "Selecione o endereço de destino nas sugestões para geolocalização";
       if (needsTow) {
         const checklistError = validateChecklist();
         if (checklistError) errs.checklist = checklistError;
@@ -785,22 +790,34 @@ export default function PublicServiceRequest() {
                   </Button>
                 </div>
                 {originCoords && (
-                  <button type="button" className="text-xs text-primary underline" onClick={() => { setOriginCoords(null); update("origin_address", ""); update("origin_city", ""); update("origin_uf", ""); }}>
+                  <button type="button" className="text-xs text-primary underline" onClick={() => { setOriginCoords(null); update("origin_address", ""); update("origin_number", ""); update("origin_city", ""); update("origin_uf", ""); }}>
                     Limpar e digitar manualmente
                   </button>
                 )}
+                {errors.origin_geo && <p className="text-xs text-destructive mt-1">{errors.origin_geo}</p>}
               </div>
 
-              {/* City field - mandatory */}
-              <div className="space-y-1.5">
-                <Label className="text-sm">Cidade *</Label>
-                <Input
-                  value={form.origin_city}
-                  onChange={(e) => { update("origin_city", e.target.value); setErrors((p) => ({ ...p, origin_city: "" })); }}
-                  placeholder="Ex: São Paulo"
-                  className={errors.origin_city ? "border-destructive" : ""}
-                />
-                {errors.origin_city && <p className="text-xs text-destructive">{errors.origin_city}</p>}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Número *</Label>
+                  <Input
+                    value={form.origin_number}
+                    onChange={(e) => { update("origin_number", e.target.value); setErrors((p) => ({ ...p, origin_number: "" })); }}
+                    placeholder="Nº ou S/N"
+                    className={errors.origin_number ? "border-destructive" : ""}
+                  />
+                  {errors.origin_number && <p className="text-xs text-destructive">{errors.origin_number}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Cidade *</Label>
+                  <Input
+                    value={form.origin_city}
+                    onChange={(e) => { update("origin_city", e.target.value); setErrors((p) => ({ ...p, origin_city: "" })); }}
+                    placeholder="Ex: São Paulo"
+                    className={errors.origin_city ? "border-destructive" : ""}
+                  />
+                  {errors.origin_city && <p className="text-xs text-destructive">{errors.origin_city}</p>}
+                </div>
               </div>
 
               {/* Destination */}
@@ -815,23 +832,36 @@ export default function PublicServiceRequest() {
                         setDestinationCoords({ lat: place.lat, lng: place.lng });
                         if (place.city) update("destination_city", place.city);
                         if (place.state) update("destination_uf", place.state);
-                        setErrors((p) => ({ ...p, destination_city: "" }));
+                        setErrors((p) => ({ ...p, destination_city: "", destination_geo: "" }));
                       }}
                       placeholder="Digite o endereço de destino"
                       error={errors.destination_address}
                       coords={destinationCoords}
                       tenantId={tenantId}
                     />
+                    {errors.destination_geo && <p className="text-xs text-destructive mt-1">{errors.destination_geo}</p>}
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-sm">Cidade de Destino *</Label>
-                    <Input
-                      value={form.destination_city}
-                      onChange={(e) => { update("destination_city", e.target.value); setErrors((p) => ({ ...p, destination_city: "" })); }}
-                      placeholder="Ex: Campinas"
-                      className={errors.destination_city ? "border-destructive" : ""}
-                    />
-                    {errors.destination_city && <p className="text-xs text-destructive">{errors.destination_city}</p>}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">Número Destino *</Label>
+                      <Input
+                        value={form.destination_number}
+                        onChange={(e) => { update("destination_number", e.target.value); setErrors((p) => ({ ...p, destination_number: "" })); }}
+                        placeholder="Nº ou S/N"
+                        className={errors.destination_number ? "border-destructive" : ""}
+                      />
+                      {errors.destination_number && <p className="text-xs text-destructive">{errors.destination_number}</p>}
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">Cidade de Destino *</Label>
+                      <Input
+                        value={form.destination_city}
+                        onChange={(e) => { update("destination_city", e.target.value); setErrors((p) => ({ ...p, destination_city: "" })); }}
+                        placeholder="Ex: Campinas"
+                        className={errors.destination_city ? "border-destructive" : ""}
+                      />
+                      {errors.destination_city && <p className="text-xs text-destructive">{errors.destination_city}</p>}
+                    </div>
                   </div>
                 </>
               )}
