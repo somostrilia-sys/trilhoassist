@@ -270,7 +270,7 @@ export default function NewServiceRequest() {
 
     const requiredByCategory: Record<VehicleCategory, { fields: string[]; data: Record<string, string> }> = {
       car: {
-        fields: ["wheel_locked", "steering_locked", "armored", "vehicle_lowered", "carrying_cargo", "easy_access", "vehicle_location", "key_available", "documents_available", "has_passengers", "had_collision", "risk_area", "vehicle_starts"],
+        fields: ["wheel_locked", "steering_locked", "armored", "vehicle_lowered", "carrying_cargo", "easy_access", "key_available", "documents_available", "has_passengers", "had_collision", "risk_area", "vehicle_starts"],
         data: carVerification as any,
       },
       motorcycle: {
