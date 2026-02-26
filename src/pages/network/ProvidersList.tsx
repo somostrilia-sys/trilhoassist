@@ -62,7 +62,7 @@ export default function ProvidersList() {
     queryKey: ["user-tenant-slug", tenantId],
     queryFn: async () => {
       const { data } = await supabase
-        .from("tenants")
+        .from("tenants_safe")
         .select("slug")
         .eq("id", tenantId!)
         .single();

@@ -92,7 +92,7 @@ export default function DispatchPanel() {
 
     if (ut?.tenant_id) {
       const { data: tenant } = await supabase
-        .from("tenants")
+        .from("tenants_safe")
         .select("alert_dispatch_minutes, alert_late_minutes")
         .eq("id", ut.tenant_id)
         .single();
