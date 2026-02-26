@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -66,6 +66,13 @@ function SpaRedirectHandler() {
   return null;
 }
 
+// Prevents "/" from redirecting to /dashboard when a spa-redirect is pending
+const HomeRedirect = () => {
+  const redirectPath = sessionStorage.getItem('spa-redirect');
+  if (redirectPath) return null; // SpaRedirectHandler will handle navigation
+  return <Navigate to="/dashboard" replace />;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -83,7 +90,7 @@ const App = () => (
             <Route path="/tracking/:token" element={<BeneficiaryTracking />} />
             <Route path="/nps/:token" element={<NpsSurvey />} />
             <Route path="/solicitar" element={<PublicServiceRequest />} />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/" element={<HomeRedirect />} />
             
             {/* Provider Portal */}
             <Route element={<ProviderLayout />}>
