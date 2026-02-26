@@ -135,6 +135,12 @@ export default function NewServiceRequest() {
   const [exceptionJustification, setExceptionJustification] = useState("");
   const [exceptionSaving, setExceptionSaving] = useState(false);
 
+  // Avulso (99) authorization
+  const [avulsoDialogOpen, setAvulsoDialogOpen] = useState(false);
+  const [avulsoAuthorizer, setAvulsoAuthorizer] = useState("");
+  const [avulsoJustification, setAvulsoJustification] = useState("");
+  const [avulsoAuthorized, setAvulsoAuthorized] = useState(false);
+
   // Beneficiary lookup
   const [beneficiaryFound, setBeneficiaryFound] = useState<{
     id: string; name: string; phone: string | null; cpf: string | null;
@@ -161,7 +167,7 @@ export default function NewServiceRequest() {
   // ═══ Plate search: beneficiary then FIPE ═══
   const searchBeneficiaryByPlate = useCallback(async (plate: string) => {
     const cleanPlate = plate.replace(/[^A-Z0-9]/g, "");
-    if (cleanPlate.length < 7) { setBeneficiaryFound(null); return; }
+    if (cleanPlate.length < 7) { setBeneficiaryFound(null); setAvulsoAuthorized(false); setAvulsoAuthorizer(""); setAvulsoJustification(""); return; }
     setPlateSearching(true);
     const { data } = await supabase
       .from("beneficiaries")
@@ -186,9 +192,19 @@ export default function NewServiceRequest() {
         vehicle_model: f.vehicle_model || data.vehicle_model || "",
         vehicle_year: f.vehicle_year || (data.vehicle_year ? String(data.vehicle_year) : ""),
       }));
+      setAvulsoAuthorized(false);
+      setAvulsoAuthorizer("");
+      setAvulsoJustification("");
+      // Also try FIPE to fill any missing data
+      if (!data.vehicle_model || !data.vehicle_year) {
+        searchFipe(cleanPlate);
+      }
     } else {
       setBeneficiaryFound(null);
-      // Try FIPE lookup
+      setAvulsoAuthorized(false);
+      setAvulsoAuthorizer("");
+      setAvulsoJustification("");
+      // Always try FIPE lookup for non-registered plates
       searchFipe(cleanPlate);
     }
   }, []);
@@ -196,16 +212,21 @@ export default function NewServiceRequest() {
   const searchFipe = async (plate: string) => {
     setFipeSearching(true);
     try {
-      const res = await fetch(`https://brasilapi.com.br/api/fipe/preco/v1/${plate}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const vehicle = data[0];
-          setForm((f) => ({
-            ...f,
-            vehicle_model: f.vehicle_model || vehicle.modelo || "",
-            vehicle_year: f.vehicle_year || (vehicle.anoModelo ? String(vehicle.anoModelo) : ""),
-          }));
+      // Call our edge function for plate lookup
+      const { data, error } = await supabase.functions.invoke("plate-lookup", {
+        body: { plate },
+      });
+      if (!error && data && data.found) {
+        setForm((f) => ({
+          ...f,
+          vehicle_model: f.vehicle_model || (data.brand && data.model ? `${data.brand} ${data.model}`.trim() : data.model || ""),
+          vehicle_year: f.vehicle_year || (data.year ? String(data.year) : ""),
+        }));
+        // Auto-detect vehicle category from API
+        if (data.category === "motorcycle") {
+          setVehicleCategory("motorcycle");
+        } else if (data.category === "truck") {
+          setVehicleCategory("truck");
         }
       }
     } catch {
@@ -374,6 +395,11 @@ export default function NewServiceRequest() {
       }
     }
 
+    // Avulso (99) validation: require authorization when no beneficiary found
+    if (!beneficiaryFound && form.vehicle_plate.replace(/[^A-Z0-9]/g, "").length >= 7 && !avulsoAuthorized) {
+      errs.avulso = "Atendimento avulso requer autorização. Preencha a permissão e justificativa.";
+    }
+
     return errs;
   };
 
@@ -407,7 +433,9 @@ export default function NewServiceRequest() {
       destination_address: form.destination_address || null,
       destination_lat: geoCoords.destination?.lat || null,
       destination_lng: geoCoords.destination?.lng || null,
-      notes: form.notes || null,
+      notes: avulsoAuthorized
+        ? `[AVULSO 99] Autorizado por: ${avulsoAuthorizer}. Justificativa: ${avulsoJustification}.${form.notes ? `\n${form.notes}` : ""}`
+        : (form.notes || null),
       provider_cost: 0,
       estimated_km: form.estimated_km ? parseFloat(String(form.estimated_km)) : null,
       charged_amount: 0,
@@ -598,13 +626,51 @@ export default function NewServiceRequest() {
                 </div>
                 {errors.vehicle_plate && <p className="text-xs text-destructive">{errors.vehicle_plate}</p>}
 
-                {!plateSearching && !beneficiaryFound && form.vehicle_plate.length >= 7 && (
-                  <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-sm">
-                    <div className="flex items-center gap-2 font-medium text-amber-800">
+                {!plateSearching && !fipeSearching && !beneficiaryFound && form.vehicle_plate.length >= 7 && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm space-y-3">
+                    <div className="flex items-center gap-2 font-medium text-amber-800 dark:text-amber-400">
                       <AlertTriangle className="h-4 w-4" />
-                      Caso Avulso (99)
-                      <Badge variant="outline" className="text-xs border-amber-300 text-amber-700">Sem vínculo</Badge>
+                      Associado não encontrado na base
+                      <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 dark:text-amber-400">Avulso (99)</Badge>
                     </div>
+                    <p className="text-xs text-amber-700 dark:text-amber-500">
+                      Este é um atendimento avulso. É necessário informar a autorização para prosseguir.
+                    </p>
+                    {!avulsoAuthorized ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-400"
+                        onClick={() => setAvulsoDialogOpen(true)}
+                      >
+                        <ShieldAlert className="h-4 w-4 mr-2" />
+                        Informar Autorização
+                      </Button>
+                    ) : (
+                      <div className="rounded-md border border-green-200 bg-green-50 dark:bg-green-950/20 p-2 text-sm space-y-1">
+                        <div className="flex items-center gap-2 font-medium text-green-700 dark:text-green-400">
+                          <CheckCircle2 className="h-4 w-4" />
+                          Autorização concedida
+                        </div>
+                        <p className="text-xs text-green-600 dark:text-green-500">
+                          Autorizado por: <strong>{avulsoAuthorizer}</strong>
+                        </p>
+                        <p className="text-xs text-green-600 dark:text-green-500">
+                          Justificativa: {avulsoJustification}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-muted-foreground p-0 h-auto"
+                          onClick={() => setAvulsoDialogOpen(true)}
+                        >
+                          Editar
+                        </Button>
+                      </div>
+                    )}
+                    {errors.avulso && <p className="text-xs text-destructive">{errors.avulso}</p>}
                   </div>
                 )}
                 {beneficiaryFound && (
@@ -1038,6 +1104,56 @@ export default function NewServiceRequest() {
             <Button variant="outline" onClick={() => setExceptionDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleGrantException} disabled={!exceptionJustification.trim() || exceptionSaving}>
               {exceptionSaving ? "Salvando..." : "Conceder Exceção"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Avulso (99) Authorization Dialog */}
+      <Dialog open={avulsoDialogOpen} onOpenChange={setAvulsoDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-amber-500" />
+              Autorização para Atendimento Avulso (99)
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Associado <strong>não encontrado</strong> na base de dados para a placa <strong>{form.vehicle_plate}</strong>.
+              Para prosseguir com o atendimento avulso, informe quem autorizou e a justificativa.
+            </p>
+            <div className="space-y-2">
+              <Label>Quem autorizou? *</Label>
+              <Input
+                value={avulsoAuthorizer}
+                onChange={(e) => setAvulsoAuthorizer(e.target.value)}
+                placeholder="Nome do supervisor/gestor que autorizou"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Justificativa *</Label>
+              <Textarea
+                value={avulsoJustification}
+                onChange={(e) => setAvulsoJustification(e.target.value)}
+                placeholder="Descreva o motivo do atendimento avulso..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAvulsoDialogOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={() => {
+                if (avulsoAuthorizer.trim() && avulsoJustification.trim()) {
+                  setAvulsoAuthorized(true);
+                  setAvulsoDialogOpen(false);
+                  setErrors((prev) => ({ ...prev, avulso: "" }));
+                }
+              }}
+              disabled={!avulsoAuthorizer.trim() || !avulsoJustification.trim()}
+            >
+              Confirmar Autorização
             </Button>
           </DialogFooter>
         </DialogContent>
