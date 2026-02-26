@@ -45,3 +45,5 @@ verify_jwt = false
 [functions.collision-upload]
 verify_jwt = false
 
+[functions.plate-lookup]
+verify_jwt = false
