@@ -81,17 +81,25 @@ export default function ProviderTracking() {
   }, [token]);
 
   const sendPosition = useCallback(async (pos: GeolocationPosition) => {
-    if (!dispatch) return;
-    await supabase.from("provider_tracking").insert({
+    if (!dispatch || !request) return;
+    const payload = {
       dispatch_id: dispatch.id,
       latitude: pos.coords.latitude,
       longitude: pos.coords.longitude,
       accuracy: pos.coords.accuracy || null,
       heading: pos.coords.heading || null,
       speed: pos.coords.speed || null,
+    };
+    // Persist to DB
+    await supabase.from("provider_tracking").insert(payload);
+    // Broadcast via Realtime channel for instant updates
+    supabase.channel(`provider-location-${request.id}`).send({
+      type: "broadcast",
+      event: "location",
+      payload: { lat: pos.coords.latitude, lng: pos.coords.longitude, ts: Date.now() },
     });
     setLastSent(new Date());
-  }, [dispatch]);
+  }, [dispatch, request]);
 
   const startTracking = useCallback(() => {
     if (!navigator.geolocation) {
@@ -112,12 +120,12 @@ export default function ProviderTracking() {
       { enableHighAccuracy: true, maximumAge: 5000 }
     );
 
-    // Send position every 15 seconds
+    // Send position every 10 seconds
     intervalRef.current = setInterval(() => {
       if (latestPos.current) {
         sendPosition(latestPos.current);
       }
-    }, 15000);
+    }, 10000);
 
     // Send first position immediately
     navigator.geolocation.getCurrentPosition(
