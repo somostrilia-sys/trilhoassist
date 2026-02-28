@@ -75,11 +75,13 @@ const categoryMap: Record<string, string> = {
 
 const verificationLabels: Record<string, string> = {
   wheel_locked: "Alguma roda travada ou veículo não se movimenta?",
+    wheel_locked_count: "Quantas rodas travadas?",
   steering_locked: "Direção travada?",
   armored: "Veículo blindado?",
   vehicle_lowered: "Veículo rebaixado?",
   carrying_cargo: "Transportando carga ou excesso de peso?",
   cargo_description: "Tipo de carga",
+    cargo_photo_url: "Foto da carga",
   easy_access: "Nível de rua e local de fácil acesso?",
   vehicle_location: "Local do veículo",
   vehicle_location_other: "Descrição do local",
@@ -111,11 +113,13 @@ const verificationLabels: Record<string, string> = {
 const verificationFieldsByCategory: Record<string, string[]> = {
   car: [
     "wheel_locked",
+    "wheel_locked_count",
     "steering_locked",
     "armored",
     "vehicle_lowered",
     "carrying_cargo",
     "cargo_description",
+    "cargo_photo_url",
     "easy_access",
     "vehicle_location",
     "vehicle_location_other",
