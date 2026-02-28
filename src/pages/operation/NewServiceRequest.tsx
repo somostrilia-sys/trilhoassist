@@ -12,12 +12,17 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 import {
   User, Car, MapPin, AlertTriangle, CheckCircle2, Loader2,
-  XCircle, Share2, ShieldAlert, Bike, Truck,
+  XCircle, Share2, ShieldAlert, Bike, Truck, CalendarIcon, Clock,
 } from "lucide-react";
 import CarVerification, { defaultCarVerification } from "@/components/service-request/CarVerification";
 import MotorcycleVerification, { defaultMotorcycleVerification } from "@/components/service-request/MotorcycleVerification";
@@ -161,6 +166,11 @@ export default function NewServiceRequest() {
   // Collision state
   const [createdRequestId, setCreatedRequestId] = useState<string | null>(null);
   const [shareToken, setShareToken] = useState<string | null>(null);
+
+  // Scheduling state (Imediato / Agendado)
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState<Date | undefined>(undefined);
+  const [scheduledTime, setScheduledTime] = useState("08:00");
 
   const update = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
@@ -400,6 +410,12 @@ export default function NewServiceRequest() {
       errs.avulso = "Atendimento avulso requer autorização. Preencha a permissão e justificativa.";
     }
 
+    // Scheduling validation
+    if (isScheduled && isTowService && attendanceType === "pane") {
+      if (!scheduledDate) errs.scheduled_date = "Selecione a data do agendamento";
+      if (!scheduledTime) errs.scheduled_time = "Informe o horário do agendamento";
+    }
+
     return errs;
   };
 
@@ -446,7 +462,9 @@ export default function NewServiceRequest() {
       vehicle_category: vehicleCategory,
       verification_answers: (attendanceType === "pane" || (attendanceType === "collision" && needsTow)) ? getVerificationAnswers() as any : {} as any,
       beneficiary_token: beneficiaryToken,
-    }).select("id").single();
+      scheduled_date: isScheduled && scheduledDate ? format(scheduledDate, "yyyy-MM-dd") : null,
+      scheduled_time: isScheduled && scheduledTime ? scheduledTime : null,
+    } as any).select("id").single();
 
     if (!error && inserted) {
       await supabase.from("service_request_events").insert({
@@ -817,6 +835,74 @@ export default function NewServiceRequest() {
           </Card>
         )}
 
+        {/* ═══════════════ AGENDAMENTO (apenas reboque) ═══════════════ */}
+        {attendanceType === "pane" && isTowService && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Clock className="h-5 w-5" /> AGENDAMENTO
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium">Tipo de atendimento</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {isScheduled ? "O atendimento será agendado para a data e horário informados" : "O atendimento será realizado imediatamente"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={cn("text-sm font-medium", !isScheduled && "text-primary")}>Imediato</span>
+                  <Switch checked={isScheduled} onCheckedChange={setIsScheduled} />
+                  <span className={cn("text-sm font-medium", isScheduled && "text-primary")}>Agendado</span>
+                </div>
+              </div>
+
+              {isScheduled && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t">
+                  <div className="space-y-2">
+                    <Label>Data do Agendamento *</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !scheduledDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {scheduledDate ? format(scheduledDate, "dd/MM/yyyy") : "Selecione a data"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={scheduledDate}
+                          onSelect={setScheduledDate}
+                          disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                          initialFocus
+                          className={cn("p-3 pointer-events-auto")}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {errors.scheduled_date && <p className="text-xs text-destructive">{errors.scheduled_date}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Horário *</Label>
+                    <Input
+                      type="time"
+                      value={scheduledTime}
+                      onChange={(e) => setScheduledTime(e.target.value)}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* ═══════════════ COLISÃO: PRECISA DE REBOQUE? ═══════════════ */}
         {attendanceType === "collision" && (
           <Card>
@@ -1066,6 +1152,14 @@ export default function NewServiceRequest() {
                     </>
                   )}
                   <span>Status:</span><span className="font-medium text-foreground">Aguardando acionamento</span>
+                  {isScheduled && isTowService && attendanceType === "pane" && scheduledDate && (
+                    <>
+                      <span>Agendamento:</span>
+                      <span className="font-medium text-foreground">
+                        {format(scheduledDate, "dd/MM/yyyy")} às {scheduledTime}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             </CardContent>

@@ -1201,6 +1201,8 @@ export type Database = {
           requester_name: string
           requester_phone: string
           requester_phone_secondary: string | null
+          scheduled_date: string | null
+          scheduled_time: string | null
           service_type: Database["public"]["Enums"]["service_type"]
           share_token: string | null
           status: Database["public"]["Enums"]["request_status"]
@@ -1243,6 +1245,8 @@ export type Database = {
           requester_name: string
           requester_phone: string
           requester_phone_secondary?: string | null
+          scheduled_date?: string | null
+          scheduled_time?: string | null
           service_type?: Database["public"]["Enums"]["service_type"]
           share_token?: string | null
           status?: Database["public"]["Enums"]["request_status"]
@@ -1285,6 +1289,8 @@ export type Database = {
           requester_name?: string
           requester_phone?: string
           requester_phone_secondary?: string | null
+          scheduled_date?: string | null
+          scheduled_time?: string | null
           service_type?: Database["public"]["Enums"]["service_type"]
           share_token?: string | null
           status?: Database["public"]["Enums"]["request_status"]
