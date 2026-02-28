@@ -724,8 +724,9 @@ export default function ServiceRequestDetail() {
                 const clientName = (request as any).clients?.name || "";
                 const fmtDate = (d: string) => new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
+                const baseTrackingUrl = "https://trilhoassist.com.br";
                 const trackingUrl = request.beneficiary_token
-                  ? `${window.location.origin}/tracking/${request.beneficiary_token}`
+                  ? `${baseTrackingUrl}/tracking/${request.beneficiary_token}`
                   : "";
 
                 const label = `*ATENDIMENTO*
