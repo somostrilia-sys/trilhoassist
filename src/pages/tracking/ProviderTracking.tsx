@@ -46,6 +46,10 @@ export default function ProviderTracking() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const latestPos = useRef<GeolocationPosition | null>(null);
   const autoArrivalRef = useRef(false);
+  const arrivalConfirmCount = useRef(0);
+  const ARRIVAL_RADIUS_METERS = 100;
+  const ARRIVAL_MAX_ACCURACY = 150; // ignore GPS readings with accuracy worse than 150m
+  const ARRIVAL_CONFIRM_THRESHOLD = 3; // require 3 consecutive readings within radius
 
   useEffect(() => {
     if (!token) return;
@@ -252,22 +256,38 @@ export default function ProviderTracking() {
     toast.success("Chegada registrada!");
   }, [dispatch]);
 
-  // Auto-detect arrival at origin (100m radius) — check on each GPS update
+  // Auto-detect arrival at origin — requires multiple consecutive GPS readings within radius with good accuracy
   useEffect(() => {
     if (!request?.origin_lat || !request?.origin_lng || !tracking || arrivedOrigin || autoArrivalRef.current) return;
     if (!latestPos.current) return;
 
     const checkInterval = setInterval(() => {
       if (!latestPos.current || autoArrivalRef.current) return;
+      
+      const accuracy = latestPos.current.coords.accuracy;
+      // Skip reading if GPS accuracy is too poor
+      if (accuracy && accuracy > ARRIVAL_MAX_ACCURACY) {
+        arrivalConfirmCount.current = 0;
+        return;
+      }
+
       const dist = haversineDistance(
         latestPos.current.coords.latitude,
         latestPos.current.coords.longitude,
         request.origin_lat,
         request.origin_lng
       );
-      if (dist <= 100) {
-        autoArrivalRef.current = true;
-        handleMarkArrival();
+      
+      if (dist <= ARRIVAL_RADIUS_METERS) {
+        arrivalConfirmCount.current += 1;
+        // Only mark arrival after multiple consecutive confirmations
+        if (arrivalConfirmCount.current >= ARRIVAL_CONFIRM_THRESHOLD) {
+          autoArrivalRef.current = true;
+          handleMarkArrival();
+        }
+      } else {
+        // Reset counter if provider moves out of radius
+        arrivalConfirmCount.current = 0;
       }
     }, 10000);
 
