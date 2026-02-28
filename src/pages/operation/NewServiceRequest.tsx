@@ -317,7 +317,7 @@ export default function NewServiceRequest() {
   const validateChecklist = (): string | null => {
     // Checklist NOT required for collision without tow or non-tow pane services
     if (attendanceType === "collision" && !needsTow) return null;
-    if (attendanceType === "pane" && ["locksmith", "tire_change", "battery"].includes(form.service_type)) return null;
+    if (attendanceType === "pane" && ["locksmith", "tire_change", "battery", "fuel"].includes(form.service_type)) return null;
 
     const requiredByCategory: Record<VehicleCategory, { fields: string[]; data: Record<string, string> }> = {
       car: {
@@ -385,7 +385,7 @@ export default function NewServiceRequest() {
         errs.service_type = "Tipo de serviço é obrigatório";
       }
 
-      const onSiteServices = ["locksmith", "tire_change", "battery"];
+      const onSiteServices = ["locksmith", "tire_change", "battery", "fuel"];
       if (!onSiteServices.includes(selectedServiceType) && !form.destination_address.trim())
         errs.destination_address = "Endereço de destino é obrigatório";
       if (!onSiteServices.includes(selectedServiceType) && !form.destination_city.trim())
@@ -424,7 +424,13 @@ export default function NewServiceRequest() {
     const validationErrors = validate();
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) {
-      toast({ title: "Preencha os campos obrigatórios", description: "Verifique os campos destacados em vermelho.", variant: "destructive" });
+      const errorMessages = Object.values(validationErrors);
+      toast({ title: "Preencha os campos obrigatórios", description: errorMessages.slice(0, 3).join(" • "), variant: "destructive" });
+      // Scroll to first error
+      setTimeout(() => {
+        const firstErrorEl = document.querySelector(".text-destructive");
+        if (firstErrorEl) firstErrorEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
       return;
     }
     setLoading(true);
@@ -944,7 +950,7 @@ export default function NewServiceRequest() {
         )}
 
         {/* ═══════════════ VERIFICAÇÃO DO VEÍCULO (pane com reboque OU colisão com reboque) ═══════════════ */}
-        {((attendanceType === "pane" && !["locksmith", "tire_change", "battery"].includes(form.service_type)) || (isCollision && needsTow)) && (
+        {((attendanceType === "pane" && !["locksmith", "tire_change", "battery", "fuel"].includes(form.service_type)) || (isCollision && needsTow)) && (
           <>
             <div className={vehicleCategory !== "car" ? "hidden" : ""}>
               <CarVerification data={carVerification} onChange={(field, value) => setCarVerification((prev) => ({ ...prev, [field]: value }))} />
@@ -995,7 +1001,7 @@ export default function NewServiceRequest() {
                 <div className="space-y-2">
                   <Label>
                     Endereço de Destino {
-                      attendanceType === "pane" && ["locksmith", "tire_change", "battery"].includes(form.service_type)
+                      attendanceType === "pane" && ["locksmith", "tire_change", "battery", "fuel"].includes(form.service_type)
                         ? ""
                         : "*"
                     }
