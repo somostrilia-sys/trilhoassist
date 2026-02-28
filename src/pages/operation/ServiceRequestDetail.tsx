@@ -720,6 +720,10 @@ export default function ServiceRequestDetail() {
                 const clientName = (request as any).clients?.name || "";
                 const fmtDate = (d: string) => new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
+                const trackingUrl = request.beneficiary_token
+                  ? `${window.location.origin}/tracking/${request.beneficiary_token}`
+                  : "";
+
                 const label = `*ATENDIMENTO*
 
 *BENEFICIÁRIO*: ${benName.toUpperCase()}
@@ -734,7 +738,8 @@ export default function ServiceRequestDetail() {
 
 *ASSISTÊNCIA*: ${clientName.toUpperCase() || "—"}
 *CENTRAL DE ASSISTÊNCIA*: TRILHO SOLUCOES
-${request.estimated_km ? `*DISTÂNCIA*: APROX ${Math.round(request.estimated_km)}KM` : ""}`.trim();
+${request.estimated_km ? `*DISTÂNCIA*: APROX ${Math.round(request.estimated_km)}KM` : ""}
+${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim();
 
                 setLabelText(label);
                 setLabelDialogOpen(true);
