@@ -219,6 +219,8 @@ export default function ServiceRequestDetail() {
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [labelText, setLabelText] = useState("");
   const [labelSending, setLabelSending] = useState(false);
+  const [cancelProviderDialogOpen, setCancelProviderDialogOpen] = useState(false);
+  const [cancelProviderReason, setCancelProviderReason] = useState("");
 
   const logEvent = useCallback(async (eventType: string, description: string, oldValue?: string, newValue?: string) => {
     if (!id) return;
@@ -550,6 +552,33 @@ export default function ServiceRequestDetail() {
     loadEvents();
   };
 
+  const handleCancelProvider = async () => {
+    if (!id || !dispatchId || !cancelProviderReason.trim()) return;
+    setActionLoading(true);
+    // Cancel the current dispatch
+    const { error: dErr } = await supabase
+      .from("dispatches")
+      .update({ status: "cancelled", notes: cancelProviderReason })
+      .eq("id", dispatchId);
+    if (dErr) {
+      setActionLoading(false);
+      toast.error("Erro ao cancelar prestador", { description: dErr.message });
+      return;
+    }
+    // Revert service request status to awaiting_dispatch
+    await supabase.from("service_requests").update({ status: "awaiting_dispatch" }).eq("id", id);
+    await logEvent("provider_cancelled", `Prestador cancelado: ${provider?.name || "—"}. Motivo: ${cancelProviderReason}`, "dispatched", "awaiting_dispatch");
+    setActionLoading(false);
+    setCancelProviderDialogOpen(false);
+    setCancelProviderReason("");
+    toast.success("Prestador cancelado! Selecione um novo prestador.");
+    await loadData();
+    await loadEvents();
+    // Auto-open dispatch dialog for new provider
+    loadProviders();
+    setDispatchDialogOpen(true);
+  };
+
   const handleReopen = async () => {
     if (!id || !reopenReason.trim()) return;
     setActionLoading(true);
@@ -781,15 +810,30 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
           {/* Dispatch info */}
           {provider && (
             <div className="mt-3 p-3 rounded-md border bg-muted/50">
-              <p className="text-sm font-medium flex items-center gap-2">
-                <Truck className="h-4 w-4" />
-                Prestador acionado: <span className="text-primary">{provider.name}</span>
-              </p>
-              {provider.city && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {provider.city}{provider.state ? ` - ${provider.state}` : ""}
-                </p>
-              )}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium flex items-center gap-2">
+                    <Truck className="h-4 w-4" />
+                    Prestador acionado: <span className="text-primary">{provider.name}</span>
+                  </p>
+                  {provider.city && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {provider.city}{provider.state ? ` - ${provider.state}` : ""}
+                    </p>
+                  )}
+                </div>
+                {request.status !== "completed" && request.status !== "cancelled" && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="gap-1 shrink-0"
+                    onClick={() => setCancelProviderDialogOpen(true)}
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                    Trocar Prestador
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </CardContent>
@@ -1659,6 +1703,41 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
             >
               {labelSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               Enviar no WhatsApp
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Provider Dialog */}
+      <Dialog open={cancelProviderDialogOpen} onOpenChange={setCancelProviderDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Trocar Prestador</DialogTitle>
+            <DialogDescription>
+              O prestador atual ({provider?.name}) será cancelado e você poderá acionar outro. O link do beneficiário será mantido.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label>Motivo da troca *</Label>
+            <Textarea
+              placeholder="Informe o motivo da troca do prestador..."
+              value={cancelProviderReason}
+              onChange={(e) => setCancelProviderReason(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelProviderDialogOpen(false)}>
+              Voltar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={actionLoading || !cancelProviderReason.trim()}
+              onClick={handleCancelProvider}
+              className="gap-2"
+            >
+              {actionLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+              Cancelar e Buscar Outro
             </Button>
           </DialogFooter>
         </DialogContent>
