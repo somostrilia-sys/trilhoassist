@@ -195,6 +195,7 @@ export default function ServiceRequestDetail() {
   const [reopenReason, setReopenReason] = useState("");
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
   const [providers, setProviders] = useState<any[]>([]);
+  const [providerSortMode, setProviderSortMode] = useState<"origin" | "destination">("origin");
   const [selectedProviderId, setSelectedProviderId] = useState("");
   const [quotedAmount, setQuotedAmount] = useState("");
   const [chargedAmount, setChargedAmount] = useState("");
@@ -211,6 +212,7 @@ export default function ServiceRequestDetail() {
   // Google Places external search
   const [externalSearchKeyword, setExternalSearchKeyword] = useState("guincho reboque auto socorro");
   const [externalSearchRadius, setExternalSearchRadius] = useState("30");
+  const [externalSearchMode, setExternalSearchMode] = useState<"origin" | "destination">("origin");
   const [externalResults, setExternalResults] = useState<any[]>([]);
   const [externalLoading, setExternalLoading] = useState(false);
   const [externalError, setExternalError] = useState("");
@@ -362,6 +364,14 @@ export default function ServiceRequestDetail() {
   }, [id, loadData, loadEvents, loadCollisionMedia]);
 
   // Load providers list for dispatch dialog, sorted by proximity to origin
+  const haversine = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }, []);
+
   const loadProviders = useCallback(async () => {
     const { data } = await supabase
       .from("providers")
@@ -370,24 +380,24 @@ export default function ServiceRequestDetail() {
       .order("name");
     let list = data || [];
 
-    // Sort by distance to origin if available
     const oLat = request?.origin_lat;
     const oLng = request?.origin_lng;
-    if (oLat && oLng) {
-      const haversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-        const R = 6371;
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      };
-      list = list.map(p => ({
-        ...p,
-        _distance: p.latitude && p.longitude ? haversine(oLat, oLng, p.latitude, p.longitude) : 99999,
-      })).sort((a, b) => (a as any)._distance - (b as any)._distance);
-    }
+    const dLat = request?.destination_lat;
+    const dLng = request?.destination_lng;
+
+    list = list.map(p => ({
+      ...p,
+      _distanceOrigin: p.latitude && p.longitude && oLat && oLng ? haversine(oLat, oLng, p.latitude, p.longitude) : 99999,
+      _distanceDestination: p.latitude && p.longitude && dLat && dLng ? haversine(dLat, dLng, p.latitude, p.longitude) : 99999,
+    }));
+
     setProviders(list);
-  }, [request?.origin_lat, request?.origin_lng]);
+  }, [request?.origin_lat, request?.origin_lng, request?.destination_lat, request?.destination_lng, haversine]);
+
+  const sortedProviders = useMemo(() => {
+    const distKey = providerSortMode === "destination" ? "_distanceDestination" : "_distanceOrigin";
+    return [...providers].sort((a, b) => (a[distKey] ?? 99999) - (b[distKey] ?? 99999));
+  }, [providers, providerSortMode]);
 
   // --- Actions ---
   const handleStatusChange = async () => {
@@ -1593,6 +1603,26 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
               </TabsList>
 
               <TabsContent value="existing" className="space-y-4 mt-4">
+                {/* Sub-tabs: sort by origin or destination */}
+                <div className="flex gap-1 bg-muted rounded-md p-1">
+                  <button
+                    type="button"
+                    className={cn("flex-1 text-xs font-medium py-1.5 px-2 rounded transition-colors", providerSortMode === "origin" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                    onClick={() => setProviderSortMode("origin")}
+                  >
+                    <MapPin className="h-3 w-3 inline mr-1" />
+                    Próximos da Origem
+                  </button>
+                  <button
+                    type="button"
+                    className={cn("flex-1 text-xs font-medium py-1.5 px-2 rounded transition-colors", providerSortMode === "destination" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground", !request?.destination_lat && "opacity-50 cursor-not-allowed")}
+                    onClick={() => request?.destination_lat && setProviderSortMode("destination")}
+                    disabled={!request?.destination_lat}
+                  >
+                    <MapPinned className="h-3 w-3 inline mr-1" />
+                    Próximos do Destino
+                  </button>
+                </div>
                 <div className="space-y-2">
                   <Label>Prestador *</Label>
                   <Popover open={providerDropdownOpen} onOpenChange={setProviderDropdownOpen}>
@@ -1602,7 +1632,8 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
                           ? (() => {
                               const p = providers.find(p => p.id === selectedProviderId);
                               if (!p) return "Selecione...";
-                              const dist = (p as any)._distance;
+                              const distKey = providerSortMode === "destination" ? "_distanceDestination" : "_distanceOrigin";
+                              const dist = p[distKey];
                               const distLabel = dist != null && dist < 99999 ? ` — ${dist.toFixed(1)} km` : "";
                               return `${p.name}${p.city ? ` (${p.city}/${p.state})` : ""}${distLabel}`;
                             })()
@@ -1616,25 +1647,29 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
                         <CommandList>
                           <CommandEmpty>Nenhum prestador encontrado.</CommandEmpty>
                           <CommandGroup>
-                            {providers.map((p) => (
-                              <CommandItem
-                                key={p.id}
-                                value={`${p.name} ${p.city || ""} ${p.state || ""}`}
-                                onSelect={() => {
-                                  setSelectedProviderId(p.id);
-                                  setProviderDropdownOpen(false);
-                                }}
-                              >
-                                <Check className={cn("mr-2 h-4 w-4", selectedProviderId === p.id ? "opacity-100" : "opacity-0")} />
-                                <div className="flex flex-col">
-                                  <span>{p.name}</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {p.city ? `${p.city}/${p.state}` : "Sem cidade"}
-                                    {(p as any)._distance != null && (p as any)._distance < 99999 && ` — ${(p as any)._distance.toFixed(1)} km`}
-                                  </span>
-                                </div>
-                              </CommandItem>
-                            ))}
+                            {sortedProviders.map((p) => {
+                              const distKey = providerSortMode === "destination" ? "_distanceDestination" : "_distanceOrigin";
+                              const dist = p[distKey];
+                              return (
+                                <CommandItem
+                                  key={p.id}
+                                  value={`${p.name} ${p.city || ""} ${p.state || ""}`}
+                                  onSelect={() => {
+                                    setSelectedProviderId(p.id);
+                                    setProviderDropdownOpen(false);
+                                  }}
+                                >
+                                  <Check className={cn("mr-2 h-4 w-4", selectedProviderId === p.id ? "opacity-100" : "opacity-0")} />
+                                  <div className="flex flex-col">
+                                    <span>{p.name}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {p.city ? `${p.city}/${p.state}` : "Sem cidade"}
+                                      {dist != null && dist < 99999 && ` — ${dist.toFixed(1)} km`}
+                                    </span>
+                                  </div>
+                                </CommandItem>
+                              );
+                            })}
                           </CommandGroup>
                         </CommandList>
                       </Command>
@@ -1672,9 +1707,16 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
                           onChange={(e) => setExternalSearchRadius(e.target.value)}
                         />
                       </div>
+                    </div>
+
+                    {/* Dual search buttons */}
+                    <div className="grid grid-cols-2 gap-2">
                       <Button
                         type="button"
+                        variant={externalSearchMode === "origin" ? "default" : "outline"}
+                        className="gap-1 text-xs"
                         onClick={async () => {
+                          setExternalSearchMode("origin");
                           setExternalLoading(true);
                           setExternalError("");
                           setExternalResults([]);
@@ -1705,8 +1747,51 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
                         }}
                         disabled={externalLoading || !externalSearchKeyword.trim()}
                       >
-                        {externalLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
-                        Buscar
+                        {externalLoading && externalSearchMode === "origin" ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />}
+                        Raio da Origem
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={externalSearchMode === "destination" ? "default" : "outline"}
+                        className="gap-1 text-xs"
+                        onClick={async () => {
+                          if (!request?.destination_lat || !request?.destination_lng) {
+                            toast.error("Endereço de destino não possui coordenadas GPS.");
+                            return;
+                          }
+                          setExternalSearchMode("destination");
+                          setExternalLoading(true);
+                          setExternalError("");
+                          setExternalResults([]);
+                          try {
+                            const { data, error } = await supabase.functions.invoke("google-places", {
+                              body: {
+                                latitude: request.destination_lat,
+                                longitude: request.destination_lng,
+                                radius: Number(externalSearchRadius) * 1000,
+                                keyword: externalSearchKeyword,
+                                tenant_id: request.tenant_id,
+                              },
+                            });
+                            if (error) throw error;
+                            if (!data.success) {
+                              setExternalError(data.error || "Erro ao buscar.");
+                            } else {
+                              setExternalResults(data.results || []);
+                              if ((data.results || []).length === 0) {
+                                setExternalError("Nenhum resultado encontrado nesse raio.");
+                              }
+                            }
+                          } catch (err: any) {
+                            setExternalError(err.message || "Erro na busca externa.");
+                          } finally {
+                            setExternalLoading(false);
+                          }
+                        }}
+                        disabled={externalLoading || !externalSearchKeyword.trim() || !request?.destination_lat}
+                      >
+                        {externalLoading && externalSearchMode === "destination" ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPinned className="h-3 w-3" />}
+                        Raio do Destino
                       </Button>
                     </div>
 
