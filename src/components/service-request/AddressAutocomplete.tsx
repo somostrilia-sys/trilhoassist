@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Loader2, MapPin, MapPinned, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface Prediction {
   place_id: string;
@@ -32,6 +33,8 @@ interface Props {
   coords?: { lat: number; lng: number } | null;
   /** Google Places types filter, e.g. "address" for exact addresses only */
   types?: string;
+  /** If true, require a street_number in address_components */
+  requireStreetNumber?: boolean;
 }
 
 export default function AddressAutocomplete({
@@ -45,6 +48,7 @@ export default function AddressAutocomplete({
   className,
   coords,
   types,
+  requireStreetNumber = false,
 }: Props) {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [loading, setLoading] = useState(false);
@@ -133,9 +137,21 @@ export default function AddressAutocomplete({
       });
       const data = await res.json();
       if (data.success && data.place) {
-        onChange(data.place.formatted_address);
-        // Extract city and state from address_components
         const components = data.place.address_components || [];
+
+        // Validate street number if required
+        if (requireStreetNumber) {
+          const hasStreetNumber = components.some((c: any) => c.types?.includes("street_number"));
+          if (!hasStreetNumber) {
+            toast.error("Endereço sem número", {
+              description: "Selecione um endereço com número. Ex: Rua Example, 123",
+            });
+            setSelectingPlace(false);
+            return;
+          }
+        }
+
+        onChange(data.place.formatted_address);
         const cityComp = components.find((c: any) => c.types?.includes("administrative_area_level_2")) 
           || components.find((c: any) => c.types?.includes("locality"));
         const stateComp = components.find((c: any) => c.types?.includes("administrative_area_level_1"));

@@ -827,6 +827,7 @@ export default function PublicServiceRequest() {
                   disabled={!!originCoords && gpsLoading}
                   tenantId={tenantId}
                   types="address"
+                  requireStreetNumber
                 />
                 {errors.origin_geo && <p className="text-xs text-destructive mt-1">{errors.origin_geo}</p>}
               </div>
@@ -872,6 +873,7 @@ export default function PublicServiceRequest() {
                       error={errors.destination_address}
                       coords={destinationCoords}
                       tenantId={tenantId}
+                      requireStreetNumber
                     />
                     {errors.destination_geo && <p className="text-xs text-destructive mt-1">{errors.destination_geo}</p>}
                   </div>

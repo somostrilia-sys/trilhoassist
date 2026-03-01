@@ -1144,6 +1144,7 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
                     placeholder="Buscar novo endereço de origem..."
                     tenantId={request.tenant_id}
                     types="address"
+                    requireStreetNumber
                   />
                   <Button
                     variant="ghost"
@@ -1203,6 +1204,7 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
                     }}
                     placeholder="Buscar novo destino..."
                     tenantId={request.tenant_id}
+                    requireStreetNumber
                   />
                   <Button
                     variant="ghost"
