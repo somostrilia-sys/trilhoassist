@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Link2, TestTube, Download, RefreshCw, ArrowRight, CheckCircle2, XCircle, Clock, AlertCircle, MapPin, Database, Eye, EyeOff, Save, QrCode } from "lucide-react";
 import { EvolutionApiIntegration } from "@/components/whatsapp/EvolutionApiIntegration";
+import { OperatorWhatsApp } from "@/components/whatsapp/OperatorWhatsApp";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
@@ -699,7 +700,7 @@ export default function IntegrationsPage() {
             Conecte seu WhatsApp escaneando o QR Code abaixo.
           </p>
         </div>
-        <EvolutionApiIntegration tenantId={tenantId} />
+        <OperatorWhatsApp tenantId={tenantId} />
       </div>
     );
   }
