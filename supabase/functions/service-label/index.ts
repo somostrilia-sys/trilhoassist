@@ -159,19 +159,13 @@ function formatDuration(min: number): string {
 
 function buildRouteSection(route: RouteBreakdown | null, kmMargin: number, estimatedKm?: number | null): string {
   if (!route) {
-    // Fallback: show estimated_km from the service request if available
     if (estimatedKm) {
-      return `\n*ROTEIRIZAÇÃO*\n*KM ESTIMADO*: ${estimatedKm.toFixed(1)} km\n*COM MARGEM (+${kmMargin}km)*: ${(estimatedKm + kmMargin).toFixed(1)} km`;
+      return `\n*ROTEIRIZAÇÃO ESTIMADA*: ${(estimatedKm + kmMargin).toFixed(1)} km`;
     }
     return "";
   }
-  const lines = ["\n*ROTEIRIZAÇÃO*"];
-  for (const leg of route.legs) {
-    lines.push(`  • ${leg.label}: ${leg.km.toFixed(1)} km (~${formatDuration(leg.min)})`);
-  }
-  lines.push(`*TOTAL*: ${route.totalKm.toFixed(1)} km (~${formatDuration(route.totalMin)})`);
-  lines.push(`*COM MARGEM (+${kmMargin}km)*: ${(route.totalKm + kmMargin).toFixed(1)} km`);
-  return lines.join("\n");
+  const totalWithMargin = route.totalKm + kmMargin;
+  return `\n*ROTEIRIZAÇÃO ESTIMADA*: ${totalWithMargin.toFixed(1)} km`;
 }
 
 function buildCreationLabel(sr: any, client: any, beneficiary: any, tenant: any, operator: any, route: RouteBreakdown | null, kmMargin: number): string {
