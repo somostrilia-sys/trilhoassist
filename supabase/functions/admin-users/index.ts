@@ -170,7 +170,30 @@ Deno.serve(async (req) => {
       return jsonRes({ success: true });
     }
 
-    // ─── DELETE USER ───
+    // ─── RESET PASSWORD ───
+    if (action === "reset_password") {
+      const { user_id, new_password } = body;
+      if (!user_id || !new_password) return jsonRes({ error: "user_id e new_password são obrigatórios" }, 400);
+      if (new_password.length < 6) return jsonRes({ error: "Senha deve ter no mínimo 6 caracteres" }, 400);
+
+      if (!isSuperAdmin) {
+        const { data: userTenants } = await adminClient
+          .from("user_tenants")
+          .select("tenant_id")
+          .eq("user_id", user_id);
+        const userTenantIds = userTenants?.map((t) => t.tenant_id) || [];
+        if (!userTenantIds.some((tid) => callerTenantIds.includes(tid))) {
+          return jsonRes({ error: "Sem permissão para alterar senha deste usuário" }, 403);
+        }
+      }
+
+      const { error } = await adminClient.auth.admin.updateUserById(user_id, { password: new_password });
+      if (error) throw error;
+
+      return jsonRes({ success: true });
+    }
+
+
     if (action === "delete") {
       const user_id = body.user_id;
       if (!user_id) return jsonRes({ error: "user_id é obrigatório" }, 400);
