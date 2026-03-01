@@ -1058,6 +1058,7 @@ export default function NewServiceRequest() {
                   error={errors.origin_address}
                   tenantId={tenantId}
                   coords={geoCoords.origin}
+                  types="address"
                 />
                 {errors.origin_geo && <p className="text-xs text-destructive mt-1">{errors.origin_geo}</p>}
               </div>

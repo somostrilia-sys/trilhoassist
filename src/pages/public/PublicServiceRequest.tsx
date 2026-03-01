@@ -826,6 +826,7 @@ export default function PublicServiceRequest() {
                   coords={originCoords}
                   disabled={!!originCoords && gpsLoading}
                   tenantId={tenantId}
+                  types="address"
                 />
                 {errors.origin_geo && <p className="text-xs text-destructive mt-1">{errors.origin_geo}</p>}
               </div>

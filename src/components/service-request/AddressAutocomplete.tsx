@@ -30,6 +30,8 @@ interface Props {
   disabled?: boolean;
   className?: string;
   coords?: { lat: number; lng: number } | null;
+  /** Google Places types filter, e.g. "address" for exact addresses only */
+  types?: string;
 }
 
 export default function AddressAutocomplete({
@@ -42,6 +44,7 @@ export default function AddressAutocomplete({
   disabled,
   className,
   coords,
+  types,
 }: Props) {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [loading, setLoading] = useState(false);
@@ -83,6 +86,7 @@ export default function AddressAutocomplete({
           input,
           tenant_id: tenantId,
           sessiontoken: sessionTokenRef.current,
+          ...(types ? { types } : {}),
         }),
       });
       const data = await res.json();
