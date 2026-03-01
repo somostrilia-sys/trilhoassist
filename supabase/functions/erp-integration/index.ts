@@ -489,11 +489,15 @@ Deno.serve(async (req) => {
           const cooperativa = coopMap.get(erpCoop) || erpCoop;
           const parsedYear = vehicleYear ? parseInt(vehicleYear) : null;
 
-          // Resolve active status from situacao mapping
+          // Resolve active status: check manual mapping first, then auto-detect from description
           const erpSituacao = record.codigo_situacao || record.codigo_situacao_associado || "";
+          const erpSituacaoDesc = record.descricao_situacao || record.descricao_situacao_associado || "";
           let isActive = true; // default active
           if (erpSituacao && situacaoMap.has(String(erpSituacao))) {
             isActive = situacaoMap.get(String(erpSituacao)) === "active";
+          } else if (erpSituacaoDesc) {
+            // Auto-detect: only descriptions containing "ativo" (case insensitive) are active
+            isActive = /ativo/i.test(erpSituacaoDesc);
           }
 
           const existingId = existingByPlate.get(plate);
@@ -701,9 +705,12 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
       const parsedYear = vehicleYear ? parseInt(vehicleYear) : null;
 
       const erpSituacao = record.codigo_situacao || record.codigo_situacao_associado || "";
+      const erpSituacaoDesc = record.descricao_situacao || record.descricao_situacao_associado || "";
       let isActive = true;
       if (erpSituacao && situacaoMap.has(String(erpSituacao))) {
         isActive = situacaoMap.get(String(erpSituacao)) === "active";
+      } else if (erpSituacaoDesc) {
+        isActive = /ativo/i.test(erpSituacaoDesc);
       }
 
       const existingId = existingByPlate.get(plate);
