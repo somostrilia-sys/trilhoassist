@@ -476,9 +476,9 @@ export default function ServiceRequestDetail() {
       return;
     }
     const hasEstimatedArrival = !!estimatedArrival;
-    const hasScheduledArrival = !!arrivalDate && !!arrivalTime;
+    const hasScheduledArrival = !!arrivalDate;
     if (!hasEstimatedArrival && !hasScheduledArrival) {
-      toast.error("Preencha a previsão de chegada", { description: "Informe a previsão em minutos OU agende uma data e horário." });
+      toast.error("Preencha a previsão de chegada", { description: "Informe a previsão em minutos OU agende uma data prevista." });
       return;
     }
     setActionLoading(true);
