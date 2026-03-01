@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Headphones, Briefcase, Users, DollarSign,
   FileText, Settings, Link2, BarChart3, ChevronDown, Plus, List,
-  Building2, UserCheck, Award, Network, Receipt, FileCheck, LogOut, Shield, MessageSquare, Zap
+  Building2, UserCheck, Award, Network, Receipt, FileCheck, LogOut, Shield, MessageSquare, Zap, QrCode
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,6 +20,8 @@ interface MenuItem {
   title: string;
   url: string;
   icon: any;
+  onlyRoles?: string[]; // Show only for these roles
+  hideRoles?: string[]; // Hide for these roles
 }
 
 interface MenuSection {
@@ -49,6 +51,7 @@ const menuSections: MenuSection[] = [
       { title: "Painel de Acionamentos", url: "/operation/dispatch-panel", icon: BarChart3 },
       { title: "WhatsApp", url: "/operation/whatsapp", icon: MessageSquare },
       { title: "Métricas WhatsApp", url: "/operation/whatsapp/metrics", icon: BarChart3 },
+      { title: "Meu WhatsApp", url: "/integrations", icon: QrCode, hideRoles: ["admin", "super_admin"] },
     ],
   },
   {
@@ -99,7 +102,7 @@ const menuSections: MenuSection[] = [
 ];
 
 export function AppSidebar() {
-  const { signOut } = useAuth();
+  const { signOut, roles } = useAuth();
   const { canAccessModule } = usePermissions();
   const navigate = useNavigate();
 
@@ -108,9 +111,17 @@ export function AppSidebar() {
     navigate("/login");
   };
 
-  const visibleSections = menuSections.filter((section) =>
-    canAccessModule(section.module)
-  );
+  const filterItems = (items: MenuItem[]) =>
+    items.filter((item) => {
+      if (item.onlyRoles && !item.onlyRoles.some((r) => roles.includes(r))) return false;
+      if (item.hideRoles && item.hideRoles.some((r) => roles.includes(r))) return false;
+      return true;
+    });
+
+  const visibleSections = menuSections
+    .filter((section) => canAccessModule(section.module))
+    .map((section) => ({ ...section, items: filterItems(section.items) }))
+    .filter((section) => section.items.length > 0);
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
