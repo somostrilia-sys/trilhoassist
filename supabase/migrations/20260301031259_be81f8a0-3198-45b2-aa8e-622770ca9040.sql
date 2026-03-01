@@ -1,0 +1,1 @@
+UPDATE clients SET api_auth_header = 'token' WHERE id = 'cb50f118-97dd-4762-bdf6-8f9d0d98145c';
