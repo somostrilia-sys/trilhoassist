@@ -115,7 +115,7 @@ export default function Dashboard() {
     const totalRequests = requests.length;
     const totalDispatches = dispatches.length;
     const totalRevenue = requests.reduce((s, r) => s + Number(r.charged_amount || 0), 0);
-    const totalCost = requests.reduce((s, r) => s + Number(r.provider_cost || 0), 0);
+    const totalCost = requests.filter((r) => r.status !== "cancelled" && r.status !== "refunded").reduce((s, r) => s + Number(r.provider_cost || 0), 0);
     const totalGanho = totalRevenue - totalCost;
     const avgCost = totalRequests > 0 ? totalRevenue / totalRequests : 0;
     const openRequests = requests.filter((r) => r.status === "open" || r.status === "awaiting_dispatch").length;
