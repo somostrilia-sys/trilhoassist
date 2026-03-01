@@ -194,7 +194,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({}),
         });
 
-        if (response.status === 405 || response.status === 404) {
+        if (response.status === 405 || response.status === 404 || response.status === 406) {
           response = await fetch(client.api_endpoint, {
             method: "GET",
             headers: apiHeaders,
@@ -417,7 +417,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({}),
         });
 
-        if (response.status === 405 || response.status === 404) {
+        if (response.status === 405 || response.status === 404 || response.status === 406) {
           response = await fetch(client.api_endpoint, {
             method: "GET",
             headers: apiHeaders,
@@ -660,7 +660,7 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
       body: JSON.stringify({}),
     });
 
-    if (response.status === 405 || response.status === 404) {
+    if (response.status === 405 || response.status === 404 || response.status === 406) {
       response = await fetch(client.api_endpoint, { method: "GET", headers });
     }
 
