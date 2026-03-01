@@ -948,7 +948,7 @@ ${trackingLink ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingLink}` : ""}`.trim
             <Button
               variant="outline"
               className="gap-2"
-              onClick={() => {
+              onClick={async () => {
                 const benName = beneficiary?.name || request.requester_name;
                 const clientName = (request as any).clients?.name || "";
                 const fmtDate = (d: string) => new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -957,6 +957,41 @@ ${trackingLink ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingLink}` : ""}`.trim
                 const trackingUrl = request.beneficiary_token
                   ? `${baseTrackingUrl}/tracking/${request.beneficiary_token}`
                   : "";
+
+                // Calculate route via OSRM
+                let routeSection = "";
+                const kmMargin = (request as any).clients?.km_margin || 10;
+                if (request.origin_lat && request.origin_lng && request.destination_lat && request.destination_lng) {
+                  try {
+                    const fetchDist = async (from: {lat:number,lng:number}, to: {lat:number,lng:number}) => {
+                      const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`;
+                      const res = await fetch(url);
+                      const data = await res.json();
+                      if (data.routes?.[0]) {
+                        return { km: Math.round(data.routes[0].distance / 1000 * 10) / 10, min: Math.round(data.routes[0].duration / 60) };
+                      }
+                      return null;
+                    };
+                    const fmtDur = (min: number) => min < 60 ? `${min} min` : `${Math.floor(min/60)}h${min%60 > 0 ? `${min%60}min` : ""}`;
+                    const leg1 = await fetchDist({lat: request.origin_lat, lng: request.origin_lng}, {lat: request.destination_lat, lng: request.destination_lng});
+                    const leg2 = await fetchDist({lat: request.destination_lat, lng: request.destination_lng}, {lat: request.origin_lat, lng: request.origin_lng});
+                    if (leg1 && leg2) {
+                      const totalKm = leg1.km + leg2.km + kmMargin;
+                      const totalMin = leg1.min + leg2.min;
+                      routeSection = `\n*ROTEIRIZAÇÃO*
+  • Origem → Destino: ${leg1.km.toFixed(1)} km (~${fmtDur(leg1.min)})
+  • Destino → Retorno: ${leg2.km.toFixed(1)} km (~${fmtDur(leg2.min)})
+*TOTAL*: ${(leg1.km + leg2.km).toFixed(1)} km (~${fmtDur(totalMin)})
+*COM MARGEM (+${kmMargin}km)*: ${totalKm.toFixed(1)} km`;
+                    }
+                  } catch (e) {
+                    console.error("Route calc error:", e);
+                  }
+                }
+                // Fallback to estimated_km if route calc failed
+                if (!routeSection && request.estimated_km) {
+                  routeSection = `\n*ROTEIRIZAÇÃO*\n*KM ESTIMADO*: ${Math.round(request.estimated_km)} km\n*COM MARGEM (+${kmMargin}km)*: ${Math.round(request.estimated_km + kmMargin)} km`;
+                }
 
                 const label = `*ATENDIMENTO*
 
@@ -972,7 +1007,7 @@ ${trackingLink ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingLink}` : ""}`.trim
 
 *ASSISTÊNCIA*: ${clientName.toUpperCase() || "—"}
 *CENTRAL DE ASSISTÊNCIA*: TRILHO SOLUCOES
-${request.estimated_km ? `*DISTÂNCIA*: APROX ${Math.round(request.estimated_km)}KM` : ""}
+${routeSection}
 ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim();
 
                 setLabelText(label);
