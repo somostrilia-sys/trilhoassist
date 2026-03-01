@@ -15,6 +15,62 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
+    // ─── DIRECT API TEST (for debugging) ───
+    if (action === "direct_test") {
+      const { endpoint, api_key } = body;
+      if (!endpoint || !api_key) {
+        return jsonResponse({ error: "endpoint and api_key required" }, 400);
+      }
+
+      const results: any[] = [];
+
+      // Test 1: header "token: <key>"
+      try {
+        const r1 = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json", "token": api_key },
+          body: JSON.stringify({}),
+        });
+        const t1 = await r1.text();
+        results.push({ test: "token_header", status: r1.status, body: t1.substring(0, 300) });
+      } catch (e: any) { results.push({ test: "token_header", error: e.message }); }
+
+      // Test 2: header "Authorization: <key>" (raw)
+      try {
+        const r2 = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": api_key },
+          body: JSON.stringify({}),
+        });
+        const t2 = await r2.text();
+        results.push({ test: "auth_raw", status: r2.status, body: t2.substring(0, 300) });
+      } catch (e: any) { results.push({ test: "auth_raw", error: e.message }); }
+
+      // Test 3: header "Authorization: Bearer <key>"
+      try {
+        const r3 = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": `Bearer ${api_key}` },
+          body: JSON.stringify({}),
+        });
+        const t3 = await r3.text();
+        results.push({ test: "auth_bearer", status: r3.status, body: t3.substring(0, 300) });
+      } catch (e: any) { results.push({ test: "auth_bearer", error: e.message }); }
+
+      // Test 4: header "Authorization: token <key>"
+      try {
+        const r4 = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": `token ${api_key}` },
+          body: JSON.stringify({}),
+        });
+        const t4 = await r4.text();
+        results.push({ test: "auth_token_prefix", status: r4.status, body: t4.substring(0, 300) });
+      } catch (e: any) { results.push({ test: "auth_token_prefix", error: e.message }); }
+
+      return jsonResponse({ results });
+    }
+
     // ─── AUTO SYNC (called by cron, no user auth) ───
     if (action === "auto_sync") {
       const serviceSupabase = createClient(
@@ -87,29 +143,27 @@ Deno.serve(async (req) => {
     }
 
     // Build auth headers based on client config
-    const buildApiHeaders = (apiKey: string, authHeader?: string) => {
+    const buildApiHeaders = (apiKey: string, authHeaderType?: string) => {
       const h: Record<string, string> = { "Content-Type": "application/json", "Accept": "application/json" };
-      const headerType = authHeader || "bearer";
+      const headerType = authHeaderType || "bearer";
       if (headerType === "token") {
         h["token"] = apiKey;
       } else if (headerType === "raw") {
         h["Authorization"] = apiKey;
       } else if (headerType === "token_auth") {
-        // Authorization: token <key>
         h["Authorization"] = `token ${apiKey}`;
       } else {
         h["Authorization"] = `Bearer ${apiKey}`;
       }
-      console.log("buildApiHeaders headerType:", headerType, "keys:", Object.keys(h));
       return h;
     };
 
     const apiHeaders = buildApiHeaders(client.api_key, client.api_auth_header);
     console.log("API headers keys:", Object.keys(apiHeaders), "authHeader config:", client.api_auth_header);
+
     // ─── ACTION: TEST CONNECTION ───
     if (action === "test") {
       try {
-        // Try POST first (Hinova and most ERPs use POST for listing endpoints), fallback to GET
         let response = await fetch(client.api_endpoint, {
           method: "POST",
           headers: apiHeaders,
@@ -117,7 +171,6 @@ Deno.serve(async (req) => {
         });
 
         if (response.status === 405 || response.status === 404) {
-          // Endpoint doesn't accept POST, try GET
           response = await fetch(client.api_endpoint, {
             method: "GET",
             headers: apiHeaders,
@@ -127,7 +180,6 @@ Deno.serve(async (req) => {
         if (!response.ok) {
           const text = await response.text();
           console.error("ERP error response:", response.status, text.substring(0, 500));
-          console.error("Request headers sent:", JSON.stringify(Object.keys(apiHeaders)));
           return jsonResponse({
             success: false,
             status: response.status,
@@ -136,22 +188,10 @@ Deno.serve(async (req) => {
         }
 
         const data = await response.json();
-
-        // Log raw response structure for debugging
         const rawKeys = typeof data === "object" && data !== null ? Object.keys(data) : [];
         console.log("ERP raw response keys:", rawKeys);
-        if (rawKeys.length > 0) {
-          for (const key of rawKeys.slice(0, 5)) {
-            const val = data[key];
-            const preview = typeof val === "string" ? val.substring(0, 500) : JSON.stringify(val)?.substring(0, 500);
-            console.log(`  key="${key}" type=${typeof val} isArray=${Array.isArray(val)} preview=${preview}`);
-          }
-        }
 
-        // Try to extract records from any nested key
         const records = extractRecords(data);
-
-        // Try to extract available fields/plans/cooperativas from response
         const sampleFields = extractSampleFields(data);
 
         return jsonResponse({
