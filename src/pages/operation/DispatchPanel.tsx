@@ -337,7 +337,10 @@ export default function DispatchPanel() {
                 {item.alertLate && !pausedIds.has(r.id) && (
                   <div className="flex items-center gap-2 text-xs text-destructive font-medium bg-destructive/10 rounded px-2 py-1">
                     <AlertTriangle className="h-3.5 w-3.5" />
-                    Prestador atrasado ({formatElapsed(item.elapsedSinceDispatch ?? 0)} / ETA {d.estimated_arrival_min}min)
+                    {d?.scheduled_arrival_date
+                      ? `Prestador atrasado — agendado para ${new Date(d.scheduled_arrival_date + "T" + (d.scheduled_arrival_time || "00:00")).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} às ${(d.scheduled_arrival_time || "00:00").slice(0, 5)}`
+                      : `Prestador atrasado (${formatElapsed(item.elapsedSinceDispatch ?? 0)} / ETA ${d?.estimated_arrival_min}min)`
+                    }
                   </div>
                 )}
 
@@ -366,7 +369,14 @@ export default function DispatchPanel() {
                     <p className="font-medium">{(d as any).providers?.name || "Prestador"}</p>
                     <div className="flex items-center gap-3 text-muted-foreground">
                       <span>Status: {d.status}</span>
-                      {d.estimated_arrival_min && <span>ETA: {d.estimated_arrival_min}min</span>}
+                      {d.scheduled_arrival_date ? (
+                        <span className="font-medium text-foreground" title="Previsão de Chegada agendada">
+                          ETA: {new Date(d.scheduled_arrival_date + "T" + (d.scheduled_arrival_time || "00:00")).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                          {d.scheduled_arrival_time && ` às ${d.scheduled_arrival_time.slice(0, 5)}`}
+                        </span>
+                      ) : d.estimated_arrival_min ? (
+                        <span title="Tempo Estimado de Chegada">ETA: {d.estimated_arrival_min}min</span>
+                      ) : null}
                       {d.provider_arrived_at && (
                         <span className="text-success font-medium flex items-center gap-1">
                           <CheckCircle2 className="h-3 w-3" /> Chegou
