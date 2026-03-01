@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
 
     // Build auth headers based on client config
     const buildApiHeaders = (apiKey: string, authHeader?: string) => {
-      const h: Record<string, string> = { "Content-Type": "application/json" };
+      const h: Record<string, string> = { "Content-Type": "application/json", "Accept": "application/json" };
       const headerType = authHeader || "bearer";
       if (headerType === "token") {
         h["token"] = apiKey;
@@ -360,7 +360,7 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
 
   try {
     const authHeader = client.api_auth_header || "token";
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const headers: Record<string, string> = { "Content-Type": "application/json", "Accept": "application/json" };
     if (authHeader === "bearer") {
       headers["Authorization"] = `Bearer ${client.api_key}`;
     } else {
