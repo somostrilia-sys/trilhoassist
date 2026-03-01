@@ -202,6 +202,8 @@ export default function ServiceRequestDetail() {
   const [paymentMethod, setPaymentMethod] = useState("");
   const [dispatchNotes, setDispatchNotes] = useState("");
   const [estimatedArrival, setEstimatedArrival] = useState("");
+  const [arrivalDate, setArrivalDate] = useState<Date | undefined>(undefined);
+  const [arrivalTime, setArrivalTime] = useState("");
   const [dispatchMode, setDispatchMode] = useState<"existing" | "quick" | "external">("existing");
   const [quickProvider, setQuickProvider] = useState({
     name: "", document: "", phone: "", cep: "", street: "", address_number: "",
@@ -530,10 +532,12 @@ export default function ServiceRequestDetail() {
       provider_id: finalProviderId,
       quoted_amount: quotedAmount ? parseFloat(quotedAmount) : null,
       estimated_arrival_min: estimatedArrival ? parseInt(estimatedArrival) : null,
+      scheduled_arrival_date: arrivalDate ? format(arrivalDate, "yyyy-MM-dd") : null,
+      scheduled_arrival_time: arrivalTime || null,
       notes: dispatchNotes || null,
       status: "sent",
       provider_token: providerToken,
-    }).select("id").single();
+    } as any).select("id").single();
 
     if (dErr) {
       setActionLoading(false);
@@ -649,6 +653,8 @@ ${trackingLink ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingLink}` : ""}`.trim
     setChargedAmount("");
     setPaymentMethod("");
     setEstimatedArrival("");
+    setArrivalDate(undefined);
+    setArrivalTime("");
     setDispatchNotes("");
     setDispatchMode("existing");
     setQuickProvider({ name: "", document: "", phone: "", cep: "", street: "", address_number: "", neighborhood: "", city: "", state: "" });
@@ -2067,6 +2073,38 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
                 onChange={(e) => setEstimatedArrival(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">Tempo estimado em minutos para o prestador chegar ao local</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Data prevista de chegada</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !arrivalDate && "text-muted-foreground")}>
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {arrivalDate ? format(arrivalDate, "dd/MM/yyyy") : "Selecionar data"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={arrivalDate}
+                      onSelect={setArrivalDate}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="space-y-2">
+                <Label>Horário previsto</Label>
+                <Input
+                  type="time"
+                  value={arrivalTime}
+                  onChange={(e) => setArrivalTime(e.target.value)}
+                  placeholder="HH:MM"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">

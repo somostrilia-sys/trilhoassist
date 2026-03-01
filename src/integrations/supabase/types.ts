@@ -211,6 +211,8 @@ export type Database = {
           provider_id: string | null
           provider_token: string | null
           quoted_amount: number | null
+          scheduled_arrival_date: string | null
+          scheduled_arrival_time: string | null
           service_request_id: string
           status: Database["public"]["Enums"]["dispatch_status"]
           updated_at: string
@@ -229,6 +231,8 @@ export type Database = {
           provider_id?: string | null
           provider_token?: string | null
           quoted_amount?: number | null
+          scheduled_arrival_date?: string | null
+          scheduled_arrival_time?: string | null
           service_request_id: string
           status?: Database["public"]["Enums"]["dispatch_status"]
           updated_at?: string
@@ -247,6 +251,8 @@ export type Database = {
           provider_id?: string | null
           provider_token?: string | null
           quoted_amount?: number | null
+          scheduled_arrival_date?: string | null
+          scheduled_arrival_time?: string | null
           service_request_id?: string
           status?: Database["public"]["Enums"]["dispatch_status"]
           updated_at?: string
