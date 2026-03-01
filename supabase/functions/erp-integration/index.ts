@@ -92,6 +92,9 @@ Deno.serve(async (req) => {
       const headerType = authHeader || "bearer";
       if (headerType === "token") {
         h["token"] = apiKey;
+      } else if (headerType === "raw") {
+        // Raw Authorization header without prefix
+        h["Authorization"] = apiKey;
       } else {
         // Default: Bearer token
         h["Authorization"] = `Bearer ${apiKey}`;
@@ -389,6 +392,8 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
     const headers: Record<string, string> = { "Content-Type": "application/json", "Accept": "application/json" };
     if (authHeader === "bearer") {
       headers["Authorization"] = `Bearer ${client.api_key}`;
+    } else if (authHeader === "raw") {
+      headers["Authorization"] = client.api_key;
     } else {
       headers[authHeader] = client.api_key;
     }
