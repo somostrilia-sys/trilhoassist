@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -16,10 +16,12 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Search, Plus, UserCheck, CheckCircle, XCircle, Pencil, MoreVertical, Car, FileSpreadsheet } from "lucide-react";
+import { Search, Plus, UserCheck, CheckCircle, XCircle, Pencil, MoreVertical, Car, FileSpreadsheet, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { maskCPF, maskPhone } from "@/lib/masks";
 import BeneficiaryImport from "@/components/import/BeneficiaryImport";
+
+const PAGE_SIZE = 50;
 
 export default function BeneficiariesList() {
   const navigate = useNavigate();
@@ -27,8 +29,20 @@ export default function BeneficiariesList() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [clientFilter, setClientFilter] = useState<string>("all");
   const [importOpen, setImportOpen] = useState(false);
+  const [page, setPage] = useState(0);
+  const debounceRef = useState<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearch(value);
+    if (debounceRef[0]) clearTimeout(debounceRef[0]);
+    debounceRef[0] = setTimeout(() => {
+      setDebouncedSearch(value);
+      setPage(0);
+    }, 400);
+  }, [debounceRef]);
 
   const { data: tenantId } = useQuery({
     queryKey: ["user-tenant-id", user?.id],
@@ -51,7 +65,6 @@ export default function BeneficiariesList() {
 
   const clientIds = clients.map((c) => c.id);
 
-  // Fetch plans for import mapping
   const { data: plans = [] } = useQuery({
     queryKey: ["admin-plans-for-import", clientIds],
     queryFn: async () => {
@@ -69,29 +82,50 @@ export default function BeneficiariesList() {
     return m;
   }, [plans]);
 
-  const { data: beneficiaries = [], isLoading } = useQuery({
-    queryKey: ["admin-beneficiaries", clientIds],
+  // Counts query (lightweight, no pagination)
+  const { data: counts } = useQuery({
+    queryKey: ["admin-beneficiaries-counts", clientIds],
     queryFn: async () => {
-      if (clientIds.length === 0) return [];
-      let allData: any[] = [];
-      let from = 0;
-      const pageSize = 1000;
-      while (true) {
-        const { data, error } = await supabase
-          .from("beneficiaries")
-          .select("*")
-          .in("client_id", clientIds)
-          .order("name")
-          .range(from, from + pageSize - 1);
-        if (error) throw error;
-        allData = allData.concat(data || []);
-        if (!data || data.length < pageSize) break;
-        from += pageSize;
-      }
-      return allData;
+      if (clientIds.length === 0) return { total: 0, active: 0, inactive: 0 };
+      const { count: total } = await supabase.from("beneficiaries").select("id", { count: "exact", head: true }).in("client_id", clientIds);
+      const { count: active } = await supabase.from("beneficiaries").select("id", { count: "exact", head: true }).in("client_id", clientIds).eq("active", true);
+      return { total: total || 0, active: active || 0, inactive: (total || 0) - (active || 0) };
     },
     enabled: clientIds.length > 0,
   });
+
+  // Server-side paginated + filtered query
+  const { data: queryResult, isLoading } = useQuery<{ data: any[]; count: number }>({
+    queryKey: ["admin-beneficiaries", clientIds, clientFilter, debouncedSearch, page],
+    queryFn: async () => {
+      if (clientIds.length === 0) return { data: [], count: 0 };
+
+      const filterClientIds = clientFilter !== "all" ? [clientFilter] : clientIds;
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      let query = supabase
+        .from("beneficiaries")
+        .select("*", { count: "exact" })
+        .in("client_id", filterClientIds)
+        .order("name")
+        .range(from, to);
+
+      if (debouncedSearch) {
+        const q = `%${debouncedSearch}%`;
+        query = query.or(`name.ilike.${q},vehicle_plate.ilike.${q},cpf.ilike.${q},cooperativa.ilike.${q}`);
+      }
+
+      const { data, error, count } = await query;
+      if (error) throw error;
+      return { data: data || [], count: count || 0 };
+    },
+    enabled: clientIds.length > 0,
+  });
+
+  const beneficiaries = queryResult?.data || [];
+  const totalFiltered = queryResult?.count || 0;
+  const totalPages = Math.ceil(totalFiltered / PAGE_SIZE);
 
   const clientMap = Object.fromEntries(clients.map((c) => [c.id, c.name]));
 
@@ -102,23 +136,10 @@ export default function BeneficiariesList() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-beneficiaries"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-beneficiaries-counts"] });
       toast({ title: "Status atualizado!" });
     },
   });
-
-  const filtered = beneficiaries.filter((b) => {
-    if (clientFilter !== "all" && b.client_id !== clientFilter) return false;
-    const q = search.toLowerCase();
-    return (
-      b.name.toLowerCase().includes(q) ||
-      b.vehicle_plate?.toLowerCase().includes(q) ||
-      b.cpf?.toLowerCase().includes(q) ||
-      (b as any).cooperativa?.toLowerCase().includes(q)
-    );
-  });
-
-  const activeCount = beneficiaries.filter((b) => b.active).length;
-  const inactiveCount = beneficiaries.filter((b) => !b.active).length;
 
   return (
     <div className="space-y-6">
@@ -147,7 +168,7 @@ export default function BeneficiariesList() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total</p>
-              <p className="text-2xl font-bold">{beneficiaries.length}</p>
+              <p className="text-2xl font-bold">{counts?.total ?? "—"}</p>
             </div>
           </CardContent>
         </Card>
@@ -158,7 +179,7 @@ export default function BeneficiariesList() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Ativos</p>
-              <p className="text-2xl font-bold">{activeCount}</p>
+              <p className="text-2xl font-bold">{counts?.active ?? "—"}</p>
             </div>
           </CardContent>
         </Card>
@@ -169,7 +190,7 @@ export default function BeneficiariesList() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Inativos</p>
-              <p className="text-2xl font-bold">{inactiveCount}</p>
+              <p className="text-2xl font-bold">{counts?.inactive ?? "—"}</p>
             </div>
           </CardContent>
         </Card>
@@ -181,11 +202,11 @@ export default function BeneficiariesList() {
           <Input
             placeholder="Buscar por nome, placa, CPF, cooperativa..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-9"
           />
         </div>
-        <Select value={clientFilter} onValueChange={setClientFilter}>
+        <Select value={clientFilter} onValueChange={(v) => { setClientFilter(v); setPage(0); }}>
           <SelectTrigger className="w-[220px]">
             <SelectValue placeholder="Todos os clientes" />
           </SelectTrigger>
@@ -200,9 +221,9 @@ export default function BeneficiariesList() {
 
       <Card>
         <CardContent className="p-0">
-          {isLoading ? (
+          {isLoading && beneficiaries.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">Carregando...</div>
-          ) : filtered.length === 0 ? (
+          ) : beneficiaries.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">
               {search || clientFilter !== "all" ? "Nenhum beneficiário encontrado." : "Nenhum beneficiário cadastrado."}
             </div>
@@ -221,7 +242,7 @@ export default function BeneficiariesList() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((b) => (
+                {beneficiaries.map((b) => (
                   <TableRow key={b.id} className="cursor-pointer hover:bg-muted/50">
                     <TableCell className="font-medium">{b.name}</TableCell>
                     <TableCell className="text-muted-foreground font-mono text-sm">
@@ -281,12 +302,32 @@ export default function BeneficiariesList() {
         </CardContent>
       </Card>
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalFiltered)} de {totalFiltered}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+              <ChevronLeft className="h-4 w-4 mr-1" /> Anterior
+            </Button>
+            <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
+              Próxima <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       <BeneficiaryImport
         open={importOpen}
         onOpenChange={setImportOpen}
         clientId={clientFilter !== "all" ? clientFilter : (clientIds[0] || "")}
         planMap={planMap}
-        onComplete={() => queryClient.invalidateQueries({ queryKey: ["admin-beneficiaries"] })}
+        onComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ["admin-beneficiaries"] });
+          queryClient.invalidateQueries({ queryKey: ["admin-beneficiaries-counts"] });
+        }}
       />
     </div>
   );
