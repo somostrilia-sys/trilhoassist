@@ -131,13 +131,18 @@ export default function Dashboard() {
       avgServiceTimeMin = validTimes.length > 0 ? validTimes.reduce((s, d) => s + d, 0) / validTimes.length : 0;
     }
 
-    // Tempo médio de acionamento (dispatch created_at → accepted_at)
-    const acceptedDisp = dispatches.filter((d) => d.accepted_at);
+    // Tempo médio de acionamento (service_request.created_at → primeiro dispatch aceito)
     let avgDispatchTimeMin = 0;
-    if (acceptedDisp.length > 0) {
-      const validTimes = acceptedDisp
-        .map((d) => (new Date(d.accepted_at).getTime() - new Date(d.created_at).getTime()) / 60000)
-        .filter((d) => d > 0);
+    const reqsWithAcceptedDispatch = requests.filter((r) => {
+      return dispatches.some((d) => d.service_request_id === r.id && d.accepted_at);
+    });
+    if (reqsWithAcceptedDispatch.length > 0) {
+      const validTimes = reqsWithAcceptedDispatch.map((r) => {
+        const firstAccepted = dispatches
+          .filter((d) => d.service_request_id === r.id && d.accepted_at)
+          .sort((a, b) => new Date(a.accepted_at!).getTime() - new Date(b.accepted_at!).getTime())[0];
+        return (new Date(firstAccepted.accepted_at!).getTime() - new Date(r.created_at).getTime()) / 60000;
+      }).filter((d) => d > 0);
       avgDispatchTimeMin = validTimes.length > 0 ? validTimes.reduce((s, d) => s + d, 0) / validTimes.length : 0;
     }
 
