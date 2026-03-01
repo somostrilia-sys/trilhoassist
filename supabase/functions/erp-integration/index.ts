@@ -487,6 +487,7 @@ Deno.serve(async (req) => {
           if (existingId) {
             toUpdate.push({
               id: existingId,
+              client_id,
               name,
               phone: phone || null,
               cpf: cpf || null,
