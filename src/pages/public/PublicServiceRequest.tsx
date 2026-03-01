@@ -261,7 +261,7 @@ export default function PublicServiceRequest() {
 
     const requiredByCategory: Record<VehicleCategory, { fields: string[]; data: Record<string, string> }> = {
       car: {
-        fields: ["wheel_locked", "steering_locked", "armored", "vehicle_lowered", "carrying_cargo", "easy_access", "vehicle_location", "key_available", "documents_available", "has_passengers", "had_collision", "risk_area", "vehicle_starts"],
+        fields: ["wheel_locked", "steering_locked", "armored", "vehicle_lowered", "carrying_cargo", "easy_access", "key_available", "documents_available", "has_passengers", "had_collision", "risk_area", "vehicle_starts"],
         data: carVerification as any,
       },
       motorcycle: {
@@ -280,6 +280,11 @@ export default function PublicServiceRequest() {
     // Conditional: if wheel_locked=yes, wheel_locked_count is required (car only)
     if (vehicleCategory === "car" && (carVerification as any).wheel_locked === "yes" && !(carVerification as any).wheel_locked_count) {
       return "Informe quantas rodas estão travadas.";
+    }
+
+    // Conditional: if easy_access=no, vehicle_location is required (car only)
+    if (vehicleCategory === "car" && (carVerification as any).easy_access === "no" && !(carVerification as any).vehicle_location) {
+      return "Informe onde o veículo está localizado.";
     }
 
     return null;
