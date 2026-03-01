@@ -191,7 +191,7 @@ export default function DispatchPanel() {
       // Alert: provider late (accepted but ETA exceeded)
       // For scheduled dispatches, only alert after the scheduled arrival time + tolerance
       let alertLate = false;
-      if (disp?.status === "accepted") {
+      if (disp?.status === "accepted" && !disp.provider_arrived_at) {
         if (disp.scheduled_arrival_date) {
           // Scheduled dispatch: alert only after scheduled time has passed + tolerance
           const scheduledStr = disp.scheduled_arrival_date + "T" + (disp.scheduled_arrival_time || "00:00") + ":00";
