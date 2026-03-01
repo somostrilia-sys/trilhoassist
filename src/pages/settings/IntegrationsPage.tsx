@@ -488,6 +488,43 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
                         </div>
                       </div>
                     )}
+                    {erpFields.situacoes?.length > 0 && (
+                      <div className="space-y-3">
+                        <h3 className="font-medium text-sm flex items-center gap-2">
+                          <Badge variant="outline">Situações</Badge>
+                          <span className="text-muted-foreground text-xs">{erpFields.situacoes.length} encontradas — defina quais são ativas e quais são inativas (caso 99)</span>
+                        </h3>
+                        <div className="space-y-2">
+                          {erpFields.situacoes.map((sit: { code: string; description: string }) => {
+                            const mapping = getMappingValue("situacao", sit.code);
+                            const currentValue = mapping.trilhoValue || "";
+                            return (
+                              <div key={sit.code} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20">
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">{sit.description}</p>
+                                  <p className="text-xs text-muted-foreground">Código: {sit.code}</p>
+                                </div>
+                                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                                <div className="flex-1">
+                                  <Select value={currentValue} onValueChange={(v) => handleSaveMapping("situacao", sit.code, v)}>
+                                    <SelectTrigger className="h-9"><SelectValue placeholder="Selecione status" /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="active">✅ Ativo</SelectItem>
+                                      <SelectItem value="inactive">❌ Inativo (caso 99)</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                {currentValue && (
+                                  <Badge variant={currentValue === "active" ? "default" : "destructive"} className="text-xs">
+                                    {currentValue === "active" ? "Ativo" : "Inativo"}
+                                  </Badge>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>

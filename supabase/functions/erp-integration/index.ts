@@ -431,6 +431,8 @@ Deno.serve(async (req) => {
 
         const planMap = new Map((mappings || []).filter((m: any) => m.field_type === "plan").map((m: any) => [m.erp_value, m.trilho_id]));
         const coopMap = new Map((mappings || []).filter((m: any) => m.field_type === "cooperativa").map((m: any) => [m.erp_value, m.trilho_value]));
+        // situacao mapping: erp_value = codigo_situacao, trilho_value = "active" or "inactive"
+        const situacaoMap = new Map((mappings || []).filter((m: any) => m.field_type === "situacao").map((m: any) => [m.erp_value, m.trilho_value]));
 
         // Also build a plan lookup by erp_code for direct code matching
         const { data: allPlans } = await serviceSupabase
@@ -483,6 +485,13 @@ Deno.serve(async (req) => {
           const cooperativa = coopMap.get(erpCoop) || erpCoop;
           const parsedYear = vehicleYear ? parseInt(vehicleYear) : null;
 
+          // Resolve active status from situacao mapping
+          const erpSituacao = record.codigo_situacao || record.codigo_situacao_associado || "";
+          let isActive = true; // default active
+          if (erpSituacao && situacaoMap.has(String(erpSituacao))) {
+            isActive = situacaoMap.get(String(erpSituacao)) === "active";
+          }
+
           const existingId = existingByPlate.get(plate);
           if (existingId) {
             toUpdate.push({
@@ -496,6 +505,7 @@ Deno.serve(async (req) => {
               vehicle_chassis: vehicleChassis || null,
               plan_id: planId,
               cooperativa: cooperativa || null,
+              active: isActive,
             });
           } else {
             toInsert.push({
@@ -509,6 +519,7 @@ Deno.serve(async (req) => {
               vehicle_chassis: vehicleChassis || null,
               plan_id: planId,
               cooperativa: cooperativa || null,
+              active: isActive,
             });
           }
         }
@@ -731,22 +742,28 @@ function extractSampleFields(data: any): any {
 
 function extractUniqueFields(data: any): any {
   const records = extractRecords(data);
-  if (records.length === 0) return { plans: [], cooperativas: [], sample_keys: [] };
+  if (records.length === 0) return { plans: [], cooperativas: [], situacoes: [], sample_keys: [] };
   
-  // Log sample record keys for debugging
   const sampleKeys = Object.keys(records[0]);
   console.log("extractUniqueFields sample keys:", sampleKeys);
   console.log("extractUniqueFields sample values:", JSON.stringify(records[0]).substring(0, 1000));
   
   const plans = new Set<string>();
   const cooperativas = new Set<string>();
+  const situacoes = new Map<string, string>(); // code -> description
   for (const r of records) {
-    // Try many possible field names for plan
     const plan = r.descricao_produto || r.produto || r.plano || r.plan || r.plan_name || r.nome_produto || "";
-    // Try many possible field names for cooperativa - Hinova uses nome_cooperativa
     const coop = r.nome_cooperativa || r.descricao_cooperativa || r.cooperativa || r.coop || r.cooperative || r.unidade || "";
+    const sitCodigo = r.codigo_situacao || r.codigo_situacao_associado || "";
+    const sitDesc = r.descricao_situacao || r.descricao_situacao_associado || "";
     if (plan) plans.add(plan);
     if (coop) cooperativas.add(coop);
+    if (sitCodigo && sitDesc) situacoes.set(String(sitCodigo), sitDesc);
   }
-  return { plans: [...plans].sort(), cooperativas: [...cooperativas].sort(), sample_keys: sampleKeys };
+  return {
+    plans: [...plans].sort(),
+    cooperativas: [...cooperativas].sort(),
+    situacoes: [...situacoes.entries()].map(([code, desc]) => ({ code, description: desc })).sort((a, b) => a.code.localeCompare(b.code)),
+    sample_keys: sampleKeys,
+  };
 }
