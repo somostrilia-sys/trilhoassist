@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { useTenantId } from "@/hooks/useFinancialData";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -679,8 +680,29 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
 // ====================== Main Page ======================
 export default function IntegrationsPage() {
   const { data: tenantId } = useTenantId();
+  const { roles } = useAuth();
+
+  const isAdmin = roles.includes("admin") || roles.includes("super_admin");
 
   if (!tenantId) return <p className="text-muted-foreground p-4">Carregando...</p>;
+
+  // Operators only see UazapiGO (WhatsApp QR Code)
+  if (!isAdmin) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <QrCode className="h-6 w-6 text-green-600" />
+            Meu WhatsApp
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Conecte seu WhatsApp escaneando o QR Code abaixo.
+          </p>
+        </div>
+        <EvolutionApiIntegration tenantId={tenantId} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
