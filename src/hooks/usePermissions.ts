@@ -23,7 +23,9 @@ export function usePermissions() {
   });
 
   const canAccessModule = (module: string): boolean => {
-    if (roles.includes("admin")) return true; // admin always has access
+    if (roles.includes("admin") || roles.includes("super_admin")) return true;
+    // If roles haven't loaded yet, don't block access
+    if (roles.length === 0) return true;
     return roles.some((role) =>
       permissions.some(
         (p) => p.role === role && p.module === module && p.enabled
