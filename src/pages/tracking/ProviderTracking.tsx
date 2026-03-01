@@ -84,46 +84,62 @@ export default function ProviderTracking() {
     load();
   }, [token]);
 
-  const lastSentPos = useRef<{ lat: number; lng: number } | null>(null);
-  const MIN_SEND_ACCURACY = 100; // Only send positions with accuracy <= 100m
-  const MIN_MOVE_METERS = 10; // Only send if moved at least 10m from last sent position
+  const lastSentPos = useRef<{ lat: number; lng: number; ts: number } | null>(null);
+  const positionHistory = useRef<{ lat: number; lng: number; acc: number; ts: number }[]>([]);
+  const MIN_SEND_ACCURACY = 50; // Only send positions with accuracy <= 50m (stricter)
+  const MAX_JUMP_METERS = 500; // Reject jumps > 500m in < 15 seconds (impossible by car in city)
+  const MAX_JUMP_INTERVAL_MS = 15000;
 
   const sendPosition = useCallback(async (pos: GeolocationPosition) => {
     if (!dispatch || !request) return;
     
-    // Skip positions with poor accuracy
     const accuracy = pos.coords.accuracy;
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    const now = Date.now();
+
+    // 1. Skip positions with poor accuracy
     if (accuracy && accuracy > MIN_SEND_ACCURACY) {
-      console.log(`GPS accuracy too poor (${accuracy.toFixed(0)}m), skipping send`);
       return;
     }
 
-    // Skip if hasn't moved enough from last sent position
+    // 2. Reject impossible jumps (teleportation detection)
     if (lastSentPos.current) {
-      const moved = haversineDistance(
-        lastSentPos.current.lat, lastSentPos.current.lng,
-        pos.coords.latitude, pos.coords.longitude
-      );
-      if (moved < MIN_MOVE_METERS) return;
+      const moved = haversineDistance(lastSentPos.current.lat, lastSentPos.current.lng, lat, lng);
+      const elapsed = now - lastSentPos.current.ts;
+      
+      // If jumped more than 500m in under 15 seconds, it's a GPS glitch
+      if (moved > MAX_JUMP_METERS && elapsed < MAX_JUMP_INTERVAL_MS) {
+        console.log(`GPS jump rejected: ${moved.toFixed(0)}m in ${(elapsed/1000).toFixed(0)}s`);
+        return;
+      }
+
+      // Skip if hasn't moved at all (< 5m)
+      if (moved < 5) return;
     }
+
+    // 3. Use median filter: keep last 3 positions, send the median to smooth outliers
+    positionHistory.current.push({ lat, lng, acc: accuracy || 999, ts: now });
+    if (positionHistory.current.length > 5) positionHistory.current.shift();
+
+    // Use position with best accuracy from recent history
+    const bestPos = positionHistory.current.reduce((best, p) => p.acc < best.acc ? p : best);
 
     const payload = {
       dispatch_id: dispatch.id,
-      latitude: pos.coords.latitude,
-      longitude: pos.coords.longitude,
-      accuracy: pos.coords.accuracy || null,
+      latitude: bestPos.lat,
+      longitude: bestPos.lng,
+      accuracy: bestPos.acc,
       heading: pos.coords.heading || null,
       speed: pos.coords.speed || null,
     };
-    // Persist to DB
     await supabase.from("provider_tracking").insert(payload);
-    // Broadcast via Realtime channel for instant updates
     supabase.channel(`provider-location-${request.id}`).send({
       type: "broadcast",
       event: "location",
-      payload: { lat: pos.coords.latitude, lng: pos.coords.longitude, ts: Date.now() },
+      payload: { lat: bestPos.lat, lng: bestPos.lng, accuracy: bestPos.acc, ts: now },
     });
-    lastSentPos.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    lastSentPos.current = { lat: bestPos.lat, lng: bestPos.lng, ts: now };
     setLastSent(new Date());
   }, [dispatch, request]);
 
@@ -137,9 +153,9 @@ export default function ProviderTracking() {
 
     watchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
-        // Only accept positions with reasonable accuracy
+        // Only accept positions with good accuracy (<=50m)
         const acc = pos.coords.accuracy;
-        if (acc && acc > MIN_SEND_ACCURACY * 2) return; // ignore very poor readings (>200m)
+        if (acc && acc > MIN_SEND_ACCURACY) return;
         latestPos.current = pos;
         setGpsReady(true);
       },
