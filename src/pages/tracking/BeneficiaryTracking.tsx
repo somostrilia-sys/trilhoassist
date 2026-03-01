@@ -126,59 +126,102 @@ export default function BeneficiaryTracking() {
   const providerMarkerRef = useRef<L.Marker | null>(null);
   const originMarkerRef = useRef<L.Marker | null>(null);
   const routePolylineRef = useRef<L.Polyline | null>(null);
+  const currentDispatchIdRef = useRef<string | null>(null);
 
   // Load data
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     if (!token) return;
-    const load = async () => {
-      const { data: sr } = await supabase
-        .from("service_requests")
-        .select("*")
-        .eq("beneficiary_token", token)
-        .maybeSingle();
+    const { data: sr } = await supabase
+      .from("service_requests")
+      .select("*")
+      .eq("beneficiary_token", token)
+      .maybeSingle();
 
-      if (!sr) {
-        setError("Link de acompanhamento inválido ou expirado.");
-        setLoading(false);
-        return;
+    if (!sr) {
+      setError("Link de acompanhamento inválido ou expirado.");
+      setLoading(false);
+      return;
+    }
+    setRequest(sr);
+
+    const { data: d } = await supabase
+      .from("dispatches")
+      .select("*, providers(name, latitude, longitude, phone)")
+      .eq("service_request_id", sr.id)
+      .in("status", ["accepted", "sent", "pending", "completed"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (d) {
+      // If dispatch changed, reset map markers
+      if (currentDispatchIdRef.current && d.id !== currentDispatchIdRef.current) {
+        if (providerMarkerRef.current && mapInstanceRef.current) {
+          mapInstanceRef.current.removeLayer(providerMarkerRef.current);
+          providerMarkerRef.current = null;
+        }
+        if (routePolylineRef.current && mapInstanceRef.current) {
+          mapInstanceRef.current.removeLayer(routePolylineRef.current);
+          routePolylineRef.current = null;
+        }
+        setProviderPos(null);
+        setProviderArrived(false);
+        arrivalNotifiedRef.current = false;
+        notifiedRef.current = false;
       }
-      setRequest(sr);
 
-      const { data: d } = await supabase
-        .from("dispatches")
-        .select("*, providers(name, latitude, longitude, phone)")
-        .eq("service_request_id", sr.id)
-        .in("status", ["accepted", "sent", "pending", "completed"])
+      currentDispatchIdRef.current = d.id;
+      setDispatch(d);
+      const prov = (d as any).providers;
+      setProviderName(prov?.name || "Prestador");
+      if (d.provider_arrived_at) setProviderArrived(true);
+
+      const { data: track } = await supabase
+        .from("provider_tracking")
+        .select("latitude, longitude, created_at")
+        .eq("dispatch_id", d.id)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (d) {
-        setDispatch(d);
-        const prov = (d as any).providers;
-        setProviderName(prov?.name || "Prestador");
-        if (d.provider_arrived_at) setProviderArrived(true);
-
-        const { data: track } = await supabase
-          .from("provider_tracking")
-          .select("latitude, longitude, created_at")
-          .eq("dispatch_id", d.id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (track) {
-          setProviderPos({ lat: track.latitude, lng: track.longitude });
-          setLastUpdate(new Date(track.created_at));
-        } else if (prov?.latitude && prov?.longitude) {
-          // Use provider base location as initial position
-          setProviderPos({ lat: prov.latitude, lng: prov.longitude });
-        }
+      if (track) {
+        setProviderPos({ lat: track.latitude, lng: track.longitude });
+        setLastUpdate(new Date(track.created_at));
+      } else if (prov?.latitude && prov?.longitude) {
+        setProviderPos({ lat: prov.latitude, lng: prov.longitude });
       }
-      setLoading(false);
-    };
-    load();
+    } else {
+      currentDispatchIdRef.current = null;
+      setDispatch(null);
+      setProviderName("");
+      setProviderPos(null);
+    }
+    setLoading(false);
   }, [token]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Subscribe to service_request updates to detect new dispatches (provider swap)
+  useEffect(() => {
+    if (!request?.id) return;
+    const channel = supabase
+      .channel(`sr-dispatch-change-${request.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "dispatches",
+          filter: `service_request_id=eq.${request.id}`,
+        },
+        () => {
+          // Re-load data when any dispatch changes (new dispatch, cancellation, etc.)
+          loadData();
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [request?.id, loadData]);
 
   // Subscribe to Realtime: postgres_changes + broadcast channel + dispatch updates
   useEffect(() => {
