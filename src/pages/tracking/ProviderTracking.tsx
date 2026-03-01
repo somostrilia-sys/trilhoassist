@@ -431,6 +431,15 @@ export default function ProviderTracking() {
                 </span>
               </div>
             )}
+            {dispatch?.scheduled_arrival_date && (
+              <div className="flex items-center gap-2 text-sm bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md p-2">
+                <Calendar className="h-4 w-4 text-blue-600" />
+                <span className="font-medium text-blue-800 dark:text-blue-200">
+                  Previsão de chegada: {new Date(dispatch.scheduled_arrival_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                  {dispatch.scheduled_arrival_time && ` às ${dispatch.scheduled_arrival_time.slice(0, 5)}`}
+                </span>
+              </div>
+            )}
             {request?.vehicle_model && (
               <div className="flex items-center gap-2 text-sm">
                 <Car className="h-4 w-4 text-muted-foreground" />
