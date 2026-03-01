@@ -180,6 +180,8 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
   const [erpFields, setErpFields] = useState<any>(null);
   const [fetchingFields, setFetchingFields] = useState(false);
   const [autoMapping, setAutoMapping] = useState(false);
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagResult, setDiagResult] = useState<any>(null);
 
   const { data: clients = [] } = useQuery({
     queryKey: ["clients-with-api", tenantId],
@@ -249,6 +251,23 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleDiagnostic = async () => {
+    if (!selectedClient) return;
+    setDiagnosing(true);
+    setDiagResult(null);
+    try {
+      const result = await callErpFunction("direct_test", {
+        endpoint: selectedClient.api_endpoint,
+        api_key: selectedClient.api_key,
+      });
+      setDiagResult(result);
+    } catch (err: any) {
+      setDiagResult({ error: err.message });
+    } finally {
+      setDiagnosing(false);
     }
   };
 
@@ -395,10 +414,16 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
                     <p className="text-sm font-mono bg-muted rounded px-2 py-1">••••••{selectedClient?.api_key?.slice(-6)}</p>
                   </div>
                 </div>
-                <Button onClick={handleTest} disabled={testing}>
-                  <TestTube className="h-4 w-4 mr-2" />
-                  {testing ? "Testando..." : "Testar Conexão"}
-                </Button>
+                <div className="flex gap-3">
+                  <Button onClick={handleTest} disabled={testing}>
+                    <TestTube className="h-4 w-4 mr-2" />
+                    {testing ? "Testando..." : "Testar Conexão"}
+                  </Button>
+                  <Button onClick={handleDiagnostic} disabled={diagnosing} variant="outline">
+                    <AlertCircle className="h-4 w-4 mr-2" />
+                    {diagnosing ? "Diagnosticando..." : "Diagnóstico Avançado"}
+                  </Button>
+                </div>
                 {testResult && (
                   <div className={`rounded-lg border p-4 ${testResult.success ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
                     <div className="flex items-center gap-2">
@@ -411,6 +436,35 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
                         <p className="text-xs text-muted-foreground">Campos: {testResult.sample_data.keys?.join(", ")}</p>
                       </div>
                     )}
+                  </div>
+                )}
+                {diagResult && (
+                  <div className="rounded-lg border p-4 bg-muted/30 space-y-3">
+                    <p className="font-medium text-sm">Resultado do Diagnóstico</p>
+                    {diagResult.error && (
+                      <p className="text-sm text-destructive">{diagResult.error}</p>
+                    )}
+                    {diagResult.results?.map((r: any, i: number) => {
+                      const isOk = r.status >= 200 && r.status < 300;
+                      const labels: Record<string, string> = {
+                        token_header: 'Header "token: <key>"',
+                        auth_raw: 'Header "Authorization: <key>"',
+                        auth_bearer: 'Header "Authorization: Bearer <key>"',
+                        auth_token_prefix: 'Header "Authorization: token <key>"',
+                      };
+                      return (
+                        <div key={i} className={`rounded border p-3 text-sm ${isOk ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            {isOk ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <XCircle className="h-4 w-4 text-red-600" />}
+                            <span className="font-medium">{labels[r.test] || r.test}</span>
+                            <Badge variant={isOk ? "default" : "destructive"} className="text-xs ml-auto">
+                              {r.status || "erro"}
+                            </Badge>
+                          </div>
+                          <p className="text-xs font-mono text-muted-foreground break-all">{r.body || r.error}</p>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
