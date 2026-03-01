@@ -136,7 +136,7 @@ export default function RouteMap({ points, title = "ROTEIRIZAÇÃO" }: RouteMapP
           },
         });
 
-        setTotalKm(haversineDistance(routeCoords));
+        setTotalKm(haversineDistance(routeCoords) + 10);
       });
     });
 
