@@ -111,10 +111,20 @@ Deno.serve(async (req) => {
     // ─── ACTION: TEST CONNECTION ───
     if (action === "test") {
       try {
-        const response = await fetch(client.api_endpoint, {
-          method: "GET",
+        // Try POST first (Hinova and most ERPs use POST for listing endpoints), fallback to GET
+        let response = await fetch(client.api_endpoint, {
+          method: "POST",
           headers: apiHeaders,
+          body: JSON.stringify({}),
         });
+
+        if (response.status === 405 || response.status === 404) {
+          // Endpoint doesn't accept POST, try GET
+          response = await fetch(client.api_endpoint, {
+            method: "GET",
+            headers: apiHeaders,
+          });
+        }
 
         if (!response.ok) {
           const text = await response.text();
@@ -163,10 +173,18 @@ Deno.serve(async (req) => {
     // ─── ACTION: FETCH ERP DATA (for mapping preview) ───
     if (action === "fetch_fields") {
       try {
-        const response = await fetch(client.api_endpoint, {
-          method: "GET",
+        let response = await fetch(client.api_endpoint, {
+          method: "POST",
           headers: apiHeaders,
+          body: JSON.stringify({}),
         });
+
+        if (response.status === 405 || response.status === 404) {
+          response = await fetch(client.api_endpoint, {
+            method: "GET",
+            headers: apiHeaders,
+          });
+        }
 
         if (!response.ok) {
           const text = await response.text();
@@ -202,10 +220,18 @@ Deno.serve(async (req) => {
 
       try {
         // Fetch data from ERP
-        const response = await fetch(client.api_endpoint, {
-          method: "GET",
+        let response = await fetch(client.api_endpoint, {
+          method: "POST",
           headers: apiHeaders,
+          body: JSON.stringify({}),
         });
+
+        if (response.status === 405 || response.status === 404) {
+          response = await fetch(client.api_endpoint, {
+            method: "GET",
+            headers: apiHeaders,
+          });
+        }
 
         if (!response.ok) {
           const text = await response.text();
@@ -366,10 +392,18 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
     } else {
       headers[authHeader] = client.api_key;
     }
-    const response = await fetch(client.api_endpoint, {
-      method: "GET",
+    let response = await fetch(client.api_endpoint, {
+      method: "POST",
       headers,
+      body: JSON.stringify({}),
     });
+
+    if (response.status === 405 || response.status === 404) {
+      response = await fetch(client.api_endpoint, {
+        method: "GET",
+        headers,
+      });
+    }
 
     if (!response.ok) {
       const text = await response.text();
