@@ -96,8 +96,9 @@ Deno.serve(async (req) => {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?tenant=${tenantId}&source=uazapi`;
       const webhookBody = {
-        webhook_url: webhookUrl,
+        url: webhookUrl,
         enabled: true,
+        events: ['messages', 'connection'],
       };
       console.log("Configuring webhook separately via POST /webhook:", JSON.stringify(webhookBody));
       try {
