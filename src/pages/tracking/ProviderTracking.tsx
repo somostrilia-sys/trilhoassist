@@ -84,8 +84,29 @@ export default function ProviderTracking() {
     load();
   }, [token]);
 
+  const lastSentPos = useRef<{ lat: number; lng: number } | null>(null);
+  const MIN_SEND_ACCURACY = 100; // Only send positions with accuracy <= 100m
+  const MIN_MOVE_METERS = 10; // Only send if moved at least 10m from last sent position
+
   const sendPosition = useCallback(async (pos: GeolocationPosition) => {
     if (!dispatch || !request) return;
+    
+    // Skip positions with poor accuracy
+    const accuracy = pos.coords.accuracy;
+    if (accuracy && accuracy > MIN_SEND_ACCURACY) {
+      console.log(`GPS accuracy too poor (${accuracy.toFixed(0)}m), skipping send`);
+      return;
+    }
+
+    // Skip if hasn't moved enough from last sent position
+    if (lastSentPos.current) {
+      const moved = haversineDistance(
+        lastSentPos.current.lat, lastSentPos.current.lng,
+        pos.coords.latitude, pos.coords.longitude
+      );
+      if (moved < MIN_MOVE_METERS) return;
+    }
+
     const payload = {
       dispatch_id: dispatch.id,
       latitude: pos.coords.latitude,
@@ -102,6 +123,7 @@ export default function ProviderTracking() {
       event: "location",
       payload: { lat: pos.coords.latitude, lng: pos.coords.longitude, ts: Date.now() },
     });
+    lastSentPos.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     setLastSent(new Date());
   }, [dispatch, request]);
 
@@ -115,6 +137,9 @@ export default function ProviderTracking() {
 
     watchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
+        // Only accept positions with reasonable accuracy
+        const acc = pos.coords.accuracy;
+        if (acc && acc > MIN_SEND_ACCURACY * 2) return; // ignore very poor readings (>200m)
         latestPos.current = pos;
         setGpsReady(true);
       },
