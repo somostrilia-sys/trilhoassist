@@ -488,48 +488,23 @@ export default function BeneficiaryTracking() {
     }
   }, [providerPos, request?.origin_lat, request?.origin_lng]);
 
-  // ETA estimation via OSRM duration or simple speed
+  // Show manual ETA from dispatch (estimated_arrival_min)
   useEffect(() => {
-    if (!providerPos || !request?.origin_lat || !request?.origin_lng) return;
-    if (etaDebounceRef.current) clearTimeout(etaDebounceRef.current);
-    etaDebounceRef.current = setTimeout(async () => {
-      // Try OSRM for accurate ETA
-      try {
-        const url = `https://router.project-osrm.org/route/v1/driving/${providerPos.lng},${providerPos.lat};${request.origin_lng},${request.origin_lat}?overview=false`;
-        const res = await fetch(url);
-        const data = await res.json();
-        if (data.routes?.[0]?.duration) {
-          const mins = Math.round(data.routes[0].duration / 60);
-          setEtaMinutes(mins);
-          if (mins <= 1) {
-            setEtaText("Chegando...");
-          } else if (mins < 60) {
-            setEtaText(`~${mins} min`);
-          } else {
-            const h = Math.floor(mins / 60);
-            const m = mins % 60;
-            setEtaText(`~${h}h${m > 0 ? ` ${m}min` : ""}`);
-          }
-          return;
-        }
-      } catch {}
-
-      // Fallback: simple speed estimation
-      const dist = haversineDistance(providerPos.lat, providerPos.lng, request.origin_lat, request.origin_lng);
-      const avgSpeedKmH = 40;
-      const etaMin = Math.round((dist / avgSpeedKmH) * 60);
-      setEtaMinutes(etaMin);
-      if (etaMin <= 1) {
-        setEtaText("Chegando...");
-      } else if (etaMin < 60) {
-        setEtaText(`~${etaMin} min`);
-      } else {
-        const h = Math.floor(etaMin / 60);
-        const m = etaMin % 60;
-        setEtaText(`~${h}h${m > 0 ? ` ${m}min` : ""}`);
-      }
-    }, 2000);
-  }, [providerPos, request?.origin_lat, request?.origin_lng]);
+    if (!dispatch?.estimated_arrival_min) {
+      setEtaText(null);
+      setEtaMinutes(null);
+      return;
+    }
+    const mins = dispatch.estimated_arrival_min;
+    setEtaMinutes(mins);
+    if (mins < 60) {
+      setEtaText(`~${mins} min`);
+    } else {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      setEtaText(`~${h}h${m > 0 ? ` ${m}min` : ""}`);
+    }
+  }, [dispatch?.estimated_arrival_min]);
 
   // Set arrived state from dispatch data
   useEffect(() => {
@@ -703,15 +678,15 @@ export default function BeneficiaryTracking() {
                 </div>
               </div>
             )}
-            {etaText && distanceKm !== null && distanceKm > 0.05 && !providerArrived && (
+            {etaText && !providerArrived && (
               <div className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-lg p-3">
                 <div className="bg-primary rounded-full p-2 shrink-0">
-                  <Navigation className="h-5 w-5 text-primary-foreground" />
+                  <Clock className="h-5 w-5 text-primary-foreground" />
                 </div>
                 <div className="flex-1">
                   <p className="text-lg font-bold text-primary">{etaText}</p>
                   <p className="text-xs text-muted-foreground">
-                    {distanceKm < 1 ? `${(distanceKm * 1000).toFixed(0)}m restantes` : `${distanceKm.toFixed(1)}km restantes`}
+                    Previsão de chegada
                   </p>
                 </div>
               </div>

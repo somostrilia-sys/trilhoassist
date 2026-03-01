@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Navigation, ExternalLink, Car, Phone, CheckCircle2, Shield, Loader2 } from "lucide-react";
+import { MapPin, Navigation, ExternalLink, Car, Phone, CheckCircle2, Shield, Loader2, Clock } from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -463,6 +463,25 @@ export default function ProviderNavigation() {
             {gpsError && <p className="text-xs text-destructive">{gpsError}</p>}
           </CardContent>
         </Card>
+
+        {/* Estimated arrival info */}
+        {dispatch?.estimated_arrival_min && (
+          <Card className="border-primary/30">
+            <CardContent className="pt-4 pb-4 flex items-center gap-3">
+              <div className="bg-primary rounded-full p-2 shrink-0">
+                <Clock className="h-5 w-5 text-primary-foreground" />
+              </div>
+              <div>
+                <p className="text-lg font-bold text-primary">
+                  {dispatch.estimated_arrival_min < 60
+                    ? `~${dispatch.estimated_arrival_min} min`
+                    : `~${Math.floor(dispatch.estimated_arrival_min / 60)}h${dispatch.estimated_arrival_min % 60 > 0 ? ` ${dispatch.estimated_arrival_min % 60}min` : ""}`}
+                </p>
+                <p className="text-xs text-muted-foreground">Previsão de chegada informada pela central</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Real-time Map */}
         <Card>
