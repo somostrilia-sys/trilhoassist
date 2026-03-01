@@ -406,28 +406,62 @@ export default function FinancialClosing() {
                     <TableCell>
                       <div className="flex gap-1">
                         <Button size="sm" variant="outline" className="gap-1" onClick={async () => {
-                          // Fetch closing items with extra fields
+                          // Fetch closing items with extra fields including beneficiary_id
                           const { data: items } = await supabase
                             .from("financial_closing_items")
-                            .select("service_request_id, provider_cost, service_requests (protocol, requester_name, vehicle_plate, vehicle_model, service_type, completed_at, origin_address, destination_address, estimated_km)")
+                            .select("service_request_id, provider_cost, service_requests (protocol, requester_name, vehicle_plate, vehicle_model, service_type, completed_at, origin_address, destination_address, estimated_km, beneficiary_id)")
                             .eq("closing_id", closing.id);
+
+                          // Fetch beneficiary cooperativas for grouping
+                          const beneficiaryIds = [...new Set((items || []).map((it: any) => it.service_requests?.beneficiary_id).filter(Boolean))];
+                          const beneficiaryCoopMap: Record<string, string> = {};
+                          if (beneficiaryIds.length > 0) {
+                            const { data: benefs } = await supabase
+                              .from("beneficiaries")
+                              .select("id, cooperativa")
+                              .in("id", beneficiaryIds);
+                            (benefs || []).forEach((b: any) => {
+                              beneficiaryCoopMap[b.id] = b.cooperativa || "Sem Cooperativa";
+                            });
+                          }
+
+                          const mappedItems = (items || []).map((it: any) => ({
+                            protocol: it.service_requests?.protocol || "",
+                            date: it.service_requests?.completed_at ? format(new Date(it.service_requests.completed_at), "dd/MM/yyyy") : "",
+                            requesterName: it.service_requests?.requester_name || "",
+                            vehiclePlate: it.service_requests?.vehicle_plate || "",
+                            vehicleModel: it.service_requests?.vehicle_model || "",
+                            serviceType: SERVICE_TYPE_LABELS[it.service_requests?.service_type] || it.service_requests?.service_type || "",
+                            chargedAmount: Number(it.provider_cost || 0),
+                            originAddress: it.service_requests?.origin_address || "",
+                            destinationAddress: it.service_requests?.destination_address || "",
+                            estimatedKm: it.service_requests?.estimated_km ?? null,
+                            cooperativa: beneficiaryCoopMap[it.service_requests?.beneficiary_id] || "Sem Cooperativa",
+                          }));
+
+                          // Group by cooperativa
+                          const coopGroupMap = new Map<string, { items: typeof mappedItems }>();
+                          mappedItems.forEach((item) => {
+                            const coop = item.cooperativa;
+                            if (!coopGroupMap.has(coop)) coopGroupMap.set(coop, { items: [] });
+                            coopGroupMap.get(coop)!.items.push(item);
+                          });
+
+                          const cooperativaGroups = Array.from(coopGroupMap.entries())
+                            .map(([cooperativa, data]) => ({
+                              cooperativa,
+                              plates: 0,
+                              plateValue: 0,
+                              items: data.items,
+                              totalCharged: data.items.reduce((s, it) => s + it.chargedAmount, 0),
+                            }))
+                            .sort((a, b) => a.cooperativa.localeCompare(b.cooperativa));
+
                           generateFinancialPdf({
                             providerName: closing.providers?.name || "",
                             periodStart: closing.period_start,
                             periodEnd: closing.period_end,
-                            items: (items || []).map((it: any) => ({
-                              protocol: it.service_requests?.protocol || "",
-                              date: it.service_requests?.completed_at ? format(new Date(it.service_requests.completed_at), "dd/MM/yyyy") : "",
-                              requesterName: it.service_requests?.requester_name || "",
-                              vehiclePlate: it.service_requests?.vehicle_plate || "",
-                              vehicleModel: it.service_requests?.vehicle_model || "",
-                              serviceType: SERVICE_TYPE_LABELS[it.service_requests?.service_type] || it.service_requests?.service_type || "",
-                              chargedAmount: Number(it.provider_cost || 0),
-                              originAddress: it.service_requests?.origin_address || "",
-                              destinationAddress: it.service_requests?.destination_address || "",
-                              estimatedKm: it.service_requests?.estimated_km ?? null,
-                              cooperativa: "",
-                            })),
+                            items: mappedItems,
                             totalServices: closing.total_services,
                             totalCharged: Number(closing.total_provider_cost),
                             totalProviderCost: Number(closing.total_provider_cost),
@@ -435,6 +469,7 @@ export default function FinancialClosing() {
                             clientName: closing.providers?.name || "",
                             notes: closing.notes || undefined,
                             type: "closing",
+                            cooperativaGroups: cooperativaGroups.length > 1 ? cooperativaGroups : undefined,
                           });
                         }}>
                           <Download className="h-3 w-3" /> PDF

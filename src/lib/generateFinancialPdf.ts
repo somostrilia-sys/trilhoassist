@@ -115,7 +115,7 @@ export function generateFinancialPdf(data: InvoicePdfData) {
   const entityLabel = isInvoice ? "Cliente" : "Prestador";
 
   // For invoices with cooperativa groups, render grouped view
-  const hasCooperativaGroups = isInvoice && data.cooperativaGroups && data.cooperativaGroups.length > 0;
+  const hasCooperativaGroups = data.cooperativaGroups && data.cooperativaGroups.length > 0;
 
   let servicesSection = "";
 
