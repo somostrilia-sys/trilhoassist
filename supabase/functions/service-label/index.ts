@@ -305,16 +305,16 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims(token);
-    if (claimsErr || !claimsData?.claims) {
+    const { data: userData, error: userErr } = await supabase.auth.getUser();
+    if (userErr || !userData?.user) {
+      console.error("Auth error:", userErr?.message);
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const userId = claimsData.claims.sub;
+    const userId = userData.user.id;
 
     const { service_request_id, trigger, cancel_reason, provider_id, quoted_amount } = await req.json();
 
@@ -402,11 +402,15 @@ Deno.serve(async (req) => {
     if (sr.origin_lat && sr.origin_lng) {
       const provLat = providerData?.latitude || null;
       const provLng = providerData?.longitude || null;
+      console.log(`Route calc: origin=(${sr.origin_lat},${sr.origin_lng}), dest=(${sr.destination_lat},${sr.destination_lng}), provider=(${provLat},${provLng})`);
       route = await calculateFullRoute(
         sr.origin_lat, sr.origin_lng,
         sr.destination_lat, sr.destination_lng,
         provLat, provLng
       );
+      console.log(`Route result: ${route ? `${route.totalKm.toFixed(1)}km` : "null"}`);
+    } else {
+      console.log(`No origin coordinates: origin_lat=${sr.origin_lat}, origin_lng=${sr.origin_lng}`);
     }
 
     switch (trigger) {
