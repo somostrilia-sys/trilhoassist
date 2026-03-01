@@ -781,6 +781,7 @@ export type Database = {
           active: boolean
           client_id: string
           created_at: string
+          erp_code: string | null
           id: string
           max_dispatches_per_year: number | null
           max_tow_km: number | null
@@ -793,6 +794,7 @@ export type Database = {
           active?: boolean
           client_id: string
           created_at?: string
+          erp_code?: string | null
           id?: string
           max_dispatches_per_year?: number | null
           max_tow_km?: number | null
@@ -805,6 +807,7 @@ export type Database = {
           active?: boolean
           client_id?: string
           created_at?: string
+          erp_code?: string | null
           id?: string
           max_dispatches_per_year?: number | null
           max_tow_km?: number | null

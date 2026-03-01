@@ -179,6 +179,7 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
   const [importing, setImporting] = useState(false);
   const [erpFields, setErpFields] = useState<any>(null);
   const [fetchingFields, setFetchingFields] = useState(false);
+  const [autoMapping, setAutoMapping] = useState(false);
 
   const { data: clients = [] } = useQuery({
     queryKey: ["clients-with-api", tenantId],
@@ -260,6 +261,25 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
       toast({ title: "Erro ao buscar campos", description: err.message, variant: "destructive" });
     } finally {
       setFetchingFields(false);
+    }
+  };
+
+  const handleAutoMapProducts = async () => {
+    setAutoMapping(true);
+    try {
+      const result = await callErpFunction("auto_map_products");
+      queryClient.invalidateQueries({ queryKey: ["erp-mappings"] });
+      queryClient.invalidateQueries({ queryKey: ["plans-for-mapping"] });
+      toast({
+        title: "Mapeamento automático concluído",
+        description: `${result.products_found} produtos encontrados, ${result.plans_created} planos criados, ${result.mappings_created} mapeamentos conectados`,
+      });
+      // Refresh fields
+      handleFetchFields();
+    } catch (err: any) {
+      toast({ title: "Erro no mapeamento automático", description: err.message, variant: "destructive" });
+    } finally {
+      setAutoMapping(false);
     }
   };
 
@@ -404,10 +424,21 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
                 <CardDescription>Associe os valores do ERP aos equivalentes no sistema</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Button onClick={handleFetchFields} disabled={fetchingFields} variant="outline">
-                  <RefreshCw className={`h-4 w-4 mr-2 ${fetchingFields ? "animate-spin" : ""}`} />
-                  {fetchingFields ? "Buscando..." : "Buscar campos do ERP"}
-                </Button>
+                <div className="flex gap-3">
+                  <Button onClick={handleFetchFields} disabled={fetchingFields} variant="outline">
+                    <RefreshCw className={`h-4 w-4 mr-2 ${fetchingFields ? "animate-spin" : ""}`} />
+                    {fetchingFields ? "Buscando..." : "Buscar campos do ERP"}
+                  </Button>
+                  <Button onClick={handleAutoMapProducts} disabled={autoMapping}>
+                    <Link2 className={`h-4 w-4 mr-2 ${autoMapping ? "animate-spin" : ""}`} />
+                    {autoMapping ? "Mapeando..." : "Auto-mapear por código"}
+                  </Button>
+                </div>
+                <div className="rounded-lg border p-3 bg-muted/20">
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium">Auto-mapear:</span> Busca os códigos dos produtos no ERP, cria os planos automaticamente no sistema e conecta todos por código. Ideal para primeira configuração.
+                  </p>
+                </div>
                 {erpFields && (
                   <div className="space-y-6">
                     {erpFields.plans?.length > 0 && (
