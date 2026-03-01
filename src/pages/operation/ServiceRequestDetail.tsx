@@ -467,12 +467,18 @@ export default function ServiceRequestDetail() {
 
   const handleDispatch = async () => {
     if (dispatchMode === "existing" && !selectedProviderId) return;
-    if (dispatchMode === "quick" && (!quickProvider.name.trim() || !quickProvider.phone.trim())) {
-      toast.error("Preencha os campos obrigatórios", { description: "Razão Social e Telefone são obrigatórios para cadastro rápido." });
+    if (dispatchMode === "quick" && (!quickProvider.name.trim() || !quickProvider.phone.trim() || !unmask(quickProvider.document).trim())) {
+      toast.error("Preencha os campos obrigatórios", { description: "Razão Social, CPF/CNPJ e Telefone são obrigatórios para cadastro rápido." });
       return;
     }
     if (!quotedAmount || !chargedAmount || !paymentMethod) {
       toast.error("Preencha os valores obrigatórios", { description: "Valor cobrado do cliente e forma de pagamento são obrigatórios." });
+      return;
+    }
+    const hasEstimatedArrival = !!estimatedArrival;
+    const hasScheduledArrival = !!arrivalDate && !!arrivalTime;
+    if (!hasEstimatedArrival && !hasScheduledArrival) {
+      toast.error("Preencha a previsão de chegada", { description: "Informe a previsão em minutos OU agende uma data e horário." });
       return;
     }
     setActionLoading(true);
@@ -1931,7 +1937,7 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <Label>CPF ou CNPJ</Label>
+                    <Label>CPF ou CNPJ *</Label>
                     <Input
                       placeholder="000.000.000-00"
                       value={quickProvider.document}
