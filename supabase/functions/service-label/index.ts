@@ -170,12 +170,14 @@ function buildRouteSection(route: RouteBreakdown | null, kmMargin: number, estim
 
 function buildCreationLabel(sr: any, client: any, beneficiary: any, tenant: any, operator: any, route: RouteBreakdown | null, kmMargin: number): string {
   const benName = beneficiary?.name || sr.requester_name;
+  const benPhone = beneficiary?.phone || sr.requester_phone || "";
   const baseUrl = "https://trilhoassist.com.br";
   const trackingLink = sr.beneficiary_token ? `${baseUrl}/tracking/${sr.beneficiary_token}` : "";
 
   return `*ATENDIMENTO*
 
 *BENEFICIÁRIO*: ${benName.toUpperCase()}
+*TELEFONE ASSOCIADO*: ${benPhone}
 *SOLICITANTE*: ${sr.requester_name.toUpperCase()}
 *CONTATO SOLICITANTE*: ${sr.requester_phone}${sr.requester_phone_secondary ? `\n*CONTATO 2*: ${sr.requester_phone_secondary}` : ""}
 *VEÍCULO*: ${(sr.vehicle_model || "").toUpperCase()} (${(sr.vehicle_plate || "").toUpperCase()})
@@ -388,7 +390,7 @@ Deno.serve(async (req) => {
     if (sr.beneficiary_id) {
       const { data: ben } = await adminSupabase
         .from("beneficiaries")
-        .select("name")
+        .select("name, phone")
         .eq("id", sr.beneficiary_id)
         .single();
       beneficiary = ben;
