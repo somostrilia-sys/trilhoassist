@@ -9,6 +9,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { ProviderLayout } from "@/components/ProviderLayout";
 import { ClientLayout } from "@/components/ClientLayout";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import ServiceRequests from "./pages/operation/ServiceRequests";
 import NewServiceRequest from "./pages/operation/NewServiceRequest";
@@ -84,6 +85,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/cadastro/prestador/:tenantSlug" element={<RegisterProvider />} />
             <Route path="/nav/:dispatchId" element={<ProviderNavigation />} />
             <Route path="/collision/:token" element={<CollisionPublicView />} />
