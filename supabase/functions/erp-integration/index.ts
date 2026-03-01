@@ -188,11 +188,22 @@ Deno.serve(async (req) => {
     // ─── ACTION: TEST CONNECTION ───
     if (action === "test") {
       try {
+        // Use pagination params like import does - Hinova rejects empty body with 406
         let response = await fetch(client.api_endpoint, {
           method: "POST",
           headers: apiHeaders,
-          body: JSON.stringify({}),
+          body: JSON.stringify({ pagina: 1, quantidade: 5 }),
         });
+
+        // Fallback: POST with empty body
+        if (!response.ok) {
+          await response.text();
+          response = await fetch(client.api_endpoint, {
+            method: "POST",
+            headers: apiHeaders,
+            body: JSON.stringify({}),
+          });
+        }
 
         if (!response.ok) {
           await response.text();
