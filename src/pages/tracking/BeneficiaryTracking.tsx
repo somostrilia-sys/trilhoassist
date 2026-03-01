@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Loader2, AlertCircle, Clock, Bell, CheckCircle2, Navigation, ShieldCheck } from "lucide-react";
+import { MapPin, Loader2, AlertCircle, Clock, Bell, CheckCircle2, Navigation, ShieldCheck, Truck, Search } from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -318,9 +318,25 @@ export default function BeneficiaryTracking() {
     const vehicleEmoji = isMoto ? "🏍️" : "🚗";
 
     const providerIcon = L.divIcon({
-      html: `<div style="font-size:28px;line-height:1;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.4));transition:transform 0.3s ease">${vehicleEmoji}</div>`,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16],
+      html: `<div style="
+        width: 40px; height: 40px; 
+        background: hsl(218, 58%, 26%); 
+        border-radius: 50%; 
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+        border: 3px solid white;
+        animation: provider-pulse 2s ease-in-out infinite;
+      ">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
+          <path d="M15 18H9"/>
+          <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/>
+          <circle cx="17" cy="18" r="2"/>
+          <circle cx="7" cy="18" r="2"/>
+        </svg>
+      </div>`,
+      iconSize: [40, 40],
+      iconAnchor: [20, 20],
       className: "",
     });
 
@@ -486,23 +502,31 @@ export default function BeneficiaryTracking() {
           from { transform: translateY(-20px); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
         }
+        @keyframes provider-pulse {
+          0%, 100% { box-shadow: 0 4px 14px rgba(0,0,0,0.35); }
+          50% { box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 0 8px rgba(30,64,120,0.15); }
+        }
+        @keyframes float-dots {
+          0%, 80%, 100% { opacity: 0; transform: translateY(0); }
+          40% { opacity: 1; transform: translateY(-4px); }
+        }
         .arrival-alert {
           animation: slide-in 0.5s ease-out;
         }
       `}</style>
 
       {/* Header */}
-      <div className="bg-primary text-primary-foreground p-4 shadow-md">
+      <div className="bg-primary text-primary-foreground p-4 shadow-lg">
         <div className="max-w-lg mx-auto flex items-center gap-3">
-          <img src={logoTrilho} alt="Logo" className="h-8 w-8 rounded" />
+          <img src={logoTrilho} alt="Logo" className="h-10 w-10 rounded-lg shadow" />
           <div className="flex-1">
-            <h1 className="text-lg font-bold">Acompanhamento</h1>
-            <p className="text-xs opacity-80">{request?.protocol}</p>
+            <h1 className="text-lg font-bold tracking-tight">Acompanhamento em Tempo Real</h1>
+            <p className="text-xs opacity-80">Protocolo: {request?.protocol}</p>
           </div>
           {providerPos && !providerArrived && (
-            <div className="flex items-center gap-1.5 bg-primary-foreground/20 rounded-full px-3 py-1">
+            <div className="flex items-center gap-1.5 bg-primary-foreground/20 rounded-full px-3 py-1.5 backdrop-blur-sm">
               <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <span className="text-xs font-medium">Ao vivo</span>
+              <span className="text-xs font-semibold">AO VIVO</span>
             </div>
           )}
         </div>
@@ -547,16 +571,36 @@ export default function BeneficiaryTracking() {
         {/* Provider arrived alert */}
         {providerArrived && !isCompleted && (
           <Card className="border-green-500 border-2 bg-green-50 dark:bg-green-950/30 arrival-alert">
-            <CardContent className="pt-4 flex items-center gap-3">
-              <div className="bg-green-500 text-white rounded-full p-2">
-                <CheckCircle2 className="h-6 w-6" />
+            <CardContent className="pt-5 pb-5 flex items-center gap-4">
+              <div className="bg-green-500 text-white rounded-full p-3 shrink-0">
+                <CheckCircle2 className="h-7 w-7" />
               </div>
               <div>
-                <p className="font-bold text-green-700 dark:text-green-400 text-sm">
-                  O prestador chegou ao local!
+                <p className="font-bold text-green-700 dark:text-green-400 text-base">
+                  O prestador chegou ao local! 🎉
                 </p>
-                <p className="text-xs text-green-600 dark:text-green-500">
-                  {providerName} está no ponto de atendimento
+                <p className="text-sm text-green-600 dark:text-green-500 mt-0.5">
+                  <strong>{providerName}</strong> está no ponto de atendimento
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Searching for provider - no dispatch yet */}
+        {!dispatch && !isCompleted && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="pt-6 pb-6 flex flex-col items-center text-center gap-4">
+              <div className="bg-primary/10 rounded-full p-4">
+                <Search className="h-8 w-8 text-primary animate-pulse" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-lg font-bold">Estamos localizando o prestador mais próximo</h2>
+                <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
+                  Nosso time já está buscando o melhor prestador para atender você. Assim que ele for acionado, você poderá acompanhar a chegada <strong>em tempo real</strong> nesta tela.
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Fique tranquilo, iremos notificá-lo quando o prestador estiver a caminho.
                 </p>
               </div>
             </CardContent>
@@ -569,21 +613,27 @@ export default function BeneficiaryTracking() {
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="secondary">{serviceTypeMap[request?.service_type] || request?.service_type}</Badge>
               {request?.vehicle_plate && <Badge variant="outline">{request.vehicle_plate}</Badge>}
+              {request?.vehicle_model && <span className="text-xs text-muted-foreground">{request.vehicle_model}</span>}
               {isCompleted && <Badge className="bg-green-500 text-white">Concluído</Badge>}
             </div>
-            {providerName && (
-              <p className="text-sm">
-                <span className="text-muted-foreground">Prestador:</span>{" "}
-                <span className="font-medium">{providerName}</span>
-              </p>
-            )}
-            {etaText && distanceKm !== null && distanceKm > 0.05 && !providerArrived && (
-              <div className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
-                <div className="bg-primary/10 rounded-full p-2">
-                  <Navigation className="h-5 w-5 text-primary" />
+            {providerName && dispatch && (
+              <div className="flex items-center gap-3 bg-muted/30 rounded-lg p-3">
+                <div className="bg-primary rounded-full p-2 shrink-0">
+                  <Truck className="h-4 w-4 text-primary-foreground" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-primary">{etaText}</p>
+                  <p className="text-sm font-semibold">{providerName}</p>
+                  <p className="text-xs text-muted-foreground">Prestador a caminho</p>
+                </div>
+              </div>
+            )}
+            {etaText && distanceKm !== null && distanceKm > 0.05 && !providerArrived && (
+              <div className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-lg p-3">
+                <div className="bg-primary rounded-full p-2 shrink-0">
+                  <Navigation className="h-5 w-5 text-primary-foreground" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-lg font-bold text-primary">{etaText}</p>
                   <p className="text-xs text-muted-foreground">
                     {distanceKm < 1 ? `${(distanceKm * 1000).toFixed(0)}m restantes` : `${distanceKm.toFixed(1)}km restantes`}
                   </p>
@@ -595,13 +645,13 @@ export default function BeneficiaryTracking() {
 
         {/* Nearby alert */}
         {isNearby && !providerArrived && (
-          <Card className="border-primary bg-primary/10">
-            <CardContent className="pt-4 flex items-center gap-3">
+          <Card className="border-primary border-2 bg-primary/10 arrival-alert">
+            <CardContent className="pt-4 pb-4 flex items-center gap-3">
               <Bell className="h-6 w-6 text-primary animate-bounce" />
               <div>
                 <p className="font-bold text-primary text-sm">Prestador muito próximo!</p>
                 <p className="text-xs text-muted-foreground">
-                  {distanceKm !== null && `A ${(distanceKm * 1000).toFixed(0)}m de distância`}
+                  {distanceKm !== null && `A apenas ${(distanceKm * 1000).toFixed(0)}m de distância`}
                 </p>
               </div>
             </CardContent>
@@ -611,22 +661,27 @@ export default function BeneficiaryTracking() {
         {/* Waiting for location warning */}
         {waitingLocation && !providerPos && dispatch && (
           <Card className="border-amber-500 bg-amber-50 dark:bg-amber-950/20">
-            <CardContent className="pt-4 flex items-center gap-3">
+            <CardContent className="pt-4 pb-4 flex items-center gap-3">
               <Clock className="h-5 w-5 text-amber-600" />
-              <p className="text-sm text-amber-700 dark:text-amber-400">
-                Aguardando localização do prestador...
-              </p>
+              <div>
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                  Aguardando localização do prestador...
+                </p>
+                <p className="text-xs text-amber-600/70 dark:text-amber-500/70">
+                  O GPS do prestador será ativado em breve
+                </p>
+              </div>
             </CardContent>
           </Card>
         )}
 
         {/* Map */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden shadow-md">
           <CardContent className="p-0">
             <div className="px-4 pt-4 pb-2 flex items-center justify-between">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-primary" />
-                {providerArrived ? "Prestador no local" : "Localização em tempo real"}
+                {providerArrived ? "Prestador no local" : providerPos ? "Acompanhe em tempo real" : "Mapa do atendimento"}
               </h3>
               <div className="flex items-center gap-2">
                 {distanceKm !== null && !providerArrived && (
@@ -643,30 +698,26 @@ export default function BeneficiaryTracking() {
               </div>
             </div>
 
-            {!providerPos && !dispatch && (
-              <p className="text-sm text-muted-foreground px-4 pb-3">Nenhum prestador acionado ainda.</p>
-            )}
-
             {!providerPos && dispatch && !waitingLocation && (
               <div className="flex items-center gap-2 px-4 pb-3">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Aguardando localização do prestador...</p>
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Conectando ao GPS do prestador...</p>
               </div>
             )}
 
             <div
               ref={mapRef}
               className="w-full"
-              style={{ height: 380 }}
+              style={{ height: 400 }}
             />
 
             {/* Map legend */}
-            <div className="px-4 py-3 flex items-center gap-4 text-xs text-muted-foreground border-t">
+            <div className="px-4 py-3 flex items-center gap-4 text-xs text-muted-foreground border-t bg-muted/30">
               {providerPos && (
                 <span className="flex items-center gap-1.5">
-                  <span className="text-lg">
-                    {request?.service_type === "tow_motorcycle" || request?.vehicle_category === "motorcycle" ? "🏍️" : "🚗"}
-                  </span>
+                  <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+                    <Truck className="h-2.5 w-2.5 text-primary-foreground" />
+                  </div>
                   Prestador
                 </span>
               )}
@@ -676,8 +727,8 @@ export default function BeneficiaryTracking() {
               </span>
               {providerPos && (
                 <span className="flex items-center gap-1.5">
-                  <div className="w-4 h-0.5 bg-blue-500" style={{ borderTop: "2px dashed" }} />
-                  Rota
+                  <div className="w-4 h-0.5 border-t-2 border-dashed border-primary/60" />
+                  Rota estimada
                 </span>
               )}
             </div>
@@ -686,15 +737,15 @@ export default function BeneficiaryTracking() {
 
         {/* Beneficiary arrival confirmation */}
         {dispatch && !beneficiaryArrived && !isCompleted && (
-          <Button onClick={handleBeneficiaryArrival} className="w-full gap-2" size="lg">
-            <CheckCircle2 className="h-4 w-4" />
+          <Button onClick={handleBeneficiaryArrival} className="w-full gap-2 shadow-md" size="lg">
+            <CheckCircle2 className="h-5 w-5" />
             Confirmar que o prestador chegou
           </Button>
         )}
         {beneficiaryArrived && (
-          <div className="flex items-center justify-center gap-2 text-sm text-green-600 font-medium py-2">
+          <div className="flex items-center justify-center gap-2 text-sm text-green-600 font-medium py-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
             <CheckCircle2 className="h-5 w-5" />
-            Chegada do prestador confirmada
+            Chegada do prestador confirmada ✓
           </div>
         )}
           </>
