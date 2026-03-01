@@ -30,6 +30,7 @@ import TruckVerification, { defaultTruckVerification } from "@/components/servic
 import CollisionMediaUpload from "@/components/collision/CollisionMediaUpload";
 import AddressAutocomplete from "@/components/service-request/AddressAutocomplete";
 import RouteDistanceDisplay from "@/components/service-request/RouteDistanceDisplay";
+import { classifyVehicle, getCompatiblePlanCategories, PLAN_VEHICLE_CATEGORY_LABELS } from "@/lib/vehicleClassification";
 
 type VehicleCategory = "car" | "motorcycle" | "truck";
 type AttendanceType = "pane" | "collision";
@@ -704,9 +705,14 @@ export default function NewServiceRequest() {
                     </div>
                     <p className="text-green-700">{beneficiaryFound.name}{beneficiaryFound.cpf ? ` — CPF: ${beneficiaryFound.cpf}` : ""}</p>
                     {beneficiaryFound.client_name && (
-                      <div className="flex gap-2 flex-wrap">
+                     <div className="flex gap-2 flex-wrap">
                         <Badge variant="secondary" className="text-xs">{beneficiaryFound.client_name}</Badge>
                         {beneficiaryFound.plan_name && <Badge variant="outline" className="text-xs">{beneficiaryFound.plan_name}</Badge>}
+                        {form.vehicle_model && (
+                          <Badge variant="outline" className="text-xs bg-blue-50 border-blue-200 text-blue-700">
+                            {PLAN_VEHICLE_CATEGORY_LABELS[classifyVehicle(form.vehicle_model, vehicleCategory)] || "Automóvel"}
+                          </Badge>
+                        )}
                       </div>
                     )}
                   </div>

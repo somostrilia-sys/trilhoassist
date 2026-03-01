@@ -1,0 +1,1 @@
+ALTER TABLE public.plans ADD COLUMN vehicle_category text DEFAULT 'all';

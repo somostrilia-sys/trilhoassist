@@ -787,6 +787,7 @@ export type Database = {
           name: string
           plate_fee: number | null
           services: Json | null
+          vehicle_category: string | null
         }
         Insert: {
           active?: boolean
@@ -798,6 +799,7 @@ export type Database = {
           name: string
           plate_fee?: number | null
           services?: Json | null
+          vehicle_category?: string | null
         }
         Update: {
           active?: boolean
@@ -809,6 +811,7 @@ export type Database = {
           name?: string
           plate_fee?: number | null
           services?: Json | null
+          vehicle_category?: string | null
         }
         Relationships: [
           {
