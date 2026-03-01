@@ -163,9 +163,20 @@ export default function DispatchPanel() {
       const alertDispatch = noDispatch && elapsedSinceCreation >= effectiveAlertMin;
 
       // Alert: provider late (accepted but ETA exceeded)
-      const alertLate = disp?.status === "accepted" && disp.estimated_arrival_min
-        ? (elapsedSinceDispatch ?? 0) >= (disp.estimated_arrival_min + alertLateMin)
-        : false;
+      // For scheduled dispatches, only alert after the scheduled arrival time + tolerance
+      let alertLate = false;
+      if (disp?.status === "accepted") {
+        if (disp.scheduled_arrival_date) {
+          // Scheduled dispatch: alert only after scheduled time has passed + tolerance
+          const scheduledStr = disp.scheduled_arrival_date + "T" + (disp.scheduled_arrival_time || "00:00") + ":00";
+          const scheduledTime = new Date(scheduledStr).getTime();
+          const now = Date.now();
+          alertLate = now > scheduledTime + alertLateMin * 60000;
+        } else if (disp.estimated_arrival_min) {
+          // Immediate dispatch: alert after ETA exceeded
+          alertLate = (elapsedSinceDispatch ?? 0) >= (disp.estimated_arrival_min + alertLateMin);
+        }
+      }
 
       return { request: r, dispatch: disp, elapsedSinceCreation, elapsedSinceDispatch, alertDispatch, alertLate };
     }).sort((a, b) => {
