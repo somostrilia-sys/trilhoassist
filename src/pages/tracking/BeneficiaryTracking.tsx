@@ -268,8 +268,8 @@ export default function BeneficiaryTracking() {
   // Force map key to re-render after SPA redirect
   const [mapReady, setMapReady] = useState(false);
   useEffect(() => {
-    // Small delay to ensure DOM is fully settled after SPA redirect
-    const timer = setTimeout(() => setMapReady(true), 100);
+    // Longer delay to ensure DOM is fully settled after SPA redirect on custom domains
+    const timer = setTimeout(() => setMapReady(true), 300);
     return () => clearTimeout(timer);
   }, []);
 
@@ -278,52 +278,77 @@ export default function BeneficiaryTracking() {
     if (!mapReady || !mapRef.current || mapInstanceRef.current) return;
     if (!request) return;
 
+    // Ensure container has dimensions before initializing
+    const container = mapRef.current;
+    if (container.clientWidth === 0 || container.clientHeight === 0) {
+      // Retry after a short delay if container has no dimensions yet
+      const retryTimer = setTimeout(() => {
+        setMapReady(false);
+        setTimeout(() => setMapReady(true), 100);
+      }, 200);
+      return () => clearTimeout(retryTimer);
+    }
+
     const centerLat = request.origin_lat || -15.79;
     const centerLng = request.origin_lng || -47.88;
     const zoom = request.origin_lat ? 14 : 5;
 
-    const map = L.map(mapRef.current, {
-      zoomControl: false,
-    }).setView([centerLat, centerLng], zoom);
+    try {
+      const map = L.map(container, {
+        zoomControl: false,
+      }).setView([centerLat, centerLng], zoom);
 
-    L.control.zoom({ position: "bottomright" }).addTo(map);
+      L.control.zoom({ position: "bottomright" }).addTo(map);
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap",
-    }).addTo(map);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap",
+        maxZoom: 19,
+      }).addTo(map);
 
-    if (request.origin_lat && request.origin_lng) {
-      const originIcon = L.divIcon({
-        html: `<div style="position:relative">
-          <div style="width:18px;height:18px;border-radius:50%;background:hsl(var(--primary));border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)"></div>
-          <div style="position:absolute;top:-2px;left:-2px;width:22px;height:22px;border-radius:50%;border:2px solid hsl(var(--primary));opacity:0.4;animation:pulse-ring 2s ease-out infinite"></div>
-        </div>`,
-        iconSize: [22, 22],
-        iconAnchor: [11, 11],
-        className: "",
+      if (request.origin_lat && request.origin_lng) {
+        const originIcon = L.divIcon({
+          html: `<div style="position:relative">
+            <div style="width:18px;height:18px;border-radius:50%;background:hsl(var(--primary));border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)"></div>
+            <div style="position:absolute;top:-2px;left:-2px;width:22px;height:22px;border-radius:50%;border:2px solid hsl(var(--primary));opacity:0.4;animation:pulse-ring 2s ease-out infinite"></div>
+          </div>`,
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+          className: "",
+        });
+        originMarkerRef.current = L.marker([request.origin_lat, request.origin_lng], { icon: originIcon })
+          .addTo(map)
+          .bindPopup(`<b>📍 Localização do veículo</b><br/>${request.origin_address || ""}`);
+      }
+
+      mapInstanceRef.current = map;
+
+      // Multiple invalidateSize calls to handle various timing scenarios
+      [0, 100, 300, 500, 1000, 2000].forEach(delay => {
+        setTimeout(() => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.invalidateSize();
+          }
+        }, delay);
       });
-      originMarkerRef.current = L.marker([request.origin_lat, request.origin_lng], { icon: originIcon })
-        .addTo(map)
-        .bindPopup(`<b>📍 Localização do veículo</b><br/>${request.origin_address || ""}`);
-    }
 
-    mapInstanceRef.current = map;
-
-    // Multiple invalidateSize calls to handle various timing scenarios
-    [100, 300, 500, 1000].forEach(delay => {
-      setTimeout(() => {
+      // Also use ResizeObserver for robust handling
+      const ro = new ResizeObserver(() => {
         if (mapInstanceRef.current) {
           mapInstanceRef.current.invalidateSize();
         }
-      }, delay);
-    });
+      });
+      ro.observe(container);
 
-    return () => {
-      map.remove();
-      mapInstanceRef.current = null;
-      providerMarkerRef.current = null;
-      routePolylineRef.current = null;
-    };
+      return () => {
+        ro.disconnect();
+        map.remove();
+        mapInstanceRef.current = null;
+        providerMarkerRef.current = null;
+        routePolylineRef.current = null;
+      };
+    } catch (err) {
+      console.error("Map initialization error:", err);
+    }
   }, [request, mapReady]);
 
   // Update provider marker with smooth animation
