@@ -1,5 +1,29 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Auto-standardize cooperativa names from ERP
+// "FILIAL SANTO ANDRÉ" → "Santo André", "OBJETIVO CAPÃO REDONDO" → "Capão Redondo"
+function autoStandardizeCoop(raw: string): string {
+  if (!raw) return raw;
+  let name = raw.trim();
+  // Remove common prefixes (case-insensitive)
+  name = name.replace(/^(FILIAL|OBJETIVO AUTO E TRUCK|OBJETIVO)\s+/i, "").trim();
+  // If still all uppercase, convert to title case
+  if (name === name.toUpperCase() && name.length > 2) {
+    name = name
+      .toLowerCase()
+      .split(/\s+/)
+      .map(w => {
+        // Keep prepositions lowercase
+        if (["de", "do", "da", "dos", "das", "e", "em"].includes(w)) return w;
+        return w.charAt(0).toUpperCase() + w.slice(1);
+      })
+      .join(" ");
+  }
+  // Handle "SãO" → "São" (common OCR/encoding issue)
+  name = name.replace(/ã([A-Z])/g, (_, c) => `ã${c.toLowerCase()}`);
+  return name;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -486,7 +510,7 @@ Deno.serve(async (req) => {
 
           const erpCode = record.codigo_produto || record.cod_produto || record.product_code || record.codigo || "";
           const planId = planMap.get(erpPlan) || (erpCode ? planByCode.get(String(erpCode)) : null) || null;
-          const cooperativa = coopMap.get(erpCoop) || erpCoop;
+          const cooperativa = coopMap.get(erpCoop) || autoStandardizeCoop(erpCoop);
           const parsedYear = vehicleYear ? parseInt(vehicleYear) : null;
 
           // Resolve active status: check manual mapping first, then auto-detect from description
@@ -701,7 +725,7 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
       const erpCode = record.codigo_produto || record.cod_produto || record.product_code || record.codigo || "";
 
       const planId = planMap.get(erpPlan) || (erpCode ? planByCode.get(String(erpCode)) : null) || null;
-      const cooperativa = coopMap.get(erpCoop) || erpCoop;
+      const cooperativa = coopMap.get(erpCoop) || autoStandardizeCoop(erpCoop);
       const parsedYear = vehicleYear ? parseInt(vehicleYear) : null;
 
       const erpSituacao = record.codigo_situacao || record.codigo_situacao_associado || "";
