@@ -413,47 +413,74 @@ Deno.serve(async (req) => {
       }
 
       try {
-        // Fetch data from ERP - POST first, fallback to GET
-        let response = await fetch(client.api_endpoint, {
-          method: "POST",
-          headers: apiHeaders,
-          body: JSON.stringify({}),
-        });
+        // Fetch data from ERP with pagination (Hinova SGA v2 style)
+        let allRecords: any[] = [];
+        let page = 1;
+        const pageSize = 1000;
+        let hasMore = true;
 
-        if (!response.ok) {
-          const firstStatus = response.status;
-          await response.text(); // consume body before retry
-          // Remove Content-Type for GET request
-          const getHeaders = { ...apiHeaders };
-          delete getHeaders["Content-Type"];
-          response = await fetch(client.api_endpoint, {
-            method: "GET",
-            headers: getHeaders,
+        while (hasMore) {
+          const postBody = JSON.stringify({ pagina: page, quantidade: pageSize });
+          let response = await fetch(client.api_endpoint, {
+            method: "POST",
+            headers: apiHeaders,
+            body: postBody,
           });
-          console.log(`POST returned ${firstStatus}, GET fallback returned ${response.status}`);
+
+          // Fallback: try without pagination on first page
+          if (!response.ok && page === 1) {
+            const firstStatus = response.status;
+            await response.text();
+            // Try POST with empty body
+            response = await fetch(client.api_endpoint, {
+              method: "POST",
+              headers: apiHeaders,
+              body: JSON.stringify({}),
+            });
+            if (!response.ok) {
+              await response.text();
+              // Try GET without Content-Type
+              const getHeaders = { ...apiHeaders };
+              delete getHeaders["Content-Type"];
+              response = await fetch(client.api_endpoint, {
+                method: "GET",
+                headers: getHeaders,
+              });
+              console.log(`Paginated POST returned ${firstStatus}, plain POST failed, GET fallback returned ${response.status}`);
+            }
+          }
+
+          if (!response.ok) {
+            if (page === 1) {
+              const text = await response.text();
+              await updateSyncLog(serviceSupabase, syncLog.id, "error", 0, 0, 0, `ERP erro ${response.status}: ${text.substring(0, 200)}`);
+              return jsonResponse({ error: `ERP retornou erro ${response.status}` }, 500);
+            }
+            break; // No more pages
+          }
+
+          const erpData = await response.json();
+          const pageRecords = extractRecords(erpData);
+          console.log(`Page ${page}: ${pageRecords.length} records`);
+
+          if (pageRecords.length === 0) {
+            hasMore = false;
+          } else {
+            allRecords = allRecords.concat(pageRecords);
+            if (pageRecords.length < pageSize) {
+              hasMore = false; // Last page
+            } else {
+              page++;
+            }
+          }
         }
 
-        if (!response.ok) {
-          const text = await response.text();
-          await updateSyncLog(serviceSupabase, syncLog.id, "error", 0, 0, 0, `ERP erro ${response.status}: ${text.substring(0, 200)}`);
-          return jsonResponse({ error: `ERP retornou erro ${response.status}` }, 500);
-        }
-
-        const erpData = await response.json();
-        console.log("Import - ERP response type:", typeof erpData, "isArray:", Array.isArray(erpData));
-        if (typeof erpData === "object" && !Array.isArray(erpData)) {
-          console.log("Import - ERP response keys:", Object.keys(erpData));
-        }
-        const records = extractRecords(erpData);
-        console.log("Import - extracted records count:", records.length);
+        const records = allRecords;
+        console.log("Import - total extracted records:", records.length);
 
         if (records.length === 0) {
-          // Log first-level structure for debugging
-          const debugInfo = Array.isArray(erpData) 
-            ? `Array with ${erpData.length} items` 
-            : `Object with keys: ${Object.keys(erpData).join(", ")}`;
-          await updateSyncLog(serviceSupabase, syncLog.id, "error", 0, 0, 0, `Nenhum registro encontrado. Estrutura: ${debugInfo}`);
-          return jsonResponse({ error: "Nenhum registro encontrado na resposta do ERP", debug: debugInfo }, 400);
+          await updateSyncLog(serviceSupabase, syncLog.id, "error", 0, 0, 0, "Nenhum registro encontrado");
+          return jsonResponse({ error: "Nenhum registro encontrado na resposta do ERP" }, 400);
         }
 
         // Get field mappings for this client
