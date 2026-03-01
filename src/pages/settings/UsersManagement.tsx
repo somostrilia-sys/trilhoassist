@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Search, Shield, Pencil } from "lucide-react";
+import { Plus, Trash2, Search, Shield, Pencil, KeyRound } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -68,6 +68,9 @@ export default function UsersManagement() {
   const [editOpen, setEditOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
   const [editRole, setEditRole] = useState("");
+  const [resetPwOpen, setResetPwOpen] = useState(false);
+  const [resetPwUser, setResetPwUser] = useState<UserItem | null>(null);
+  const [newPassword, setNewPassword] = useState("");
   const [search, setSearch] = useState("");
   const [selectedTenantId, setSelectedTenantId] = useState<string>("all");
   const [newUser, setNewUser] = useState({
@@ -147,10 +150,29 @@ export default function UsersManagement() {
     },
   });
 
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ user_id, new_password }: { user_id: string; new_password: string }) => {
+      const res = await supabase.functions.invoke("admin-users", {
+        body: { action: "reset_password", user_id, new_password },
+      });
+      if (res.error) throw res.error;
+      if (res.data?.error) throw new Error(res.data.error);
+      return res.data;
+    },
+    onSuccess: () => {
+      setResetPwOpen(false);
+      setResetPwUser(null);
+      setNewPassword("");
+      toast({ title: "Senha alterada com sucesso!" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Erro ao resetar senha", description: err.message, variant: "destructive" });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (userId: string) => {
       const { data, error } = await supabase.functions.invoke("admin-users", {
-        method: "POST",
         body: { action: "delete", user_id: userId },
       });
       if (error) {
@@ -332,6 +354,46 @@ export default function UsersManagement() {
         </DialogContent>
       </Dialog>
 
+      {/* Reset Password Dialog */}
+      <Dialog open={resetPwOpen} onOpenChange={(v) => { setResetPwOpen(v); if (!v) { setNewPassword(""); setResetPwUser(null); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Resetar Senha</DialogTitle>
+            <DialogDescription>
+              Definir nova senha para {resetPwUser?.full_name || resetPwUser?.email}
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (resetPwUser) {
+                resetPasswordMutation.mutate({ user_id: resetPwUser.id, new_password: newPassword });
+              }
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label>Nova senha</Label>
+              <Input
+                type="password"
+                placeholder="Mínimo 6 caracteres"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                minLength={6}
+              />
+            </div>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={resetPasswordMutation.isPending || newPassword.length < 6}
+            >
+              {resetPasswordMutation.isPending ? "Alterando..." : "Alterar Senha"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Tenant filter */}
       {isSuperAdmin && tenants.length > 0 && (
         <div className="flex items-center gap-3">
@@ -453,6 +515,14 @@ export default function UsersManagement() {
                           title="Editar perfil"
                         >
                           <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => { setResetPwUser(user); setResetPwOpen(true); }}
+                          title="Resetar senha"
+                        >
+                          <KeyRound className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
