@@ -281,42 +281,8 @@ export default function ProviderTracking() {
     toast.success("Chegada registrada!");
   }, [dispatch]);
 
-  // Auto-detect arrival at origin — requires multiple GPS readings within radius (not necessarily consecutive)
-  useEffect(() => {
-    if (!request?.origin_lat || !request?.origin_lng || !tracking || arrivedOrigin || autoArrivalRef.current) return;
-
-    const checkInterval = setInterval(() => {
-      if (!latestPos.current || autoArrivalRef.current || arrivedOrigin) return;
-      
-      const accuracy = latestPos.current.coords.accuracy;
-      // Skip reading if GPS accuracy is too poor
-      if (accuracy && accuracy > ARRIVAL_MAX_ACCURACY) {
-        return; // Don't reset counter on bad accuracy — just skip
-      }
-
-      const dist = haversineDistance(
-        latestPos.current.coords.latitude,
-        latestPos.current.coords.longitude,
-        request.origin_lat,
-        request.origin_lng
-      );
-      
-      if (dist <= ARRIVAL_RADIUS_METERS) {
-        arrivalConfirmCount.current += 1;
-        // Only mark arrival after enough confirmations
-        if (arrivalConfirmCount.current >= ARRIVAL_CONFIRM_THRESHOLD) {
-          autoArrivalRef.current = true;
-          handleMarkArrival();
-        }
-      } else if (dist > ARRIVAL_RADIUS_METERS * 2) {
-        // Only reset counter if clearly far away (200m+), not on minor GPS bounces
-        arrivalConfirmCount.current = Math.max(0, arrivalConfirmCount.current - 1);
-      }
-      // Between 100m-200m: don't change counter (hysteresis zone)
-    }, 10000);
-
-    return () => clearInterval(checkInterval);
-  }, [request?.origin_lat, request?.origin_lng, tracking, arrivedOrigin, handleMarkArrival]);
+  // Auto-arrival removed — GPS accuracy is unreliable on mobile devices,
+  // causing false arrivals at 6km+ distance. Provider must mark arrival manually.
 
   // Set arrived state from dispatch data
   useEffect(() => {
