@@ -189,15 +189,16 @@ Deno.serve(async (req) => {
     if (action === "test") {
       try {
         let response = await fetch(client.api_endpoint, {
-          method: "POST",
+          method: "GET",
           headers: apiHeaders,
-          body: JSON.stringify({}),
         });
 
-        if (response.status === 405 || response.status === 404 || response.status === 406) {
+        if (!response.ok) {
+          await response.text();
           response = await fetch(client.api_endpoint, {
-            method: "GET",
+            method: "POST",
             headers: apiHeaders,
+            body: JSON.stringify({}),
           });
         }
 
@@ -411,16 +412,19 @@ Deno.serve(async (req) => {
 
       try {
         // Fetch data from ERP
+        // Try GET first (Hinova SGA prefers GET), fallback to POST
         let response = await fetch(client.api_endpoint, {
-          method: "POST",
+          method: "GET",
           headers: apiHeaders,
-          body: JSON.stringify({}),
         });
 
-        if (response.status === 405 || response.status === 404 || response.status === 406) {
+        if (!response.ok) {
+          // Consume body before retrying
+          await response.text();
           response = await fetch(client.api_endpoint, {
-            method: "GET",
+            method: "POST",
             headers: apiHeaders,
+            body: JSON.stringify({}),
           });
         }
 
@@ -660,13 +664,17 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
       headers[authHeader] = client.api_key;
     }
     let response = await fetch(client.api_endpoint, {
-      method: "POST",
+      method: "GET",
       headers,
-      body: JSON.stringify({}),
     });
 
-    if (response.status === 405 || response.status === 404 || response.status === 406) {
-      response = await fetch(client.api_endpoint, { method: "GET", headers });
+    if (!response.ok) {
+      await response.text();
+      response = await fetch(client.api_endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({}),
+      });
     }
 
     if (!response.ok) {
