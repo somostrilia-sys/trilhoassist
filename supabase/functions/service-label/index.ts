@@ -81,6 +81,22 @@ async function calculateFullRoute(
         totalMin: leg1.min + leg2.min + leg3.min,
         description: "Base Prestador → Origem → Destino → Retorno",
       };
+    } else if (providerLat && providerLng && (!destLat || !destLng)) {
+      // Provider but no destination: Base Prestador → Origem → Retorno
+      const [leg1, leg2] = await Promise.all([
+        fetchOSRMRoute(providerLat, providerLng, originLat, originLng),
+        fetchOSRMRoute(originLat, originLng, providerLat, providerLng),
+      ]);
+      if (!leg1 || !leg2) return null;
+      return {
+        legs: [
+          { label: "Base → Origem", km: leg1.km, min: leg1.min },
+          { label: "Origem → Retorno", km: leg2.km, min: leg2.min },
+        ],
+        totalKm: leg1.km + leg2.km,
+        totalMin: leg1.min + leg2.min,
+        description: "Base Prestador → Origem → Retorno",
+      };
     } else if (destLat && destLng) {
       // Without provider: Origem → Destino (ida e volta + 10km margem)
       const [leg1, leg2] = await Promise.all([
@@ -98,6 +114,8 @@ async function calculateFullRoute(
         description: "Origem → Destino → Retorno + 10km margem",
       };
     }
+    // No destination and no provider — no route to calculate
+    console.log("No route: missing destination and provider coordinates");
   } catch (err) {
     console.error("Route calculation error:", err);
   }
@@ -139,8 +157,14 @@ function formatDuration(min: number): string {
   return `${h}h${m > 0 ? `${m}min` : ""}`;
 }
 
-function buildRouteSection(route: RouteBreakdown | null, kmMargin: number): string {
-  if (!route) return "";
+function buildRouteSection(route: RouteBreakdown | null, kmMargin: number, estimatedKm?: number | null): string {
+  if (!route) {
+    // Fallback: show estimated_km from the service request if available
+    if (estimatedKm) {
+      return `\n*ROTEIRIZAÇÃO*\n*KM ESTIMADO*: ${estimatedKm.toFixed(1)} km\n*COM MARGEM (+${kmMargin}km)*: ${(estimatedKm + kmMargin).toFixed(1)} km`;
+    }
+    return "";
+  }
   const lines = ["\n*ROTEIRIZAÇÃO*"];
   for (const leg of route.legs) {
     lines.push(`  • ${leg.label}: ${leg.km.toFixed(1)} km (~${formatDuration(leg.min)})`);
@@ -180,7 +204,7 @@ function buildCreationLabel(sr: any, client: any, beneficiary: any, tenant: any,
 *TIPO DE EVENTO*: ${eventTypeMap[sr.event_type] || sr.event_type}
 *ATENDIMENTO REALIZADO POR*: ${(operator?.full_name || "SISTEMA").toUpperCase()}
 *ASSISTÊNCIA*: ${(tenant?.name || "").toUpperCase()}
-${buildRouteSection(route, kmMargin)}
+${buildRouteSection(route, kmMargin, sr.estimated_km)}
 ${trackingLink ? `\nOlá, segue o link com as informações do serviço: ${trackingLink}` : ""}`;
 }
 
@@ -197,7 +221,7 @@ function buildDispatchPreviewLabel(sr: any, provider: any, quotedAmount: number 
 *CIDADE PRESTADOR*: ${[provider?.city, provider?.state].filter(Boolean).join(" - ").toUpperCase() || "—"}
 
 *VALOR COBRADO*: ${formatCurrency(quotedAmount)}
-${buildRouteSection(route, kmMargin)}`;
+${buildRouteSection(route, kmMargin, sr.estimated_km)}`;
 }
 
 function buildCompletionLabel(sr: any, client: any, provider: any, finalAmount: number | null): string {
