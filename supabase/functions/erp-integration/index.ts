@@ -311,11 +311,22 @@ Deno.serve(async (req) => {
         const planMap = new Map((mappings || []).filter((m: any) => m.field_type === "plan").map((m: any) => [m.erp_value, m.trilho_id]));
         const coopMap = new Map((mappings || []).filter((m: any) => m.field_type === "cooperativa").map((m: any) => [m.erp_value, m.trilho_value]));
 
-        // Fetch all existing beneficiaries for this client in one query
-        const { data: existingBeneficiaries } = await serviceSupabase
-          .from("beneficiaries")
-          .select("id, vehicle_plate")
-          .eq("client_id", client_id);
+        // Fetch ALL existing beneficiaries (paginate to bypass 1000 row limit)
+        let existingBeneficiaries: any[] = [];
+        let from = 0;
+        const PAGE_SIZE = 1000;
+        while (true) {
+          const { data: page } = await serviceSupabase
+            .from("beneficiaries")
+            .select("id, vehicle_plate")
+            .eq("client_id", client_id)
+            .range(from, from + PAGE_SIZE - 1);
+          if (!page || page.length === 0) break;
+          existingBeneficiaries = existingBeneficiaries.concat(page);
+          if (page.length < PAGE_SIZE) break;
+          from += PAGE_SIZE;
+        }
+        console.log("Existing beneficiaries loaded:", existingBeneficiaries.length);
 
         const existingByPlate = new Map(
           (existingBeneficiaries || [])
@@ -372,6 +383,8 @@ Deno.serve(async (req) => {
           }
         }
 
+        console.log(`To insert: ${toInsert.length}, to update: ${toUpdate.length}`);
+
         let created = 0;
         let updated = 0;
 
@@ -381,18 +394,20 @@ Deno.serve(async (req) => {
           const chunk = toInsert.slice(i, i + BATCH_SIZE);
           const { error: insertErr } = await serviceSupabase.from("beneficiaries").insert(chunk);
           if (!insertErr) created += chunk.length;
-          else console.error("Batch insert error:", insertErr.message);
+          else console.error(`Batch insert error (chunk ${i}):`, insertErr.message);
         }
 
-        // Batch update in chunks of 100 (individual upserts are needed for updates by id)
+        // Batch update in chunks of 500
         for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
           const chunk = toUpdate.slice(i, i + BATCH_SIZE);
           const { error: upsertErr } = await serviceSupabase
             .from("beneficiaries")
             .upsert(chunk, { onConflict: "id" });
           if (!upsertErr) updated += chunk.length;
-          else console.error("Batch upsert error:", upsertErr.message);
+          else console.error(`Batch upsert error (chunk ${i}):`, upsertErr.message);
         }
+
+        console.log(`Import complete: ${created} created, ${updated} updated`);
 
         await updateSyncLog(serviceSupabase, syncLog.id, "success", records.length, created, updated, null);
 
