@@ -311,8 +311,20 @@ Deno.serve(async (req) => {
         const planMap = new Map((mappings || []).filter((m: any) => m.field_type === "plan").map((m: any) => [m.erp_value, m.trilho_id]));
         const coopMap = new Map((mappings || []).filter((m: any) => m.field_type === "cooperativa").map((m: any) => [m.erp_value, m.trilho_value]));
 
-        let created = 0;
-        let updated = 0;
+        // Fetch all existing beneficiaries for this client in one query
+        const { data: existingBeneficiaries } = await serviceSupabase
+          .from("beneficiaries")
+          .select("id, vehicle_plate")
+          .eq("client_id", client_id);
+
+        const existingByPlate = new Map(
+          (existingBeneficiaries || [])
+            .filter((b: any) => b.vehicle_plate)
+            .map((b: any) => [b.vehicle_plate, b.id])
+        );
+
+        const toInsert: any[] = [];
+        const toUpdate: any[] = [];
 
         for (const record of records) {
           const plate = record.placa || record.vehicle_plate || record.plate || "";
@@ -325,49 +337,61 @@ Deno.serve(async (req) => {
           const erpPlan = record.plano || record.plan || record.plan_name || record.descricao_produto || "";
           const erpCoop = record.nome_cooperativa || record.cooperativa || record.coop || record.cooperative || record.descricao_cooperativa || "";
 
-          if (!name && !plate) continue; // skip empty records
+          if (!name && !plate) continue;
 
           const planId = planMap.get(erpPlan) || null;
           const cooperativa = coopMap.get(erpCoop) || erpCoop;
+          const parsedYear = vehicleYear ? parseInt(vehicleYear) : null;
 
-          // Check if beneficiary already exists by plate
-          const { data: existing } = await supabase
-            .from("beneficiaries")
-            .select("id")
-            .eq("client_id", client_id)
-            .eq("vehicle_plate", plate)
-            .maybeSingle();
-
-          if (existing) {
-            await supabase
-              .from("beneficiaries")
-              .update({
-                name,
-                phone: phone || undefined,
-                cpf: cpf || undefined,
-                vehicle_model: vehicleModel || undefined,
-                vehicle_year: vehicleYear ? parseInt(vehicleYear) : undefined,
-                vehicle_chassis: vehicleChassis || undefined,
-                plan_id: planId || undefined,
-                cooperativa: cooperativa || undefined,
-              })
-              .eq("id", existing.id);
-            updated++;
+          const existingId = existingByPlate.get(plate);
+          if (existingId) {
+            toUpdate.push({
+              id: existingId,
+              name,
+              phone: phone || null,
+              cpf: cpf || null,
+              vehicle_model: vehicleModel || null,
+              vehicle_year: parsedYear,
+              vehicle_chassis: vehicleChassis || null,
+              plan_id: planId,
+              cooperativa: cooperativa || null,
+            });
           } else {
-            await supabase.from("beneficiaries").insert({
+            toInsert.push({
               client_id,
               name,
               vehicle_plate: plate,
               phone: phone || null,
               cpf: cpf || null,
               vehicle_model: vehicleModel || null,
-              vehicle_year: vehicleYear ? parseInt(vehicleYear) : null,
+              vehicle_year: parsedYear,
               vehicle_chassis: vehicleChassis || null,
               plan_id: planId,
               cooperativa: cooperativa || null,
             });
-            created++;
           }
+        }
+
+        let created = 0;
+        let updated = 0;
+
+        // Batch insert in chunks of 500
+        const BATCH_SIZE = 500;
+        for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+          const chunk = toInsert.slice(i, i + BATCH_SIZE);
+          const { error: insertErr } = await serviceSupabase.from("beneficiaries").insert(chunk);
+          if (!insertErr) created += chunk.length;
+          else console.error("Batch insert error:", insertErr.message);
+        }
+
+        // Batch update in chunks of 100 (individual upserts are needed for updates by id)
+        for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
+          const chunk = toUpdate.slice(i, i + BATCH_SIZE);
+          const { error: upsertErr } = await serviceSupabase
+            .from("beneficiaries")
+            .upsert(chunk, { onConflict: "id" });
+          if (!upsertErr) updated += chunk.length;
+          else console.error("Batch upsert error:", upsertErr.message);
         }
 
         await updateSyncLog(serviceSupabase, syncLog.id, "success", records.length, created, updated, null);
