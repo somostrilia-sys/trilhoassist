@@ -25,7 +25,7 @@ const portals = [
     label: "Assistência 24h",
     description: "Operação e gestão completa do sistema",
     icon: Truck,
-    roles: ["admin", "operator"],
+    roles: ["admin", "operator", "super_admin"],
     gradient: "from-primary to-[hsl(218,58%,34%)]",
     iconBg: "bg-primary/20",
     iconColor: "text-primary",
