@@ -256,19 +256,17 @@ export default function ProviderTracking() {
     toast.success("Chegada registrada!");
   }, [dispatch]);
 
-  // Auto-detect arrival at origin — requires multiple consecutive GPS readings within radius with good accuracy
+  // Auto-detect arrival at origin — requires multiple GPS readings within radius (not necessarily consecutive)
   useEffect(() => {
     if (!request?.origin_lat || !request?.origin_lng || !tracking || arrivedOrigin || autoArrivalRef.current) return;
-    if (!latestPos.current) return;
 
     const checkInterval = setInterval(() => {
-      if (!latestPos.current || autoArrivalRef.current) return;
+      if (!latestPos.current || autoArrivalRef.current || arrivedOrigin) return;
       
       const accuracy = latestPos.current.coords.accuracy;
       // Skip reading if GPS accuracy is too poor
       if (accuracy && accuracy > ARRIVAL_MAX_ACCURACY) {
-        arrivalConfirmCount.current = 0;
-        return;
+        return; // Don't reset counter on bad accuracy — just skip
       }
 
       const dist = haversineDistance(
@@ -280,15 +278,16 @@ export default function ProviderTracking() {
       
       if (dist <= ARRIVAL_RADIUS_METERS) {
         arrivalConfirmCount.current += 1;
-        // Only mark arrival after multiple consecutive confirmations
+        // Only mark arrival after enough confirmations
         if (arrivalConfirmCount.current >= ARRIVAL_CONFIRM_THRESHOLD) {
           autoArrivalRef.current = true;
           handleMarkArrival();
         }
-      } else {
-        // Reset counter if provider moves out of radius
-        arrivalConfirmCount.current = 0;
+      } else if (dist > ARRIVAL_RADIUS_METERS * 2) {
+        // Only reset counter if clearly far away (200m+), not on minor GPS bounces
+        arrivalConfirmCount.current = Math.max(0, arrivalConfirmCount.current - 1);
       }
+      // Between 100m-200m: don't change counter (hysteresis zone)
     }, 10000);
 
     return () => clearInterval(checkInterval);
