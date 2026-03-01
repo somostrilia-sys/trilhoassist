@@ -1785,6 +1785,7 @@ export type Database = {
           media_url: string | null
           message_type: string
           raw_payload: Json | null
+          sender_user_id: string | null
         }
         Insert: {
           content?: string | null
@@ -1798,6 +1799,7 @@ export type Database = {
           media_url?: string | null
           message_type?: string
           raw_payload?: Json | null
+          sender_user_id?: string | null
         }
         Update: {
           content?: string | null
@@ -1811,6 +1813,7 @@ export type Database = {
           media_url?: string | null
           message_type?: string
           raw_payload?: Json | null
+          sender_user_id?: string | null
         }
         Relationships: [
           {

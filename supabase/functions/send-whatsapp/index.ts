@@ -228,6 +228,7 @@ Deno.serve(async (req) => {
         message_type: template ? "template" : "text",
         content: messageContent,
         external_id: result.messageId || result.zaapId || result.key?.id || result.id || null,
+        sender_user_id: userId,
       });
 
       const convUpdate: Record<string, any> = {

@@ -196,6 +196,12 @@ export function ChatArea({
                     : "bg-muted"
                 }`}
               >
+                {/* Operator name on outbound messages */}
+                {msg.direction === "outbound" && msg.sender_user_id && (
+                  <p className="text-[10px] font-semibold opacity-75 mb-0.5">
+                    {getOperatorName(msg.sender_user_id) || "Operador"}
+                  </p>
+                )}
                 {msg.message_type === "location" ? (
                   <a
                     href={`https://maps.google.com/?q=${msg.latitude},${msg.longitude}`}
