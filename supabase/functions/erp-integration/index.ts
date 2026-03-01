@@ -613,12 +613,15 @@ Deno.serve(async (req) => {
         let created = 0;
         let updated = 0;
 
-        // Batch insert in chunks of 500
+        // Batch insert in chunks of 500 (ignore duplicates via onConflict)
         const BATCH_SIZE = 500;
         for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
           const chunk = toInsert.slice(i, i + BATCH_SIZE);
-          const { error: insertErr } = await serviceSupabase.from("beneficiaries").insert(chunk);
-          if (!insertErr) created += chunk.length;
+          const { data: inserted, error: insertErr } = await serviceSupabase
+            .from("beneficiaries")
+            .upsert(chunk, { onConflict: "client_id,vehicle_plate", ignoreDuplicates: true })
+            .select("id");
+          if (!insertErr) created += (inserted?.length || chunk.length);
           else console.error(`Batch insert error (chunk ${i}):`, insertErr.message);
         }
 
@@ -823,8 +826,11 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
 
     for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
       const chunk = toInsert.slice(i, i + BATCH_SIZE);
-      const { error: insertErr } = await supabase.from("beneficiaries").insert(chunk);
-      if (!insertErr) created += chunk.length;
+      const { data: inserted, error: insertErr } = await supabase
+        .from("beneficiaries")
+        .upsert(chunk, { onConflict: "client_id,vehicle_plate", ignoreDuplicates: true })
+        .select("id");
+      if (!insertErr) created += (inserted?.length || chunk.length);
       else console.error(`Auto sync insert error (chunk ${i}):`, insertErr.message);
     }
 
