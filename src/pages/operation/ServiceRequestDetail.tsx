@@ -812,6 +812,9 @@ ${trackingLink ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingLink}` : ""}`.trim
     }
     if (hasProvider) {
       pts.push({ label: `${providerLabel} (retorno)`, lat: provider.latitude, lng: provider.longitude, color: "#6366f1" });
+    } else if (hasOrigin && hasDest) {
+      // Without provider: show return to origin
+      pts.push({ label: "Retorno (Origem)", lat: request.origin_lat, lng: request.origin_lng, color: "#f59e0b" });
     }
 
     return pts;
