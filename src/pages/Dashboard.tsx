@@ -431,20 +431,23 @@ export default function Dashboard() {
           .filter((r) => r.origin_lat && r.origin_lng)
           .map((r) => [Number(r.origin_lat), Number(r.origin_lng), 1]);
 
-        // Extract city from address string
+        // Extract city from Brazilian address string
         const extractCity = (address: string): string => {
           if (!address) return "Desconhecida";
-          // Try pattern "City - ST" or "City-ST" at the end
           const parts = address.split(",").map((p) => p.trim());
-          // Look for part with " - XX" pattern (city - state)
-          for (let i = parts.length - 1; i >= 0; i--) {
-            const match = parts[i].match(/^([A-Za-zÀ-ÿ\s.]+)\s*[-–]\s*[A-Z]{2}/);
+          // Look for "City - ST" pattern (most common in Brazilian addresses)
+          for (const part of parts) {
+            const match = part.match(/^([A-Za-zÀ-ÿ\s.'-]+)\s*[-–]\s*[A-Z]{2}$/);
             if (match) return match[1].trim();
           }
-          // Fallback: second to last part (often city in Brazilian addresses)
-          if (parts.length >= 3) return parts[parts.length - 2].trim();
-          if (parts.length >= 2) return parts[parts.length - 1].trim();
-          return address.trim();
+          // Look for standalone city name (no numbers, no CEP, at least 3 chars)
+          for (let i = parts.length - 1; i >= 0; i--) {
+            const p = parts[i];
+            if (p.length >= 3 && !/\d/.test(p) && !/^[A-Z]{2}$/.test(p)) {
+              return p;
+            }
+          }
+          return parts[0] || address.trim();
         };
 
         // Aggregate origins and destinations by CITY
