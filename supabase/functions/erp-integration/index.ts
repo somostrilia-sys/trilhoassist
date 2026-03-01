@@ -126,6 +126,8 @@ Deno.serve(async (req) => {
 
         if (!response.ok) {
           const text = await response.text();
+          console.error("ERP error response:", response.status, text.substring(0, 500));
+          console.error("Request headers sent:", JSON.stringify(Object.keys(apiHeaders)));
           return jsonResponse({
             success: false,
             status: response.status,
