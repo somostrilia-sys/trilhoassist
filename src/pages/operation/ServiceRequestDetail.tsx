@@ -32,6 +32,7 @@ import { sendAutoNotify } from "@/lib/autoNotify";
 import { maskPhone, maskCPF, maskCNPJ, maskCEP, unmask } from "@/lib/masks";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ProviderInvoiceReview } from "@/components/provider/ProviderInvoiceReview";
+import AddressAutocomplete from "@/components/service-request/AddressAutocomplete";
 
 const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   open: { label: "Aberto", variant: "default" },
@@ -226,6 +227,9 @@ export default function ServiceRequestDetail() {
   const [cancelRequestProviderCost, setCancelRequestProviderCost] = useState("");
   const [cancelRequestChargedAmount, setCancelRequestChargedAmount] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editingDestination, setEditingDestination] = useState(false);
+  const [editDestAddress, setEditDestAddress] = useState("");
+  const [savingDestination, setSavingDestination] = useState(false);
 
   const logEvent = useCallback(async (eventType: string, description: string, oldValue?: string, newValue?: string) => {
     if (!id) return;
@@ -1089,10 +1093,68 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
             <MapPin className="h-5 w-5" /> ENDEREÇOS
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
             <InfoRow label="Endereço de Origem" value={request.origin_address} />
-            <InfoRow label="Endereço de Destino" value={request.destination_address} />
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-muted-foreground">Endereço de Destino</span>
+                {!editingDestination && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs gap-1"
+                    onClick={() => {
+                      setEditDestAddress(request.destination_address || "");
+                      setEditingDestination(true);
+                    }}
+                  >
+                    <MapPinned className="h-3 w-3" />
+                    Editar
+                  </Button>
+                )}
+              </div>
+              {editingDestination ? (
+                <div className="space-y-2">
+                  <AddressAutocomplete
+                    value={editDestAddress}
+                    onChange={setEditDestAddress}
+                    onPlaceSelect={async (place) => {
+                      setSavingDestination(true);
+                      const { error: updErr } = await supabase
+                        .from("service_requests")
+                        .update({
+                          destination_address: place.formatted_address,
+                          destination_lat: place.lat,
+                          destination_lng: place.lng,
+                        })
+                        .eq("id", id);
+                      if (updErr) {
+                        toast.error("Erro ao atualizar destino");
+                      } else {
+                        toast.success("Destino atualizado!");
+                        await logEvent("update", `Destino alterado para: ${place.formatted_address}`, request.destination_address || "—", place.formatted_address);
+                        setRequest({ ...request, destination_address: place.formatted_address, destination_lat: place.lat, destination_lng: place.lng });
+                      }
+                      setSavingDestination(false);
+                      setEditingDestination(false);
+                    }}
+                    placeholder="Buscar novo destino..."
+                    tenantId={request.tenant_id}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => setEditingDestination(false)}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm">{request.destination_address || "—"}</p>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
