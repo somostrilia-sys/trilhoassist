@@ -466,6 +466,7 @@ Deno.serve(async (req) => {
 
         const toInsert: any[] = [];
         const toUpdate: any[] = [];
+        const seenPlates = new Set<string>(); // Deduplicate plates from ERP
 
         for (const record of records) {
           const plate = record.placa || record.vehicle_plate || record.plate || "";
@@ -479,6 +480,9 @@ Deno.serve(async (req) => {
           const erpCoop = record.nome_cooperativa || record.cooperativa || record.coop || record.cooperative || record.descricao_cooperativa || "";
 
           if (!name && !plate) continue;
+          // Skip duplicate plates in the same ERP response
+          if (plate && seenPlates.has(plate)) continue;
+          if (plate) seenPlates.add(plate);
 
           const erpCode = record.codigo_produto || record.cod_produto || record.product_code || record.codigo || "";
           const planId = planMap.get(erpPlan) || (erpCode ? planByCode.get(String(erpCode)) : null) || null;
@@ -620,7 +624,6 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
     } else if (authHeader === "token_auth") {
       headers["Authorization"] = `token ${client.api_key}`;
     } else {
-      // Default: custom header name (e.g. "token")
       headers[authHeader] = client.api_key;
     }
     let response = await fetch(client.api_endpoint, {
@@ -630,10 +633,7 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
     });
 
     if (response.status === 405 || response.status === 404) {
-      response = await fetch(client.api_endpoint, {
-        method: "GET",
-        headers,
-      });
+      response = await fetch(client.api_endpoint, { method: "GET", headers });
     }
 
     if (!response.ok) {
@@ -649,15 +649,43 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
       return { error: "Nenhum registro encontrado" };
     }
 
+    // Get all mappings (plan, cooperativa, situacao)
     const { data: mappings } = await supabase.from("erp_field_mappings").select("*").eq("client_id", client.id);
     const planMap = new Map((mappings || []).filter((m: any) => m.field_type === "plan").map((m: any) => [m.erp_value, m.trilho_id]));
     const coopMap = new Map((mappings || []).filter((m: any) => m.field_type === "cooperativa").map((m: any) => [m.erp_value, m.trilho_value]));
+    const situacaoMap = new Map((mappings || []).filter((m: any) => m.field_type === "situacao").map((m: any) => [m.erp_value, m.trilho_value]));
 
-    let created = 0, updated = 0;
+    // Plan lookup by erp_code
+    const { data: allPlans } = await supabase.from("plans").select("id, erp_code").eq("client_id", client.id);
+    const planByCode = new Map((allPlans || []).filter((p: any) => p.erp_code).map((p: any) => [p.erp_code, p.id]));
+
+    // Fetch ALL existing beneficiaries (paginate)
+    let existingBeneficiaries: any[] = [];
+    let from = 0;
+    const PAGE_SIZE = 1000;
+    while (true) {
+      const { data: page } = await supabase
+        .from("beneficiaries").select("id, vehicle_plate").eq("client_id", client.id).range(from, from + PAGE_SIZE - 1);
+      if (!page || page.length === 0) break;
+      existingBeneficiaries = existingBeneficiaries.concat(page);
+      if (page.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+
+    const existingByPlate = new Map(
+      existingBeneficiaries.filter((b: any) => b.vehicle_plate).map((b: any) => [b.vehicle_plate, b.id])
+    );
+
+    const toInsert: any[] = [];
+    const toUpdate: any[] = [];
+    const seenPlates = new Set<string>();
+
     for (const record of records) {
       const plate = record.placa || record.vehicle_plate || record.plate || "";
       const name = record.nome_associado || record.nome || record.name || record.beneficiario || "";
       if (!name && !plate) continue;
+      if (plate && seenPlates.has(plate)) continue;
+      if (plate) seenPlates.add(plate);
 
       const phone = record.telefone || record.phone || record.celular || record.telefone_residencial || record.telefone_celular || "";
       const cpf = record.cpf || record.documento || "";
@@ -666,27 +694,51 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
       const vehicleChassis = record.chassi || record.chassis || "";
       const erpPlan = record.plano || record.plan || record.plan_name || record.descricao_produto || "";
       const erpCoop = record.nome_cooperativa || record.cooperativa || record.coop || record.cooperative || record.descricao_cooperativa || "";
-      const planId = planMap.get(erpPlan) || null;
+      const erpCode = record.codigo_produto || record.cod_produto || record.product_code || record.codigo || "";
+
+      const planId = planMap.get(erpPlan) || (erpCode ? planByCode.get(String(erpCode)) : null) || null;
       const cooperativa = coopMap.get(erpCoop) || erpCoop;
+      const parsedYear = vehicleYear ? parseInt(vehicleYear) : null;
 
-      const { data: existing } = await supabase
-        .from("beneficiaries").select("id").eq("client_id", client.id).eq("vehicle_plate", plate).maybeSingle();
-
-      if (existing) {
-        await supabase.from("beneficiaries").update({
-          name, phone: phone || undefined, cpf: cpf || undefined,
-          vehicle_model: vehicleModel || undefined, vehicle_year: vehicleYear ? parseInt(vehicleYear) : undefined,
-          vehicle_chassis: vehicleChassis || undefined, plan_id: planId || undefined, cooperativa: cooperativa || undefined,
-        }).eq("id", existing.id);
-        updated++;
-      } else {
-        await supabase.from("beneficiaries").insert({
-          client_id: client.id, name, vehicle_plate: plate, phone: phone || null, cpf: cpf || null,
-          vehicle_model: vehicleModel || null, vehicle_year: vehicleYear ? parseInt(vehicleYear) : null,
-          vehicle_chassis: vehicleChassis || null, plan_id: planId, cooperativa: cooperativa || null,
-        });
-        created++;
+      const erpSituacao = record.codigo_situacao || record.codigo_situacao_associado || "";
+      let isActive = true;
+      if (erpSituacao && situacaoMap.has(String(erpSituacao))) {
+        isActive = situacaoMap.get(String(erpSituacao)) === "active";
       }
+
+      const existingId = existingByPlate.get(plate);
+      if (existingId) {
+        toUpdate.push({
+          id: existingId, client_id: client.id, name, phone: phone || null, cpf: cpf || null,
+          vehicle_model: vehicleModel || null, vehicle_year: parsedYear,
+          vehicle_chassis: vehicleChassis || null, plan_id: planId, cooperativa: cooperativa || null, active: isActive,
+        });
+      } else {
+        toInsert.push({
+          client_id: client.id, name, vehicle_plate: plate, phone: phone || null, cpf: cpf || null,
+          vehicle_model: vehicleModel || null, vehicle_year: parsedYear,
+          vehicle_chassis: vehicleChassis || null, plan_id: planId, cooperativa: cooperativa || null, active: isActive,
+        });
+      }
+    }
+
+    console.log(`Auto sync - To insert: ${toInsert.length}, to update: ${toUpdate.length}`);
+
+    let created = 0, updated = 0;
+    const BATCH_SIZE = 500;
+
+    for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+      const chunk = toInsert.slice(i, i + BATCH_SIZE);
+      const { error: insertErr } = await supabase.from("beneficiaries").insert(chunk);
+      if (!insertErr) created += chunk.length;
+      else console.error(`Auto sync insert error (chunk ${i}):`, insertErr.message);
+    }
+
+    for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
+      const chunk = toUpdate.slice(i, i + BATCH_SIZE);
+      const { error: upsertErr } = await supabase.from("beneficiaries").upsert(chunk, { onConflict: "id" });
+      if (!upsertErr) updated += chunk.length;
+      else console.error(`Auto sync upsert error (chunk ${i}):`, upsertErr.message);
     }
 
     if (syncLog) await updateSyncLog(supabase, syncLog.id, "success", records.length, created, updated, null);
