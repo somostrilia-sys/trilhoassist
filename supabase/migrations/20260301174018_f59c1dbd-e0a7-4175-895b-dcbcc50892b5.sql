@@ -1,0 +1,1 @@
+ALTER TABLE public.beneficiaries ADD COLUMN vehicle_color text DEFAULT NULL;

@@ -27,6 +27,7 @@ export type Database = {
           plan_id: string | null
           updated_at: string
           vehicle_chassis: string | null
+          vehicle_color: string | null
           vehicle_model: string | null
           vehicle_plate: string | null
           vehicle_year: number | null
@@ -43,6 +44,7 @@ export type Database = {
           plan_id?: string | null
           updated_at?: string
           vehicle_chassis?: string | null
+          vehicle_color?: string | null
           vehicle_model?: string | null
           vehicle_plate?: string | null
           vehicle_year?: number | null
@@ -59,6 +61,7 @@ export type Database = {
           plan_id?: string | null
           updated_at?: string
           vehicle_chassis?: string | null
+          vehicle_color?: string | null
           vehicle_model?: string | null
           vehicle_plate?: string | null
           vehicle_year?: number | null
