@@ -147,7 +147,9 @@ export default function DispatchPanel() {
 
   // Build panel items
   const items: PanelItem[] = useMemo(() => {
-    return requests.map((r) => {
+    // Exclude collision requests without tow (no destination = no dispatch needed)
+    const filtered = requests.filter((r) => !(r.service_type === "collision" && !r.destination_address));
+    return filtered.map((r) => {
       const disp = dispatches.find((d) => d.service_request_id === r.id);
       const elapsedSinceCreation = minutesElapsed(r.created_at);
       const elapsedSinceDispatch = disp?.accepted_at
