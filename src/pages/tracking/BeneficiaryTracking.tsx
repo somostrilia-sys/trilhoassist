@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Loader2, AlertCircle, Clock, Bell, CheckCircle2, Navigation } from "lucide-react";
+import { MapPin, Loader2, AlertCircle, Clock, Bell, CheckCircle2, Navigation, ShieldCheck } from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -473,6 +473,7 @@ export default function BeneficiaryTracking() {
   }
 
   const isCompleted = dispatch?.status === "completed";
+  const isCollision = request?.service_type === "collision";
 
   return (
     <div className="min-h-screen bg-background">
@@ -508,6 +509,41 @@ export default function BeneficiaryTracking() {
       </div>
 
       <div className="max-w-lg mx-auto p-4 space-y-4">
+        {/* ══════ COLISÃO: mensagem informativa, sem tracking ══════ */}
+        {isCollision ? (
+          <>
+            <Card>
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="secondary">Colisão</Badge>
+                  {request?.vehicle_plate && <Badge variant="outline">{request.vehicle_plate}</Badge>}
+                  {isCompleted && <Badge className="bg-green-500 text-white">Concluído</Badge>}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-primary/30">
+              <CardContent className="pt-6 pb-6 flex flex-col items-center text-center gap-4">
+                <div className="bg-primary/10 rounded-full p-4">
+                  <ShieldCheck className="h-10 w-10 text-primary" />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-lg font-bold">Registro recebido com sucesso</h2>
+                  <p className="text-sm text-muted-foreground leading-relaxed max-w-sm">
+                    Em breve, o <strong>setor de eventos</strong> entrará em contato com você para dar sequência ao processo de <strong>reparo ou indenização</strong>.
+                  </p>
+                  <p className="text-sm text-muted-foreground leading-relaxed max-w-sm">
+                    Fique atento ao seu telefone. Caso precise, entre em contato conosco pelo mesmo número de WhatsApp.
+                  </p>
+                </div>
+                <div className="text-xs text-muted-foreground pt-2">
+                  Protocolo: <span className="font-medium">{request?.protocol}</span>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        ) : (
+          <>
         {/* Provider arrived alert */}
         {providerArrived && !isCompleted && (
           <Card className="border-green-500 border-2 bg-green-50 dark:bg-green-950/30 arrival-alert">
@@ -660,6 +696,8 @@ export default function BeneficiaryTracking() {
             <CheckCircle2 className="h-5 w-5" />
             Chegada do prestador confirmada
           </div>
+        )}
+          </>
         )}
       </div>
     </div>
