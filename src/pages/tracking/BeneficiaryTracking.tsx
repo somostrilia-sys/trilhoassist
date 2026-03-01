@@ -752,19 +752,6 @@ export default function BeneficiaryTracking() {
                 </div>
               </div>
             )}
-            {etaText && !providerArrived && (
-              <div className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-lg p-3">
-                <div className="bg-primary rounded-full p-2 shrink-0">
-                  <Clock className="h-5 w-5 text-primary-foreground" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-lg font-bold text-primary">{etaText}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Tempo estimado de chegada
-                  </p>
-                </div>
-              </div>
-            )}
 
             {/* Timeline de atualizações */}
             {dispatch && (
