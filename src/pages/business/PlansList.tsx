@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Search, Plus, Award, Pencil, MoreVertical, ArrowLeft, CheckCircle, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { PLAN_VEHICLE_CATEGORY_LABELS } from "@/lib/vehicleClassification";
 
 export default function PlansList() {
   const { clientId } = useParams<{ clientId: string }>();
@@ -122,14 +123,15 @@ export default function PlansList() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Nome do Plano</TableHead>
-                  <TableHead>Coberturas</TableHead>
-                  <TableHead>KM Guincho</TableHead>
-                  <TableHead>Acionamentos/Ano</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
+                 <TableRow>
+                   <TableHead>Nome do Plano</TableHead>
+                   <TableHead>Categoria</TableHead>
+                   <TableHead>Coberturas</TableHead>
+                   <TableHead>KM Guincho</TableHead>
+                   <TableHead>Acionamentos/Ano</TableHead>
+                   <TableHead>Status</TableHead>
+                   <TableHead className="w-12"></TableHead>
+                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((plan) => (
@@ -139,11 +141,16 @@ export default function PlansList() {
                         <Award className="h-4 w-4 text-primary" />
                         {plan.name}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{coverageCounts[plan.id] || 0} regras</Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
+                     </TableCell>
+                     <TableCell>
+                       <Badge variant="outline" className="text-xs">
+                         {PLAN_VEHICLE_CATEGORY_LABELS[(plan as any).vehicle_category || "all"] || "Todos"}
+                       </Badge>
+                     </TableCell>
+                     <TableCell>
+                       <Badge variant="secondary">{coverageCounts[plan.id] || 0} regras</Badge>
+                     </TableCell>
+                     <TableCell className="text-muted-foreground">
                       {plan.max_tow_km ? `${plan.max_tow_km} km` : "—"}
                     </TableCell>
                     <TableCell className="text-muted-foreground">

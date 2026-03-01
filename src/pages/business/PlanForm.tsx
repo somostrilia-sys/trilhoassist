@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Save, Plus, Trash2 } from "lucide-react";
+import { PLAN_VEHICLE_CATEGORIES } from "@/lib/vehicleClassification";
 
 const SERVICE_OPTIONS = [
   { value: "tow_light", label: "Guincho Leve" },
@@ -61,6 +62,7 @@ export default function PlanForm() {
   const queryClient = useQueryClient();
 
   const [name, setName] = useState("");
+  const [vehicleCategory, setVehicleCategory] = useState("all");
   const [active, setActive] = useState(true);
   const [maxTowKm, setMaxTowKm] = useState<number | "">(100);
   const [maxDispatches, setMaxDispatches] = useState<number | "">(4);
@@ -103,6 +105,7 @@ export default function PlanForm() {
   useEffect(() => {
     if (plan) {
       setName(plan.name);
+      setVehicleCategory((plan as any).vehicle_category || "all");
       setActive(plan.active);
       setMaxTowKm(plan.max_tow_km ?? "");
       setMaxDispatches(plan.max_dispatches_per_year ?? "");
@@ -145,6 +148,7 @@ export default function PlanForm() {
       const planPayload = {
         name,
         active,
+        vehicle_category: vehicleCategory,
         max_tow_km: maxTowKm === "" ? null : Number(maxTowKm),
         max_dispatches_per_year: maxDispatches === "" ? null : Number(maxDispatches),
         plate_fee: plateFee === "" ? 0 : Number(plateFee),
@@ -248,10 +252,23 @@ export default function PlanForm() {
             <CardTitle className="text-lg">Dados Gerais</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Nome do Plano *</Label>
                 <Input id="name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Plano Gold" />
+              </div>
+              <div className="space-y-2">
+                <Label>Categoria de Veículo *</Label>
+                <Select value={vehicleCategory} onValueChange={setVehicleCategory}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PLAN_VEHICLE_CATEGORIES.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="plateFee">Valor por Placa (R$)</Label>
