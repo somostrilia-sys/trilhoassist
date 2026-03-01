@@ -33,6 +33,7 @@ import { maskPhone, maskCPF, maskCNPJ, maskCEP, unmask } from "@/lib/masks";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ProviderInvoiceReview } from "@/components/provider/ProviderInvoiceReview";
 import AddressAutocomplete from "@/components/service-request/AddressAutocomplete";
+import EditableField from "@/components/service-request/EditableField";
 
 const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   open: { label: "Aberto", variant: "default" },
@@ -268,6 +269,22 @@ export default function ServiceRequestDetail() {
       setEvents(eventsData.map(e => ({ ...e, _operator_name: null })));
     }
   }, [id]);
+
+  const updateField = useCallback(async (field: string, value: any, label: string, oldDisplayValue?: string, newDisplayValue?: string) => {
+    if (!id) return;
+    const { error } = await supabase
+      .from("service_requests")
+      .update({ [field]: value })
+      .eq("id", id);
+    if (error) {
+      toast.error(`Erro ao atualizar ${label}`, { description: error.message });
+      throw error;
+    }
+    toast.success(`${label} atualizado!`);
+    await logEvent("update", `${label} alterado`, oldDisplayValue || String(request?.[field] ?? "—"), newDisplayValue || String(value));
+    setRequest((prev: any) => prev ? { ...prev, [field]: value } : prev);
+    loadEvents();
+  }, [id, logEvent, request, loadEvents]);
 
   const loadData = useCallback(async () => {
     if (!id) return;
@@ -812,6 +829,12 @@ ${trackingLink ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingLink}` : ""}`.trim
           </div>
           <p className="text-sm text-muted-foreground mt-1">
             Criado em {new Date(request.created_at).toLocaleDateString("pt-BR")} às {new Date(request.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+            {request.scheduled_date && (
+              <span className="ml-2 text-primary font-medium">
+                • Agendado: {new Date(request.scheduled_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                {request.scheduled_time ? ` às ${request.scheduled_time.slice(0, 5)}` : ""}
+              </span>
+            )}
           </p>
         </div>
         {request.beneficiary_token && (
@@ -1010,10 +1033,11 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-            <InfoRow label="Nome" value={request.requester_name} />
-            <InfoRow label="Telefone" value={request.requester_phone} />
-            <InfoRow label="Email" value={request.requester_email} />
-            <InfoRow label="Telefone Secundário" value={request.requester_phone_secondary} />
+            <EditableField label="Nome" value={request.requester_name} rawValue={request.requester_name || ""} onSave={(v) => updateField("requester_name", v, "Nome do solicitante")} />
+            <EditableField label="Telefone" value={request.requester_phone} rawValue={request.requester_phone || ""} onSave={(v) => updateField("requester_phone", v, "Telefone")} />
+            <EditableField label="Email" value={request.requester_email} rawValue={request.requester_email || ""} onSave={(v) => updateField("requester_email", v, "Email")} />
+            <EditableField label="Telefone Secundário" value={request.requester_phone_secondary} rawValue={request.requester_phone_secondary || ""} onSave={(v) => updateField("requester_phone_secondary", v, "Telefone secundário")} />
+            <EditableField label="Nome do Motorista" value={request.driver_name} rawValue={request.driver_name || ""} onSave={(v) => updateField("driver_name", v, "Nome do motorista")} />
           </div>
           {beneficiary && (
             <>
@@ -1041,9 +1065,9 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8">
-            <InfoRow label="Placa" value={request.vehicle_plate} />
-            <InfoRow label="Modelo" value={request.vehicle_model} />
-            <InfoRow label="Ano" value={request.vehicle_year} />
+            <EditableField label="Placa" value={request.vehicle_plate} rawValue={request.vehicle_plate || ""} onSave={(v) => updateField("vehicle_plate", v.toUpperCase(), "Placa")} />
+            <EditableField label="Modelo" value={request.vehicle_model} rawValue={request.vehicle_model || ""} onSave={(v) => updateField("vehicle_model", v, "Modelo")} />
+            <EditableField label="Ano" value={request.vehicle_year} rawValue={String(request.vehicle_year || "")} type="number" onSave={(v) => updateField("vehicle_year", v ? parseInt(v) : null, "Ano")} />
           </div>
         </CardContent>
       </Card>
@@ -1057,8 +1081,50 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-            <InfoRow label="Motivo da Pane" value={eventTypeMap[request.event_type] || request.event_type} />
-            <InfoRow label="Tipo de Serviço" value={serviceTypeMap[request.service_type] || request.service_type} />
+            <EditableField
+              label="Motivo da Pane"
+              value={eventTypeMap[request.event_type] || request.event_type}
+              rawValue={request.event_type}
+              type="select"
+              options={Object.entries(eventTypeMap).map(([v, l]) => ({ value: v, label: l }))}
+              onSave={(v) => updateField("event_type", v, "Motivo da pane", eventTypeMap[request.event_type], eventTypeMap[v])}
+            />
+            <EditableField
+              label="Tipo de Serviço"
+              value={serviceTypeMap[request.service_type] || request.service_type}
+              rawValue={request.service_type}
+              type="select"
+              options={Object.entries(serviceTypeMap).map(([v, l]) => ({ value: v, label: l }))}
+              onSave={(v) => updateField("service_type", v, "Tipo de serviço", serviceTypeMap[request.service_type], serviceTypeMap[v])}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Scheduling */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <CalendarIcon className="h-5 w-5" /> AGENDAMENTO
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+            <EditableField
+              label="Data agendada"
+              value={request.scheduled_date ? new Date(request.scheduled_date + "T00:00:00").toLocaleDateString("pt-BR") : "Imediato"}
+              rawValue={request.scheduled_date || ""}
+              type="date"
+              placeholder="AAAA-MM-DD"
+              onSave={(v) => updateField("scheduled_date", v || null, "Data agendada", request.scheduled_date || "Imediato", v || "Imediato")}
+            />
+            <EditableField
+              label="Horário agendado"
+              value={request.scheduled_time ? request.scheduled_time.slice(0, 5) : "—"}
+              rawValue={request.scheduled_time ? request.scheduled_time.slice(0, 5) : ""}
+              type="time"
+              onSave={(v) => updateField("scheduled_time", v || null, "Horário agendado", request.scheduled_time || "—", v || "—")}
+            />
           </div>
         </CardContent>
       </Card>
@@ -1299,18 +1365,23 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
       )}
 
       {/* Notes */}
-      {request.notes && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <FileText className="h-5 w-5" /> OBSERVAÇÕES
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm whitespace-pre-wrap">{request.notes}</p>
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <FileText className="h-5 w-5" /> OBSERVAÇÕES
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <EditableField
+            label=""
+            value={request.notes ? <p className="text-sm whitespace-pre-wrap">{request.notes}</p> : "Sem observações"}
+            rawValue={request.notes || ""}
+            type="textarea"
+            placeholder="Adicionar observações..."
+            onSave={(v) => updateField("notes", v || null, "Observações")}
+          />
+        </CardContent>
+      </Card>
 
       {/* Financial */}
       <Card>
@@ -1321,16 +1392,13 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-            <InfoRow label="Custo Prestador" value={`R$ ${Number(request.provider_cost || 0).toFixed(2)}`} />
-            <InfoRow label="Valor Cobrado" value={`R$ ${Number(request.charged_amount || 0).toFixed(2)}`} />
+            <EditableField label="Custo Prestador" value={`R$ ${Number(request.provider_cost || 0).toFixed(2)}`} rawValue={String(request.provider_cost || "")} type="number" onSave={(v) => updateField("provider_cost", v ? parseFloat(v) : 0, "Custo prestador")} />
+            <EditableField label="Valor Cobrado" value={`R$ ${Number(request.charged_amount || 0).toFixed(2)}`} rawValue={String(request.charged_amount || "")} type="number" onSave={(v) => updateField("charged_amount", v ? parseFloat(v) : 0, "Valor cobrado")} />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-            <InfoRow label="Forma de pagamento" value={request.payment_method || "—"} />
+            <EditableField label="Forma de pagamento" value={request.payment_method || "—"} rawValue={request.payment_method || ""} onSave={(v) => updateField("payment_method", v || null, "Forma de pagamento")} />
             <InfoRow label="Recebido em" value={request.payment_received_at ? new Date(request.payment_received_at).toLocaleDateString("pt-BR") : "—"} />
           </div>
-          <p className="text-xs text-muted-foreground">
-            Forma de pagamento e valor cobrado são definidos na etapa de <strong>Acionar Prestador</strong>.
-          </p>
         </CardContent>
       </Card>
 
