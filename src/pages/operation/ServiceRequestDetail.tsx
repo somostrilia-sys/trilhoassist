@@ -570,10 +570,31 @@ export default function ServiceRequestDetail() {
     loadEvents();
   };
 
+  const handleQuickCancelProvider = async () => {
+    if (!id || !dispatchId) return;
+    setActionLoading(true);
+    const { error: dErr } = await supabase
+      .from("dispatches")
+      .update({ status: "cancelled", notes: "Troca de prestador (subsequente)" })
+      .eq("id", dispatchId);
+    if (dErr) {
+      setActionLoading(false);
+      toast.error("Erro ao cancelar prestador", { description: dErr.message });
+      return;
+    }
+    await supabase.from("service_requests").update({ status: "awaiting_dispatch" }).eq("id", id);
+    await logEvent("provider_cancelled", `Prestador cancelado: ${provider?.name || "—"} (troca subsequente)`, "dispatched", "awaiting_dispatch");
+    setActionLoading(false);
+    toast.success("Prestador cancelado! Selecione um novo prestador.");
+    await loadData();
+    await loadEvents();
+    loadProviders();
+    setDispatchDialogOpen(true);
+  };
+
   const handleCancelProvider = async () => {
     if (!id || !dispatchId || !cancelProviderReason.trim()) return;
     setActionLoading(true);
-    // Cancel the current dispatch with final amount if provider charged
     const dispatchUpdate: any = { status: "cancelled", notes: cancelProviderReason };
     if (cancelProviderCost) {
       dispatchUpdate.final_amount = parseFloat(cancelProviderCost);
@@ -587,7 +608,6 @@ export default function ServiceRequestDetail() {
       toast.error("Erro ao cancelar prestador", { description: dErr.message });
       return;
     }
-    // Update service request with revised financial values
     const srUpdate: any = { status: "awaiting_dispatch" };
     if (cancelProviderCost) {
       srUpdate.provider_cost = parseFloat(cancelProviderCost);
@@ -608,9 +628,30 @@ export default function ServiceRequestDetail() {
     toast.success("Prestador cancelado! Selecione um novo prestador.");
     await loadData();
     await loadEvents();
-    // Auto-open dispatch dialog for new provider
     loadProviders();
     setDispatchDialogOpen(true);
+  };
+
+  // Check if there was already a previous provider swap (cancelled dispatch exists)
+  const [hasPreviousSwap, setHasPreviousSwap] = useState(false);
+  useEffect(() => {
+    if (!id) return;
+    supabase
+      .from("dispatches")
+      .select("id")
+      .eq("service_request_id", id)
+      .eq("status", "cancelled")
+      .limit(1)
+      .then(({ data }) => setHasPreviousSwap((data?.length || 0) > 0));
+  }, [id, provider]);
+
+  const handleSwapProviderClick = () => {
+    if (hasPreviousSwap) {
+      // Skip justification — already justified before
+      handleQuickCancelProvider();
+    } else {
+      setCancelProviderDialogOpen(true);
+    }
   };
 
   const handleReopen = async () => {
@@ -887,7 +928,8 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
                     variant="destructive"
                     size="sm"
                     className="gap-1 shrink-0"
-                    onClick={() => setCancelProviderDialogOpen(true)}
+                    onClick={handleSwapProviderClick}
+                    disabled={actionLoading}
                   >
                     <XCircle className="h-3.5 w-3.5" />
                     Trocar Prestador
