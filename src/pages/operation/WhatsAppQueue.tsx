@@ -8,7 +8,8 @@ import { useTenantId } from "@/hooks/useFinancialData";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Info, FileText, Plus, Link } from "lucide-react";
+import { MessageSquare, Info, FileText, Plus, Link, Copy } from "lucide-react";
+import { toast as sonnerToast } from "sonner";
 import { ConversationList } from "@/components/whatsapp/ConversationList";
 import { ChatArea } from "@/components/whatsapp/ChatArea";
 import { ContactInfoPanel } from "@/components/whatsapp/ContactInfoPanel";
@@ -413,6 +414,17 @@ export default function WhatsAppQueue() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              navigator.clipboard.writeText("https://trilhoassist.com.br/solicitar");
+              sonnerToast.success("Link copiado!", { description: "https://trilhoassist.com.br/solicitar" });
+            }}
+          >
+            <Copy className="h-4 w-4 mr-1" />
+            Copiar Link
+          </Button>
           <Button variant="default" size="sm" onClick={() => setShowNewConversation(true)}>
             <Plus className="h-4 w-4 mr-1" />
             Nova Conversa
