@@ -2,7 +2,9 @@ import { Outlet, Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { Bell, Menu } from "lucide-react";
+import { Bell, Menu, Copy } from "lucide-react";
+import { toast as sonnerToast } from "sonner";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -49,6 +51,25 @@ export function AppLayout() {
               </SidebarTrigger>
             </div>
             <div className="flex items-center gap-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-lg hover:bg-muted"
+                      onClick={() => {
+                        const url = "https://trilhoassist.com.br/solicitar";
+                        navigator.clipboard.writeText(url);
+                        sonnerToast.success("Link copiado!", { description: url });
+                      }}
+                    >
+                      <Copy className="h-[18px] w-[18px]" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Copiar link de solicitação</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <Button variant="ghost" size="icon" className="rounded-lg relative hover:bg-muted">
                 <Bell className="h-[18px] w-[18px]" />
               </Button>
