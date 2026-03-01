@@ -242,8 +242,14 @@ Deno.serve(async (req) => {
 
     // ─── ACTION: IMPORT BENEFICIARIES ───
     if (action === "import") {
+      // Use service role client for sync log operations (bypasses RLS)
+      const serviceSupabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+
       // Create sync log
-      const { data: syncLog, error: logError } = await supabase
+      const { data: syncLog, error: logError } = await serviceSupabase
         .from("erp_sync_logs")
         .insert({
           client_id,
@@ -275,7 +281,7 @@ Deno.serve(async (req) => {
 
         if (!response.ok) {
           const text = await response.text();
-          await updateSyncLog(supabase, syncLog.id, "error", 0, 0, 0, `ERP erro ${response.status}: ${text.substring(0, 200)}`);
+          await updateSyncLog(serviceSupabase, syncLog.id, "error", 0, 0, 0, `ERP erro ${response.status}: ${text.substring(0, 200)}`);
           return jsonResponse({ error: `ERP retornou erro ${response.status}` }, 500);
         }
 
@@ -292,7 +298,7 @@ Deno.serve(async (req) => {
           const debugInfo = Array.isArray(erpData) 
             ? `Array with ${erpData.length} items` 
             : `Object with keys: ${Object.keys(erpData).join(", ")}`;
-          await updateSyncLog(supabase, syncLog.id, "error", 0, 0, 0, `Nenhum registro encontrado. Estrutura: ${debugInfo}`);
+          await updateSyncLog(serviceSupabase, syncLog.id, "error", 0, 0, 0, `Nenhum registro encontrado. Estrutura: ${debugInfo}`);
           return jsonResponse({ error: "Nenhum registro encontrado na resposta do ERP", debug: debugInfo }, 400);
         }
 
@@ -364,7 +370,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        await updateSyncLog(supabase, syncLog.id, "success", records.length, created, updated, null);
+        await updateSyncLog(serviceSupabase, syncLog.id, "success", records.length, created, updated, null);
 
         return jsonResponse({
           success: true,
@@ -373,7 +379,7 @@ Deno.serve(async (req) => {
           records_updated: updated,
         });
       } catch (err: any) {
-        await updateSyncLog(supabase, syncLog.id, "error", 0, 0, 0, err.message);
+        await updateSyncLog(serviceSupabase, syncLog.id, "error", 0, 0, 0, err.message);
         return jsonResponse({ error: `Erro na importação: ${err.message}` }, 500);
       }
     }
