@@ -89,9 +89,11 @@ export default function ServiceHeatmap({ points }: HeatmapProps) {
 
         points.forEach(([lat, lng]) => {
           const markerEl = document.createElement("div");
-          markerEl.style.cssText =
-            "width:12px;height:12px;border-radius:50%;background:#2563eb;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);";
-
+          markerEl.innerHTML = `<svg width="24" height="32" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 0C5.373 0 0 5.373 0 12c0 9 12 20 12 20s12-11 12-20c0-6.627-5.373-12-12-12z" fill="#2563eb"/>
+            <circle cx="12" cy="12" r="5" fill="#ffffff"/>
+          </svg>`;
+          markerEl.style.cssText = "cursor:pointer;";
           const marker = new maplibregl.Marker({ element: markerEl })
             .setLngLat([lng, lat])
             .addTo(map);
