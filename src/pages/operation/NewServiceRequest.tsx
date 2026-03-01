@@ -320,6 +320,24 @@ export default function NewServiceRequest() {
     if (attendanceType === "collision" && !needsTow) return null;
     if (attendanceType === "pane" && ["locksmith", "tire_change", "battery", "fuel"].includes(form.service_type)) return null;
 
+    const fieldLabels: Record<string, string> = {
+      wheel_locked: "Roda travada",
+      steering_locked: "Direção travada",
+      armored: "Blindado",
+      vehicle_lowered: "Rebaixado",
+      carrying_cargo: "Transportando carga",
+      easy_access: "Fácil acesso",
+      key_available: "Chave disponível",
+      documents_available: "Documentos no local",
+      has_passengers: "Passageiros",
+      had_collision: "Sofreu colisão",
+      risk_area: "Área de risco",
+      vehicle_starts: "Veículo liga",
+      docs_key_available: "Documentos e chave",
+      truck_type: "Tipo de caminhão",
+      loaded: "Carregado",
+      moves: "Se movimenta",
+    };
     const requiredByCategory: Record<VehicleCategory, { fields: string[]; data: Record<string, string> }> = {
       car: {
         fields: ["wheel_locked", "steering_locked", "armored", "vehicle_lowered", "carrying_cargo", "easy_access", "key_available", "documents_available", "has_passengers", "had_collision", "risk_area", "vehicle_starts"],
@@ -336,7 +354,11 @@ export default function NewServiceRequest() {
     };
     const { fields, data } = requiredByCategory[vehicleCategory];
     const missing = fields.filter((f) => !data[f] || data[f].trim() === "");
-    if (missing.length > 0) return "Preencha todos os campos obrigatórios do checklist de verificação do veículo.";
+    if (missing.length > 0) {
+      const missingLabels = missing.slice(0, 3).map(f => fieldLabels[f] || f).join(", ");
+      const extra = missing.length > 3 ? ` e mais ${missing.length - 3}` : "";
+      return `Checklist incompleto: ${missingLabels}${extra}`;
+    }
     
     // Conditional: if wheel_locked=yes, wheel_locked_count is required (car only)
     if (vehicleCategory === "car" && (carVerification as any).wheel_locked === "yes" && !(carVerification as any).wheel_locked_count) {
