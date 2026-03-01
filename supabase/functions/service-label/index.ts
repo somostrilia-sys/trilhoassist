@@ -30,19 +30,76 @@ const eventTypeMap: Record<string, string> = {
   other: "OUTRO",
 };
 
-async function calculateRouteKm(
+async function fetchOSRMRoute(
   originLat: number, originLng: number,
   destLat: number, destLng: number
-): Promise<number | null> {
+): Promise<{ km: number; min: number } | null> {
   try {
     const url = `https://router.project-osrm.org/route/v1/driving/${originLng},${originLat};${destLng},${destLat}?overview=false`;
     const res = await fetch(url);
     const data = await res.json();
-    if (data.routes?.[0]?.distance) {
-      return Math.round(data.routes[0].distance / 1000);
+    if (data.routes?.[0]) {
+      return {
+        km: Math.round(data.routes[0].distance / 1000 * 10) / 10,
+        min: Math.round(data.routes[0].duration / 60),
+      };
     }
   } catch (err) {
     console.error("OSRM error:", err);
+  }
+  return null;
+}
+
+interface RouteBreakdown {
+  legs: { label: string; km: number; min: number }[];
+  totalKm: number;
+  totalMin: number;
+  description: string;
+}
+
+async function calculateFullRoute(
+  originLat: number, originLng: number,
+  destLat: number | null, destLng: number | null,
+  providerLat: number | null, providerLng: number | null
+): Promise<RouteBreakdown | null> {
+  try {
+    if (providerLat && providerLng && destLat && destLng) {
+      // Full: Base Prestador → Origem → Destino → Retorno Base
+      const [leg1, leg2, leg3] = await Promise.all([
+        fetchOSRMRoute(providerLat, providerLng, originLat, originLng),
+        fetchOSRMRoute(originLat, originLng, destLat, destLng),
+        fetchOSRMRoute(destLat, destLng, providerLat, providerLng),
+      ]);
+      if (!leg1 || !leg2 || !leg3) return null;
+      return {
+        legs: [
+          { label: "Base → Origem", km: leg1.km, min: leg1.min },
+          { label: "Origem → Destino", km: leg2.km, min: leg2.min },
+          { label: "Destino → Retorno", km: leg3.km, min: leg3.min },
+        ],
+        totalKm: leg1.km + leg2.km + leg3.km,
+        totalMin: leg1.min + leg2.min + leg3.min,
+        description: "Base Prestador → Origem → Destino → Retorno",
+      };
+    } else if (destLat && destLng) {
+      // Without provider: Origem → Destino (ida e volta + 10km margem)
+      const [leg1, leg2] = await Promise.all([
+        fetchOSRMRoute(originLat, originLng, destLat, destLng),
+        fetchOSRMRoute(destLat, destLng, originLat, originLng),
+      ]);
+      if (!leg1 || !leg2) return null;
+      return {
+        legs: [
+          { label: "Origem → Destino", km: leg1.km, min: leg1.min },
+          { label: "Destino → Retorno", km: leg2.km, min: leg2.min },
+        ],
+        totalKm: leg1.km + leg2.km + 10,
+        totalMin: leg1.min + leg2.min,
+        description: "Origem → Destino → Retorno + 10km margem",
+      };
+    }
+  } catch (err) {
+    console.error("Route calculation error:", err);
   }
   return null;
 }
@@ -75,8 +132,25 @@ function extractCity(address: string): string {
 
 // ========== LABEL BUILDERS (unchanged logic) ==========
 
-function buildCreationLabel(sr: any, client: any, beneficiary: any, tenant: any, operator: any, estimatedKm: number | null, kmMargin: number): string {
-  const totalKm = estimatedKm ? estimatedKm + kmMargin : null;
+function formatDuration(min: number): string {
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${h}h${m > 0 ? `${m}min` : ""}`;
+}
+
+function buildRouteSection(route: RouteBreakdown | null, kmMargin: number): string {
+  if (!route) return "";
+  const lines = ["\n*ROTEIRIZAÇÃO*"];
+  for (const leg of route.legs) {
+    lines.push(`  • ${leg.label}: ${leg.km.toFixed(1)} km (~${formatDuration(leg.min)})`);
+  }
+  lines.push(`*TOTAL*: ${route.totalKm.toFixed(1)} km (~${formatDuration(route.totalMin)})`);
+  lines.push(`*COM MARGEM (+${kmMargin}km)*: ${(route.totalKm + kmMargin).toFixed(1)} km`);
+  return lines.join("\n");
+}
+
+function buildCreationLabel(sr: any, client: any, beneficiary: any, tenant: any, operator: any, route: RouteBreakdown | null, kmMargin: number): string {
   const benName = beneficiary?.name || sr.requester_name;
   const baseUrl = "https://veniti-watch.lovable.app";
   const trackingLink = sr.beneficiary_token ? `${baseUrl}/tracking/${sr.beneficiary_token}` : "";
@@ -106,11 +180,11 @@ function buildCreationLabel(sr: any, client: any, beneficiary: any, tenant: any,
 *TIPO DE EVENTO*: ${eventTypeMap[sr.event_type] || sr.event_type}
 *ATENDIMENTO REALIZADO POR*: ${(operator?.full_name || "SISTEMA").toUpperCase()}
 *ASSISTÊNCIA*: ${(tenant?.name || "").toUpperCase()}
-${totalKm ? `\n*APROX: ${totalKm}KM*` : ""}
+${buildRouteSection(route, kmMargin)}
 ${trackingLink ? `\nOlá, segue o link com as informações do serviço: ${trackingLink}` : ""}`;
 }
 
-function buildDispatchPreviewLabel(sr: any, provider: any, quotedAmount: number | null, client: any): string {
+function buildDispatchPreviewLabel(sr: any, provider: any, quotedAmount: number | null, client: any, route: RouteBreakdown | null, kmMargin: number): string {
   return `*PRÉVIA DE ACIONAMENTO* 🚗
 
 *PROTOCOLO*: ${sr.protocol}
@@ -122,7 +196,8 @@ function buildDispatchPreviewLabel(sr: any, provider: any, quotedAmount: number 
 *TELEFONE PRESTADOR*: ${provider?.phone || "—"}
 *CIDADE PRESTADOR*: ${[provider?.city, provider?.state].filter(Boolean).join(" - ").toUpperCase() || "—"}
 
-*VALOR COBRADO*: ${formatCurrency(quotedAmount)}`;
+*VALOR COBRADO*: ${formatCurrency(quotedAmount)}
+${buildRouteSection(route, kmMargin)}`;
 }
 
 function buildCompletionLabel(sr: any, client: any, provider: any, finalAmount: number | null): string {
@@ -306,7 +381,7 @@ Deno.serve(async (req) => {
     if (trigger === "dispatch_preview" || trigger === "completion") {
       const { data: dispatch } = await adminSupabase
         .from("dispatches")
-        .select("*, providers(name, phone, city, state)")
+        .select("*, providers(name, phone, city, state, latitude, longitude)")
         .eq("service_request_id", service_request_id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -322,17 +397,25 @@ Deno.serve(async (req) => {
     let message = "";
     const kmMargin = client?.km_margin || 10;
 
+    // Calculate route if we have origin coordinates
+    let route: RouteBreakdown | null = null;
+    if (sr.origin_lat && sr.origin_lng) {
+      const provLat = providerData?.latitude || null;
+      const provLng = providerData?.longitude || null;
+      route = await calculateFullRoute(
+        sr.origin_lat, sr.origin_lng,
+        sr.destination_lat, sr.destination_lng,
+        provLat, provLng
+      );
+    }
+
     switch (trigger) {
       case "creation": {
-        let estimatedKm: number | null = null;
-        if (sr.origin_lat && sr.origin_lng && sr.destination_lat && sr.destination_lng) {
-          estimatedKm = await calculateRouteKm(sr.origin_lat, sr.origin_lng, sr.destination_lat, sr.destination_lng);
-        }
-        message = buildCreationLabel(sr, client, beneficiary, tenant, operator, estimatedKm, kmMargin);
+        message = buildCreationLabel(sr, client, beneficiary, tenant, operator, route, kmMargin);
         break;
       }
       case "dispatch_preview":
-        message = buildDispatchPreviewLabel(sr, providerData, quoted_amount || dispatchData?.quoted_amount, client);
+        message = buildDispatchPreviewLabel(sr, providerData, quoted_amount || dispatchData?.quoted_amount, client, route, kmMargin);
         break;
       case "completion":
         message = buildCompletionLabel(sr, client, providerData, dispatchData?.final_amount);
