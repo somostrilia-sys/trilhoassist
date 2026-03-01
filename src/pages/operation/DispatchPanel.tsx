@@ -128,7 +128,7 @@ export default function DispatchPanel() {
           .from("service_request_events")
           .select("service_request_id, created_at")
           .in("service_request_id", reqIds)
-          .eq("event_type", "status_change")
+          .in("event_type", ["status_change", "reopen"])
           .eq("new_value", "open")
           .order("created_at", { ascending: false }),
       ]);
