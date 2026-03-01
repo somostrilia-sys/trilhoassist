@@ -314,6 +314,29 @@ export default function ServiceRequestDetail() {
 
   useEffect(() => { loadData(); loadEvents(); loadCollisionMedia(); }, [loadData, loadEvents, loadCollisionMedia]);
 
+  // Realtime: atualiza dados automaticamente quando service_requests, dispatches ou beneficiaries mudam
+  useEffect(() => {
+    if (!id) return;
+    const channel = supabase
+      .channel(`sr-detail-${id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "service_requests", filter: `id=eq.${id}` }, () => {
+        loadData();
+        loadEvents();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "dispatches", filter: `service_request_id=eq.${id}` }, () => {
+        loadData();
+        loadEvents();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "beneficiaries" }, () => {
+        loadData();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "collision_media", filter: `service_request_id=eq.${id}` }, () => {
+        loadCollisionMedia();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [id, loadData, loadEvents, loadCollisionMedia]);
+
   // Load providers list for dispatch dialog, sorted by proximity to origin
   const loadProviders = useCallback(async () => {
     const { data } = await supabase
