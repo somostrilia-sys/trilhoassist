@@ -221,6 +221,10 @@ export default function ServiceRequestDetail() {
   const [labelSending, setLabelSending] = useState(false);
   const [cancelProviderDialogOpen, setCancelProviderDialogOpen] = useState(false);
   const [cancelProviderReason, setCancelProviderReason] = useState("");
+  const [cancelProviderCost, setCancelProviderCost] = useState("");
+  const [cancelProviderChargedAmount, setCancelProviderChargedAmount] = useState("");
+  const [cancelRequestProviderCost, setCancelRequestProviderCost] = useState("");
+  const [cancelRequestChargedAmount, setCancelRequestChargedAmount] = useState("");
 
   const logEvent = useCallback(async (eventType: string, description: string, oldValue?: string, newValue?: string) => {
     if (!id) return;
@@ -369,20 +373,33 @@ export default function ServiceRequestDetail() {
   const handleCancel = async () => {
     if (!id) return;
     setActionLoading(true);
+    const updates: any = {
+      status: "cancelled",
+      notes: request.notes ? `${request.notes}\n\n[CANCELAMENTO] ${cancelReason}` : `[CANCELAMENTO] ${cancelReason}`,
+    };
+    if (cancelRequestProviderCost) {
+      updates.provider_cost = parseFloat(cancelRequestProviderCost);
+    }
+    if (cancelRequestChargedAmount) {
+      updates.charged_amount = parseFloat(cancelRequestChargedAmount);
+    }
     const { error } = await supabase
       .from("service_requests")
-      .update({ status: "cancelled", notes: request.notes ? `${request.notes}\n\n[CANCELAMENTO] ${cancelReason}` : `[CANCELAMENTO] ${cancelReason}` })
+      .update(updates)
       .eq("id", id);
     setActionLoading(false);
     if (error) {
       toast.error("Erro ao cancelar", { description: error.message });
     } else {
-      await logEvent("cancel", `Atendimento cancelado. Motivo: ${cancelReason}`, request.status, "cancelled");
-      // Send cancellation label
+      const costInfo = cancelRequestProviderCost ? ` | Custo prestador: R$ ${parseFloat(cancelRequestProviderCost).toFixed(2)}` : "";
+      const chargeInfo = cancelRequestChargedAmount ? ` | Valor cobrado cliente: R$ ${parseFloat(cancelRequestChargedAmount).toFixed(2)}` : "";
+      await logEvent("cancel", `Atendimento cancelado. Motivo: ${cancelReason}${costInfo}${chargeInfo}`, request.status, "cancelled");
       sendServiceLabel(id, "cancellation", { cancel_reason: cancelReason });
       toast.success("Atendimento cancelado");
       setCancelDialogOpen(false);
       setCancelReason("");
+      setCancelRequestProviderCost("");
+      setCancelRequestChargedAmount("");
       loadData();
       loadEvents();
     }
@@ -555,22 +572,38 @@ export default function ServiceRequestDetail() {
   const handleCancelProvider = async () => {
     if (!id || !dispatchId || !cancelProviderReason.trim()) return;
     setActionLoading(true);
-    // Cancel the current dispatch
+    // Cancel the current dispatch with final amount if provider charged
+    const dispatchUpdate: any = { status: "cancelled", notes: cancelProviderReason };
+    if (cancelProviderCost) {
+      dispatchUpdate.final_amount = parseFloat(cancelProviderCost);
+    }
     const { error: dErr } = await supabase
       .from("dispatches")
-      .update({ status: "cancelled", notes: cancelProviderReason })
+      .update(dispatchUpdate)
       .eq("id", dispatchId);
     if (dErr) {
       setActionLoading(false);
       toast.error("Erro ao cancelar prestador", { description: dErr.message });
       return;
     }
-    // Revert service request status to awaiting_dispatch
-    await supabase.from("service_requests").update({ status: "awaiting_dispatch" }).eq("id", id);
-    await logEvent("provider_cancelled", `Prestador cancelado: ${provider?.name || "—"}. Motivo: ${cancelProviderReason}`, "dispatched", "awaiting_dispatch");
+    // Update service request with revised financial values
+    const srUpdate: any = { status: "awaiting_dispatch" };
+    if (cancelProviderCost) {
+      srUpdate.provider_cost = parseFloat(cancelProviderCost);
+    }
+    if (cancelProviderChargedAmount) {
+      srUpdate.charged_amount = parseFloat(cancelProviderChargedAmount);
+    }
+    await supabase.from("service_requests").update(srUpdate).eq("id", id);
+
+    const costInfo = cancelProviderCost ? ` | Custo prestador: R$ ${parseFloat(cancelProviderCost).toFixed(2)}` : "";
+    const chargeInfo = cancelProviderChargedAmount ? ` | Valor mantido cliente: R$ ${parseFloat(cancelProviderChargedAmount).toFixed(2)}` : "";
+    await logEvent("provider_cancelled", `Prestador cancelado: ${provider?.name || "—"}. Motivo: ${cancelProviderReason}${costInfo}${chargeInfo}`, "dispatched", "awaiting_dispatch");
     setActionLoading(false);
     setCancelProviderDialogOpen(false);
     setCancelProviderReason("");
+    setCancelProviderCost("");
+    setCancelProviderChargedAmount("");
     toast.success("Prestador cancelado! Selecione um novo prestador.");
     await loadData();
     await loadEvents();
@@ -1174,12 +1207,40 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
               Esta ação irá cancelar o atendimento <strong>{request.protocol}</strong>. Informe o motivo:
             </DialogDescription>
           </DialogHeader>
-          <Textarea
-            placeholder="Motivo do cancelamento..."
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-            rows={3}
-          />
+          <div className="space-y-4">
+            <Textarea
+              placeholder="Motivo do cancelamento..."
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              rows={3}
+            />
+            <Separator />
+            <p className="text-sm font-medium text-muted-foreground">Houve custo com o prestador?</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Valor pago ao prestador (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0,00"
+                  value={cancelRequestProviderCost}
+                  onChange={(e) => setCancelRequestProviderCost(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Valor cobrado do cliente (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0,00"
+                  value={cancelRequestChargedAmount}
+                  onChange={(e) => setCancelRequestChargedAmount(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>Voltar</Button>
             <Button variant="destructive" onClick={handleCancel} disabled={!cancelReason.trim() || actionLoading}>
@@ -1717,14 +1778,42 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
               O prestador atual ({provider?.name}) será cancelado e você poderá acionar outro. O link do beneficiário será mantido.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <Label>Motivo da troca *</Label>
-            <Textarea
-              placeholder="Informe o motivo da troca do prestador..."
-              value={cancelProviderReason}
-              onChange={(e) => setCancelProviderReason(e.target.value)}
-              rows={3}
-            />
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Motivo da troca *</Label>
+              <Textarea
+                placeholder="Informe o motivo da troca do prestador..."
+                value={cancelProviderReason}
+                onChange={(e) => setCancelProviderReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <Separator />
+            <p className="text-sm font-medium text-muted-foreground">Houve custo com o prestador cancelado?</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Valor cobrado pelo prestador (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0,00"
+                  value={cancelProviderCost}
+                  onChange={(e) => setCancelProviderCost(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Valor mantido para o cliente (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0,00"
+                  value={cancelProviderChargedAmount}
+                  onChange={(e) => setCancelProviderChargedAmount(e.target.value)}
+                />
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCancelProviderDialogOpen(false)}>
