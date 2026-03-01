@@ -113,7 +113,7 @@ export function AppSidebar() {
   );
 
   return (
-    <Sidebar className="border-r-0">
+    <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-white/10 p-1.5 ring-1 ring-white/10 shadow-lg">
@@ -129,7 +129,7 @@ export function AppSidebar() {
       <SidebarContent className="px-2 py-3 custom-scrollbar">
         {visibleSections.map((section) =>
           section.collapsible ? (
-            <Collapsible key={section.label} className="group/collapsible">
+            <Collapsible key={section.label} defaultOpen className="group/collapsible">
               <SidebarGroup className="py-0.5">
                 <CollapsibleTrigger asChild>
                   <SidebarGroupLabel className="flex items-center justify-between cursor-pointer hover:bg-sidebar-accent/60 rounded-lg px-2.5 py-2 text-sidebar-foreground/70 text-[11px] uppercase tracking-wider font-semibold transition-colors">
