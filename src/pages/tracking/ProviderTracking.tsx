@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   MapPin, Navigation, Car, Phone, ExternalLink, Loader2,
-  CheckCircle2, AlertCircle, Shield, Play,
+  CheckCircle2, AlertCircle, Shield, Play, Calendar,
 } from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
 import { toast } from "sonner";
@@ -422,6 +422,15 @@ export default function ProviderTracking() {
               <Badge variant="secondary">{serviceTypeMap[request?.service_type] || request?.service_type}</Badge>
               {request?.vehicle_plate && <Badge variant="outline">{request.vehicle_plate}</Badge>}
             </div>
+            {request?.scheduled_date && (
+              <div className="flex items-center gap-2 text-sm bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-md p-2">
+                <Calendar className="h-4 w-4 text-amber-600" />
+                <span className="font-medium text-amber-800 dark:text-amber-200">
+                  Agendado: {new Date(request.scheduled_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                  {request.scheduled_time && ` às ${request.scheduled_time.slice(0, 5)}`}
+                </span>
+              </div>
+            )}
             {request?.vehicle_model && (
               <div className="flex items-center gap-2 text-sm">
                 <Car className="h-4 w-4 text-muted-foreground" />
