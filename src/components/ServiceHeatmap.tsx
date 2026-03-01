@@ -80,6 +80,26 @@ export default function ServiceHeatmap({ points }: HeatmapProps) {
             },
           });
 
+          // Add circle markers layer for visibility
+          map.addLayer({
+            id: "points-layer",
+            type: "circle",
+            source: "heat-source",
+            minzoom: 0,
+            paint: {
+              "circle-radius": [
+                "interpolate", ["linear"], ["zoom"],
+                0, 3,
+                8, 5,
+                14, 8,
+              ],
+              "circle-color": "#2563eb",
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 1.5,
+              "circle-opacity": 0.85,
+            },
+          });
+
           if (points.length > 0) {
             const bounds = new maplibregl.LngLatBounds();
             points.forEach(([lat, lng]) => bounds.extend([lng, lat]));
