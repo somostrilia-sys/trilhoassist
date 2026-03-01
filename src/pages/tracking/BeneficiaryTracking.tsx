@@ -640,6 +640,57 @@ export default function BeneficiaryTracking() {
                 </div>
               </div>
             )}
+
+            {/* Timeline de atualizações */}
+            {dispatch && (
+              <div className="border-t pt-3 mt-1">
+                <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Histórico</p>
+                <div className="space-y-2">
+                  {request?.created_at && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
+                      <span className="text-muted-foreground">Solicitação aberta</span>
+                      <span className="ml-auto font-medium">{new Date(request.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                  )}
+                  {dispatch?.created_at && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
+                      <span className="text-muted-foreground">Prestador acionado</span>
+                      <span className="ml-auto font-medium">{new Date(dispatch.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                  )}
+                  {dispatch?.accepted_at && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                      <span className="text-muted-foreground">Prestador aceitou</span>
+                      <span className="ml-auto font-medium">{new Date(dispatch.accepted_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                  )}
+                  {dispatch?.provider_arrived_at && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                      <span className="text-muted-foreground">Chegou ao local</span>
+                      <span className="ml-auto font-medium">{new Date(dispatch.provider_arrived_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                  )}
+                  {dispatch?.completed_at && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="w-2 h-2 rounded-full bg-green-600 shrink-0" />
+                      <span className="text-muted-foreground">Concluído</span>
+                      <span className="ml-auto font-medium">{new Date(dispatch.completed_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                  )}
+                  {lastUpdate && !providerArrived && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0" />
+                      <span className="text-muted-foreground">Última posição GPS</span>
+                      <span className="ml-auto font-medium">{lastUpdate.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
