@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
 });
 
 async function handleAutocomplete(body: any) {
-  const { input, tenant_id, sessiontoken } = body;
+  const { input, tenant_id, sessiontoken, types } = body;
 
   if (!input || typeof input !== 'string' || input.trim().length < 3 || input.length > 500) {
     return new Response(
@@ -99,6 +99,9 @@ async function handleAutocomplete(body: any) {
   url.searchParams.set('language', 'pt-BR');
   url.searchParams.set('components', 'country:br');
   url.searchParams.set('key', apiKey);
+  if (types && typeof types === 'string' && types.length <= 50) {
+    url.searchParams.set('types', types);
+  }
   if (sessiontoken && typeof sessiontoken === 'string' && sessiontoken.length <= 200) {
     url.searchParams.set('sessiontoken', sessiontoken);
   }
