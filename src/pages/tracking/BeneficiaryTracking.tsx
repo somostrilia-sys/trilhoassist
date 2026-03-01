@@ -265,9 +265,17 @@ export default function BeneficiaryTracking() {
     }, 30000);
   }, []);
 
+  // Force map key to re-render after SPA redirect
+  const [mapReady, setMapReady] = useState(false);
+  useEffect(() => {
+    // Small delay to ensure DOM is fully settled after SPA redirect
+    const timer = setTimeout(() => setMapReady(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Initialize map
   useEffect(() => {
-    if (!mapRef.current || mapInstanceRef.current) return;
+    if (!mapReady || !mapRef.current || mapInstanceRef.current) return;
     if (!request) return;
 
     const centerLat = request.origin_lat || -15.79;
@@ -278,7 +286,6 @@ export default function BeneficiaryTracking() {
       zoomControl: false,
     }).setView([centerLat, centerLng], zoom);
 
-    // Add zoom control to bottom-right for mobile friendliness
     L.control.zoom({ position: "bottomright" }).addTo(map);
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -302,10 +309,14 @@ export default function BeneficiaryTracking() {
 
     mapInstanceRef.current = map;
 
-    // Force invalidateSize after a short delay to fix rendering in some environments
-    setTimeout(() => {
-      map.invalidateSize();
-    }, 300);
+    // Multiple invalidateSize calls to handle various timing scenarios
+    [100, 300, 500, 1000].forEach(delay => {
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+        }
+      }, delay);
+    });
 
     return () => {
       map.remove();
@@ -313,7 +324,7 @@ export default function BeneficiaryTracking() {
       providerMarkerRef.current = null;
       routePolylineRef.current = null;
     };
-  }, [request]);
+  }, [request, mapReady]);
 
   // Update provider marker with smooth animation
   useEffect(() => {
@@ -764,7 +775,7 @@ export default function BeneficiaryTracking() {
             <div
               ref={mapRef}
               className="w-full"
-              style={{ height: 400 }}
+              style={{ height: "400px", minHeight: "400px" }}
             />
 
             {/* Map legend */}
