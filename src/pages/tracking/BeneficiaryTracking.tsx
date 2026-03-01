@@ -738,6 +738,19 @@ export default function BeneficiaryTracking() {
                 </div>
               </div>
             )}
+            {etaText && !providerArrived && !dispatch?.scheduled_arrival_date && (
+              <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                <div className="bg-blue-500 rounded-full p-2 shrink-0">
+                  <Clock className="h-5 w-5 text-white" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                    ETA: {etaText}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Previsão de chegada do prestador</p>
+                </div>
+              </div>
+            )}
             {dispatch?.scheduled_arrival_date && !providerArrived && (
               <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
                 <div className="bg-blue-500 rounded-full p-2 shrink-0">
