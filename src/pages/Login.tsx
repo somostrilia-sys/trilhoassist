@@ -9,6 +9,13 @@ import { useToast } from "@/hooks/use-toast";
 import { Shield, Building2, Wrench, ArrowLeft, ChevronRight, Truck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import logoTrilho from "@/assets/logo-trilho.png";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 type Portal = "assistencia" | "prestador" | "associacao" | null;
 
@@ -52,6 +59,9 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [selectedPortal, setSelectedPortal] = useState<Portal>(null);
   const [loginData, setLoginData] = useState({ email: "", password: "" });
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -235,6 +245,13 @@ export default function Login() {
                 >
                   {loading ? "Entrando..." : "Entrar"}
                 </Button>
+                <button
+                  type="button"
+                  onClick={() => { setForgotEmail(loginData.email); setForgotOpen(true); }}
+                  className="w-full text-center text-xs text-white/40 hover:text-white/70 transition-colors mt-1"
+                >
+                  Esqueceu sua senha?
+                </button>
               </form>
             </CardContent>
           </Card>
@@ -246,6 +263,50 @@ export default function Login() {
           <span>Conexão segura e criptografada</span>
         </div>
       </div>
+
+      {/* Forgot Password Dialog */}
+      <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
+        <DialogContent className="bg-[hsl(218,58%,16%)] border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-white">Recuperar Senha</DialogTitle>
+            <DialogDescription className="text-white/50">
+              Informe seu e-mail para receber o link de redefinição de senha.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setForgotLoading(true);
+              const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+                redirectTo: `${window.location.origin}/reset-password`,
+              });
+              setForgotLoading(false);
+              if (error) {
+                toast({ title: "Erro", description: error.message, variant: "destructive" });
+              } else {
+                toast({ title: "E-mail enviado!", description: "Verifique sua caixa de entrada para redefinir a senha." });
+                setForgotOpen(false);
+              }
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label className="text-white/60 text-xs">E-mail</Label>
+              <Input
+                type="email"
+                placeholder="seu@email.com"
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                required
+                className="bg-white/[0.06] border-white/[0.08] text-white placeholder:text-white/20"
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={forgotLoading}>
+              {forgotLoading ? "Enviando..." : "Enviar link de recuperação"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
