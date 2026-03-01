@@ -42,14 +42,48 @@ export default function ProviderTracking() {
   const [accepting, setAccepting] = useState(false);
   const [gpsReady, setGpsReady] = useState(false);
   const [arrivedOrigin, setArrivedOrigin] = useState(false);
+  const [wakeLockActive, setWakeLockActive] = useState(false);
   const watchRef = useRef<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const latestPos = useRef<GeolocationPosition | null>(null);
   const autoArrivalRef = useRef(false);
   const arrivalConfirmCount = useRef(0);
+  const wakeLockRef = useRef<any>(null);
   const ARRIVAL_RADIUS_METERS = 100;
-  const ARRIVAL_MAX_ACCURACY = 150; // ignore GPS readings with accuracy worse than 150m
-  const ARRIVAL_CONFIRM_THRESHOLD = 3; // require 3 consecutive readings within radius
+  const ARRIVAL_MAX_ACCURACY = 150;
+  const ARRIVAL_CONFIRM_THRESHOLD = 3;
+
+  // Wake Lock: keep screen on while tracking
+  const requestWakeLock = useCallback(async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        setWakeLockActive(true);
+        wakeLockRef.current.addEventListener('release', () => setWakeLockActive(false));
+      }
+    } catch (err) {
+      console.log('Wake Lock not available:', err);
+    }
+  }, []);
+
+  const releaseWakeLock = useCallback(() => {
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release();
+      wakeLockRef.current = null;
+      setWakeLockActive(false);
+    }
+  }, []);
+
+  // Re-acquire wake lock when page becomes visible again
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && tracking && !wakeLockRef.current) {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [tracking, requestWakeLock]);
 
   useEffect(() => {
     if (!token) return;
@@ -184,7 +218,8 @@ export default function ProviderTracking() {
     );
 
     setTracking(true);
-  }, [sendPosition]);
+    requestWakeLock();
+  }, [sendPosition, requestWakeLock]);
 
   const stopTracking = useCallback(() => {
     if (watchRef.current !== null) {
@@ -197,7 +232,8 @@ export default function ProviderTracking() {
     }
     setTracking(false);
     setGpsReady(false);
-  }, []);
+    releaseWakeLock();
+  }, [releaseWakeLock]);
 
   useEffect(() => {
     return () => {
@@ -465,6 +501,15 @@ export default function ProviderTracking() {
                       Último: {lastSent.toLocaleTimeString("pt-BR")}
                     </span>
                   )}
+                </div>
+                {wakeLockActive && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Shield className="h-3 w-3" />
+                    <span>Tela mantida ligada</span>
+                  </div>
+                )}
+                <div className="rounded-md bg-amber-50 border border-amber-200 p-2 text-xs text-amber-800">
+                  <strong>⚠️ Mantenha esta página aberta</strong> para que sua localização continue sendo compartilhada. Se minimizar o navegador, o envio será pausado.
                 </div>
                 {isAccepted && (
                   <Button onClick={stopTracking} variant="outline" size="sm" className="w-full">
