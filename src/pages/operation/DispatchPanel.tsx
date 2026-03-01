@@ -229,6 +229,22 @@ export default function DispatchPanel() {
     }
   }, [items, soundEnabled]);
 
+  // Recurring siren every 15 minutes while there are active alerts
+  useEffect(() => {
+    if (!soundEnabled) return;
+
+    const interval = setInterval(() => {
+      const hasActiveAlerts = items.some(
+        (i) => (i.alertDispatch || i.alertLate) && !pausedIds.has(i.request.id)
+      );
+      if (hasActiveAlerts) {
+        playSiren();
+      }
+    }, 15 * 60 * 1000); // 15 minutes
+
+    return () => clearInterval(interval);
+  }, [items, soundEnabled, pausedIds]);
+
   const alertCount = items.filter((i) => i.alertDispatch || i.alertLate).length;
 
   return (
