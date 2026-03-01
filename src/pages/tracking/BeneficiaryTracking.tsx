@@ -120,6 +120,7 @@ export default function BeneficiaryTracking() {
   const waitingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const etaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastAcceptedPos = useRef<{ lat: number; lng: number; ts: number } | null>(null);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -127,6 +128,25 @@ export default function BeneficiaryTracking() {
   const originMarkerRef = useRef<L.Marker | null>(null);
   const routePolylineRef = useRef<L.Polyline | null>(null);
   const currentDispatchIdRef = useRef<string | null>(null);
+
+  // Anti-jump filter: reject positions that teleport impossibly fast
+  const acceptPosition = useCallback((lat: number, lng: number): boolean => {
+    const now = Date.now();
+    if (!lastAcceptedPos.current) {
+      lastAcceptedPos.current = { lat, lng, ts: now };
+      return true;
+    }
+    const moved = haversineDistance(lastAcceptedPos.current.lat, lastAcceptedPos.current.lng, lat, lng) * 1000; // km to meters
+    const elapsed = now - lastAcceptedPos.current.ts;
+    
+    // Reject jumps > 500m in < 15 seconds
+    if (moved > 500 && elapsed < 15000) {
+      console.log(`Beneficiary view: rejected GPS jump ${moved.toFixed(0)}m in ${(elapsed/1000).toFixed(0)}s`);
+      return false;
+    }
+    lastAcceptedPos.current = { lat, lng, ts: now };
+    return true;
+  }, []);
 
   // Load data
   const loadData = useCallback(async () => {
@@ -240,9 +260,11 @@ export default function BeneficiaryTracking() {
         },
         (payload: any) => {
           const { latitude, longitude, created_at } = payload.new;
-          setProviderPos({ lat: latitude, lng: longitude });
-          setLastUpdate(new Date(created_at));
-          resetWaitingTimer();
+          if (acceptPosition(latitude, longitude)) {
+            setProviderPos({ lat: latitude, lng: longitude });
+            setLastUpdate(new Date(created_at));
+            resetWaitingTimer();
+          }
         }
       )
       .subscribe();
@@ -252,7 +274,7 @@ export default function BeneficiaryTracking() {
       .channel(`provider-location-${request.id}`)
       .on("broadcast", { event: "location" }, (payload: any) => {
         const { lat, lng, ts } = payload.payload;
-        if (lat && lng) {
+        if (lat && lng && acceptPosition(lat, lng)) {
           setProviderPos({ lat, lng });
           setLastUpdate(new Date(ts));
           resetWaitingTimer();
