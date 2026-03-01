@@ -1188,6 +1188,7 @@ export type Database = {
           destination_lat: number | null
           destination_lng: number | null
           difficult_access: boolean | null
+          driver_name: string | null
           estimated_km: number | null
           event_type: Database["public"]["Enums"]["event_type"]
           financial_status: string | null
@@ -1232,6 +1233,7 @@ export type Database = {
           destination_lat?: number | null
           destination_lng?: number | null
           difficult_access?: boolean | null
+          driver_name?: string | null
           estimated_km?: number | null
           event_type?: Database["public"]["Enums"]["event_type"]
           financial_status?: string | null
@@ -1276,6 +1278,7 @@ export type Database = {
           destination_lat?: number | null
           destination_lng?: number | null
           difficult_access?: boolean | null
+          driver_name?: string | null
           estimated_km?: number | null
           event_type?: Database["public"]["Enums"]["event_type"]
           financial_status?: string | null

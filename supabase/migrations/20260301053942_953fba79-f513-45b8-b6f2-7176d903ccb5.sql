@@ -1,0 +1,1 @@
+ALTER TABLE public.service_requests ADD COLUMN driver_name text DEFAULT NULL;

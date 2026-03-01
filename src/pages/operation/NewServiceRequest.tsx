@@ -168,6 +168,10 @@ export default function NewServiceRequest() {
   const [createdRequestId, setCreatedRequestId] = useState<string | null>(null);
   const [shareToken, setShareToken] = useState<string | null>(null);
 
+  // Driver (condutor) state
+  const [driverIsBeneficiary, setDriverIsBeneficiary] = useState(true);
+  const [driverName, setDriverName] = useState("");
+
   // Scheduling state (Imediato / Agendado)
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledDate, setScheduledDate] = useState<Date | undefined>(undefined);
@@ -493,6 +497,7 @@ export default function NewServiceRequest() {
       beneficiary_token: beneficiaryToken,
       scheduled_date: isScheduled && scheduledDate ? format(scheduledDate, "yyyy-MM-dd") : null,
       scheduled_time: isScheduled && scheduledTime ? scheduledTime : null,
+      driver_name: driverIsBeneficiary ? null : (driverName.trim() || null),
     } as any).select("id").single();
 
     if (!error && inserted) {
@@ -804,20 +809,52 @@ export default function NewServiceRequest() {
               <User className="h-5 w-5" /> DADOS DO SOLICITANTE
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Nome do Solicitante *</Label>
-              <Input value={form.requester_name} onChange={(e) => { update("requester_name", e.target.value); setErrors(prev => ({ ...prev, requester_name: "" })); }} className={errors.requester_name ? "border-destructive" : ""} />
-              {errors.requester_name && <p className="text-xs text-destructive">{errors.requester_name}</p>}
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Nome do Solicitante *</Label>
+                <Input value={form.requester_name} onChange={(e) => { update("requester_name", e.target.value); setErrors(prev => ({ ...prev, requester_name: "" })); }} className={errors.requester_name ? "border-destructive" : ""} />
+                {errors.requester_name && <p className="text-xs text-destructive">{errors.requester_name}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label>Telefone do Solicitante *</Label>
+                <Input value={form.requester_phone} onChange={(e) => { update("requester_phone", maskPhone(e.target.value)); setErrors(prev => ({ ...prev, requester_phone: "" })); }} placeholder="(00) 00000-0000" className={errors.requester_phone ? "border-destructive" : ""} />
+                {errors.requester_phone && <p className="text-xs text-destructive">{errors.requester_phone}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label>Telefone Secundário</Label>
+                <Input value={form.requester_phone_secondary} onChange={(e) => update("requester_phone_secondary", maskPhone(e.target.value))} placeholder="(00) 00000-0000" />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Telefone do Solicitante *</Label>
-              <Input value={form.requester_phone} onChange={(e) => { update("requester_phone", maskPhone(e.target.value)); setErrors(prev => ({ ...prev, requester_phone: "" })); }} placeholder="(00) 00000-0000" className={errors.requester_phone ? "border-destructive" : ""} />
-              {errors.requester_phone && <p className="text-xs text-destructive">{errors.requester_phone}</p>}
-            </div>
-            <div className="space-y-2">
-              <Label>Telefone Secundário</Label>
-              <Input value={form.requester_phone_secondary} onChange={(e) => update("requester_phone_secondary", maskPhone(e.target.value))} placeholder="(00) 00000-0000" />
+
+            {/* Condutor */}
+            <div className="border-t pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Condutor</Label>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="driver-is-beneficiary"
+                    checked={driverIsBeneficiary}
+                    onCheckedChange={(checked) => {
+                      setDriverIsBeneficiary(!!checked);
+                      if (checked) setDriverName("");
+                    }}
+                  />
+                  <label htmlFor="driver-is-beneficiary" className="text-sm cursor-pointer">
+                    Próprio associado
+                  </label>
+                </div>
+              </div>
+              {!driverIsBeneficiary && (
+                <div className="space-y-2">
+                  <Label>Nome do Condutor</Label>
+                  <Input
+                    value={driverName}
+                    onChange={(e) => setDriverName(e.target.value)}
+                    placeholder="Nome de quem está conduzindo o veículo"
+                  />
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
