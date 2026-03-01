@@ -6,13 +6,16 @@ const ServiceHeatmap = lazy(() => import("@/components/ServiceHeatmap"));
 const NpsPanel = lazy(() => import("@/components/NpsPanel"));
 import {
   Headphones, Send, DollarSign, Clock, TrendingUp, AlertCircle,
-  Timer, Route, Banknote, Zap,
+  Timer, Route, Banknote, Zap, Copy,
 } from "lucide-react";
+import { toast as sonnerToast } from "sonner";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell, BarChart, Bar,
 } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 const statusMap: Record<string, { label: string; color: string }> = {
   open: { label: "Aberto", color: "hsl(var(--primary))" },
@@ -258,6 +261,26 @@ export default function Dashboard() {
           <p>Visão geral das operações em tempo real</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => {
+                    const url = "https://trilhoassist.com.br/solicitar";
+                    navigator.clipboard.writeText(url);
+                    sonnerToast.success("Link copiado!", { description: url });
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                  Link de Solicitação
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Copiar link público de solicitação</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Select value={clientFilter} onValueChange={setClientFilter}>
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="Todos os clientes" />
@@ -344,7 +367,7 @@ export default function Dashboard() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={tooltipStyle} />
+                  <RechartsTooltip contentStyle={tooltipStyle} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -365,7 +388,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis type="number" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" width={80} />
-                  <Tooltip contentStyle={tooltipStyle} />
+                  <RechartsTooltip contentStyle={tooltipStyle} />
                   <Bar dataKey="quantidade" name="Quantidade" radius={[0, 4, 4, 0]}>
                     {serviceTypeData.map((_, index) => (
                       <Cell key={`bar-${index}`} fill={serviceTypeColors[index % serviceTypeColors.length]} />
@@ -389,7 +412,7 @@ export default function Dashboard() {
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" interval={days <= 14 ? 0 : "preserveStartEnd"} />
               <YAxis tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" allowDecimals={false} />
-              <Tooltip contentStyle={tooltipStyle} />
+              <RechartsTooltip contentStyle={tooltipStyle} />
               <Legend />
               <Line type="monotone" dataKey="abertos" stroke="hsl(var(--primary))" strokeWidth={2} name="Abertos" dot={days <= 14} />
               <Line type="monotone" dataKey="finalizados" stroke="hsl(var(--success))" strokeWidth={2} name="Finalizados" dot={days <= 14} />
