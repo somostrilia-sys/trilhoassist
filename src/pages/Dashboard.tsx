@@ -230,7 +230,6 @@ export default function Dashboard() {
     { label: "Tempo Méd. Atendimento", value: formatDuration(kpiData.avgServiceTimeMin), icon: Timer, color: "text-info" },
     { label: "Tempo Méd. Acionamento", value: formatDuration(kpiData.avgDispatchTimeMin), icon: Zap, color: "text-warning" },
     { label: "Distância Média", value: kpiData.avgKm > 0 ? `${kpiData.avgKm.toFixed(1)} km` : "—", icon: Route, color: "text-primary" },
-    { label: "Valor Méd. Cobrado", value: formatCurrency(kpiData.avgCost), icon: DollarSign, color: "text-primary" },
     { label: "Valor Méd. Prestador", value: formatCurrency(kpiData.avgProviderCost), icon: Banknote, color: "text-destructive" },
   ];
 
@@ -326,7 +325,7 @@ export default function Dashboard() {
       </div>
 
       {/* KPIs — Row 2: Médias e Performance */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {kpiCards2.map((kpi) => (
           <Card key={kpi.label} className="kpi-card hover:shadow-md">
             <CardContent className="p-4">
