@@ -8,6 +8,7 @@ import { MapPin, Loader2, AlertCircle, Clock, Bell, CheckCircle2, Navigation, Sh
 import logoTrilho from "@/assets/logo-trilho.png";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { GPSKalmanFilter } from "@/lib/gpsKalmanFilter";
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
@@ -120,7 +121,7 @@ export default function BeneficiaryTracking() {
   const waitingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const etaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastAcceptedPos = useRef<{ lat: number; lng: number; ts: number } | null>(null);
+  const receiverKalman = useRef(new GPSKalmanFilter(3));
 
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -129,23 +130,9 @@ export default function BeneficiaryTracking() {
   const routePolylineRef = useRef<L.Polyline | null>(null);
   const currentDispatchIdRef = useRef<string | null>(null);
 
-  // Anti-jump filter: reject positions that teleport impossibly fast
-  const acceptPosition = useCallback((lat: number, lng: number): boolean => {
-    const now = Date.now();
-    if (!lastAcceptedPos.current) {
-      lastAcceptedPos.current = { lat, lng, ts: now };
-      return true;
-    }
-    const moved = haversineDistance(lastAcceptedPos.current.lat, lastAcceptedPos.current.lng, lat, lng) * 1000; // km to meters
-    const elapsed = now - lastAcceptedPos.current.ts;
-    
-    // Reject jumps > 500m in < 15 seconds
-    if (moved > 500 && elapsed < 15000) {
-      console.log(`Beneficiary view: rejected GPS jump ${moved.toFixed(0)}m in ${(elapsed/1000).toFixed(0)}s`);
-      return false;
-    }
-    lastAcceptedPos.current = { lat, lng, ts: now };
-    return true;
+  // Kalman-based position smoother for received provider positions
+  const smoothPosition = useCallback((lat: number, lng: number, accuracy?: number): { lat: number; lng: number } => {
+    return receiverKalman.current.process(lat, lng, accuracy || 30, Date.now());
   }, []);
 
   // Load data
@@ -188,6 +175,7 @@ export default function BeneficiaryTracking() {
         setProviderArrived(false);
         arrivalNotifiedRef.current = false;
         notifiedRef.current = false;
+        receiverKalman.current.reset(); // Reset Kalman for new dispatch
       }
 
       currentDispatchIdRef.current = d.id;
@@ -259,12 +247,11 @@ export default function BeneficiaryTracking() {
           filter: `dispatch_id=eq.${dispatch.id}`,
         },
         (payload: any) => {
-          const { latitude, longitude, created_at } = payload.new;
-          if (acceptPosition(latitude, longitude)) {
-            setProviderPos({ lat: latitude, lng: longitude });
-            setLastUpdate(new Date(created_at));
-            resetWaitingTimer();
-          }
+          const { latitude, longitude, created_at, accuracy } = payload.new;
+          const smoothed = smoothPosition(latitude, longitude, accuracy);
+          setProviderPos(smoothed);
+          setLastUpdate(new Date(created_at));
+          resetWaitingTimer();
         }
       )
       .subscribe();
@@ -273,9 +260,10 @@ export default function BeneficiaryTracking() {
     const broadcastChannel = supabase
       .channel(`provider-location-${request.id}`)
       .on("broadcast", { event: "location" }, (payload: any) => {
-        const { lat, lng, ts } = payload.payload;
-        if (lat && lng && acceptPosition(lat, lng)) {
-          setProviderPos({ lat, lng });
+        const { lat, lng, ts, accuracy } = payload.payload;
+        if (lat && lng) {
+          const smoothed = smoothPosition(lat, lng, accuracy);
+          setProviderPos(smoothed);
           setLastUpdate(new Date(ts));
           resetWaitingTimer();
         }

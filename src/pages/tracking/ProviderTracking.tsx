@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
 import { toast } from "sonner";
+import { GPSKalmanFilter } from "@/lib/gpsKalmanFilter";
 
 const serviceTypeMap: Record<string, string> = {
   tow_light: "Reboque Leve", tow_heavy: "Reboque Pesado", tow_motorcycle: "Reboque Moto",
@@ -118,52 +119,37 @@ export default function ProviderTracking() {
     load();
   }, [token]);
 
+  const kalmanFilter = useRef(new GPSKalmanFilter(3)); // processNoise=3 for city driving
   const lastSentPos = useRef<{ lat: number; lng: number; ts: number } | null>(null);
-  const positionHistory = useRef<{ lat: number; lng: number; acc: number; ts: number }[]>([]);
-  const MIN_SEND_ACCURACY = 50; // Only send positions with accuracy <= 50m (stricter)
-  const MAX_JUMP_METERS = 500; // Reject jumps > 500m in < 15 seconds (impossible by car in city)
-  const MAX_JUMP_INTERVAL_MS = 15000;
+  const MIN_SEND_DISTANCE = 8; // Only send if Kalman output moved >= 8m
 
   const sendPosition = useCallback(async (pos: GeolocationPosition) => {
     if (!dispatch || !request) return;
     
-    const accuracy = pos.coords.accuracy;
-    const lat = pos.coords.latitude;
-    const lng = pos.coords.longitude;
+    const accuracy = pos.coords.accuracy || 50;
     const now = Date.now();
 
-    // 1. Skip positions with poor accuracy
-    if (accuracy && accuracy > MIN_SEND_ACCURACY) {
-      return;
-    }
+    // Run through Kalman filter — this smooths everything
+    const filtered = kalmanFilter.current.process(
+      pos.coords.latitude,
+      pos.coords.longitude,
+      accuracy,
+      now
+    );
 
-    // 2. Reject impossible jumps (teleportation detection)
+    // Skip if Kalman output hasn't moved enough from last sent
     if (lastSentPos.current) {
-      const moved = haversineDistance(lastSentPos.current.lat, lastSentPos.current.lng, lat, lng);
-      const elapsed = now - lastSentPos.current.ts;
-      
-      // If jumped more than 500m in under 15 seconds, it's a GPS glitch
-      if (moved > MAX_JUMP_METERS && elapsed < MAX_JUMP_INTERVAL_MS) {
-        console.log(`GPS jump rejected: ${moved.toFixed(0)}m in ${(elapsed/1000).toFixed(0)}s`);
-        return;
-      }
-
-      // Skip if hasn't moved at all (< 5m)
-      if (moved < 5) return;
+      const moved = haversineDistance(lastSentPos.current.lat, lastSentPos.current.lng, filtered.lat, filtered.lng);
+      if (moved < MIN_SEND_DISTANCE) return;
     }
 
-    // 3. Use median filter: keep last 3 positions, send the median to smooth outliers
-    positionHistory.current.push({ lat, lng, acc: accuracy || 999, ts: now });
-    if (positionHistory.current.length > 5) positionHistory.current.shift();
-
-    // Use position with best accuracy from recent history
-    const bestPos = positionHistory.current.reduce((best, p) => p.acc < best.acc ? p : best);
+    const filteredAccuracy = kalmanFilter.current.getAccuracy();
 
     const payload = {
       dispatch_id: dispatch.id,
-      latitude: bestPos.lat,
-      longitude: bestPos.lng,
-      accuracy: bestPos.acc,
+      latitude: filtered.lat,
+      longitude: filtered.lng,
+      accuracy: filteredAccuracy,
       heading: pos.coords.heading || null,
       speed: pos.coords.speed || null,
     };
@@ -171,9 +157,9 @@ export default function ProviderTracking() {
     supabase.channel(`provider-location-${request.id}`).send({
       type: "broadcast",
       event: "location",
-      payload: { lat: bestPos.lat, lng: bestPos.lng, accuracy: bestPos.acc, ts: now },
+      payload: { lat: filtered.lat, lng: filtered.lng, accuracy: filteredAccuracy, ts: now },
     });
-    lastSentPos.current = { lat: bestPos.lat, lng: bestPos.lng, ts: now };
+    lastSentPos.current = { lat: filtered.lat, lng: filtered.lng, ts: now };
     setLastSent(new Date());
   }, [dispatch, request]);
 
@@ -187,9 +173,7 @@ export default function ProviderTracking() {
 
     watchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
-        // Only accept positions with good accuracy (<=50m)
-        const acc = pos.coords.accuracy;
-        if (acc && acc > MIN_SEND_ACCURACY) return;
+        // Accept all readings — Kalman filter will smooth them
         latestPos.current = pos;
         setGpsReady(true);
       },
