@@ -17,11 +17,12 @@ import { Button } from "@/components/ui/button";
 import { NewConversationDialog } from "@/components/whatsapp/NewConversationDialog";
 
 export default function WhatsAppQueue() {
-  const { user } = useAuth();
+  const { user, roles } = useAuth();
   const { data: tenantId } = useTenantId();
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const isAdmin = roles.includes("admin") || roles.includes("super_admin");
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -31,15 +32,22 @@ export default function WhatsAppQueue() {
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [showNewConversation, setShowNewConversation] = useState(false);
   const [creatingConversation, setCreatingConversation] = useState(false);
-  // Fetch all conversations (including closed for filter)
+  // Fetch conversations - operators see only their own, admins see all
   const { data: conversations = [], isLoading } = useQuery({
-    queryKey: ["whatsapp-conversations", tenantId],
+    queryKey: ["whatsapp-conversations", tenantId, isAdmin, user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("whatsapp_conversations")
         .select("*, beneficiaries(id, name, vehicle_plate, vehicle_model, vehicle_year, client_id, clients(name))")
         .eq("tenant_id", tenantId!)
         .order("last_message_at", { ascending: false });
+      
+      // Operators only see conversations assigned to them
+      if (!isAdmin && user?.id) {
+        query = query.eq("assigned_to", user.id);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
     },
