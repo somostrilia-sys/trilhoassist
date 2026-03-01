@@ -32,7 +32,7 @@ export default function WhatsAppQueue() {
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [showNewConversation, setShowNewConversation] = useState(false);
   const [creatingConversation, setCreatingConversation] = useState(false);
-  // Fetch conversations - operators see only their own, admins see all
+  // Fetch conversations - operators see their own + unassigned, admins see all
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ["whatsapp-conversations", tenantId, isAdmin, user?.id],
     queryFn: async () => {
@@ -42,9 +42,9 @@ export default function WhatsAppQueue() {
         .eq("tenant_id", tenantId!)
         .order("last_message_at", { ascending: false });
       
-      // Operators only see conversations assigned to them
+      // Operators see conversations assigned to them OR unassigned (queue)
       if (!isAdmin && user?.id) {
-        query = query.eq("assigned_to", user.id);
+        query = query.or(`assigned_to.eq.${user.id},assigned_to.is.null`);
       }
 
       const { data, error } = await query;
