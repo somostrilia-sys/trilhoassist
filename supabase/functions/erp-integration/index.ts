@@ -556,7 +556,12 @@ Deno.serve(async (req) => {
           }
         }
 
-        console.log(`To insert: ${toInsert.length}, to update: ${toUpdate.length}`);
+        // Deduplicate toUpdate by id (keep last)
+        const updateMap = new Map();
+        for (const row of toUpdate) { updateMap.set(row.id, row); }
+        const dedupedUpdate = Array.from(updateMap.values());
+
+        console.log(`To insert: ${toInsert.length}, to update: ${dedupedUpdate.length} (deduped from ${toUpdate.length})`);
 
         let created = 0;
         let updated = 0;
@@ -571,8 +576,8 @@ Deno.serve(async (req) => {
         }
 
         // Batch update in chunks of 500
-        for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
-          const chunk = toUpdate.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < dedupedUpdate.length; i += BATCH_SIZE) {
+          const chunk = dedupedUpdate.slice(i, i + BATCH_SIZE);
           const { error: upsertErr } = await serviceSupabase
             .from("beneficiaries")
             .upsert(chunk, { onConflict: "id" });
@@ -753,7 +758,12 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
       }
     }
 
-    console.log(`Auto sync - To insert: ${toInsert.length}, to update: ${toUpdate.length}`);
+    // Deduplicate toUpdate by id (keep last)
+    const updateMap = new Map();
+    for (const row of toUpdate) { updateMap.set(row.id, row); }
+    const dedupedUpdate = Array.from(updateMap.values());
+
+    console.log(`Auto sync - To insert: ${toInsert.length}, to update: ${dedupedUpdate.length} (deduped from ${toUpdate.length})`);
 
     let created = 0, updated = 0;
     const BATCH_SIZE = 500;
@@ -765,8 +775,8 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
       else console.error(`Auto sync insert error (chunk ${i}):`, insertErr.message);
     }
 
-    for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
-      const chunk = toUpdate.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < dedupedUpdate.length; i += BATCH_SIZE) {
+      const chunk = dedupedUpdate.slice(i, i + BATCH_SIZE);
       const { error: upsertErr } = await supabase.from("beneficiaries").upsert(chunk, { onConflict: "id" });
       if (!upsertErr) updated += chunk.length;
       else console.error(`Auto sync upsert error (chunk ${i}):`, upsertErr.message);
