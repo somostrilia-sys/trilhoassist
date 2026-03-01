@@ -15,7 +15,7 @@ import {
   Share2, Truck, XCircle, PlayCircle, CheckCircle2, Loader2, Clock, History,
   FilePlus2, RotateCcw, Send, Camera, Mic, Video, File, Link as LinkIcon,
   DollarSign, CalendarIcon, AlertCircle, Search, ChevronsUpDown, Check,
-  ClipboardCopy, Phone, Star, MapPinned,
+  ClipboardCopy, Phone, Star, MapPinned, Trash2,
 } from "lucide-react";
 import { Command, CommandInput, CommandList, CommandEmpty, CommandItem, CommandGroup } from "@/components/ui/command";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -225,6 +225,7 @@ export default function ServiceRequestDetail() {
   const [cancelProviderChargedAmount, setCancelProviderChargedAmount] = useState("");
   const [cancelRequestProviderCost, setCancelRequestProviderCost] = useState("");
   const [cancelRequestChargedAmount, setCancelRequestChargedAmount] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const logEvent = useCallback(async (eventType: string, description: string, oldValue?: string, newValue?: string) => {
     if (!id) return;
@@ -632,6 +633,23 @@ export default function ServiceRequestDetail() {
     }
   };
 
+  const handleDeleteRequest = async () => {
+    if (!id) return;
+    setActionLoading(true);
+    // Delete related records first (events, dispatches, collision_media)
+    await supabase.from("service_request_events").delete().eq("service_request_id", id);
+    await supabase.from("dispatches").delete().eq("service_request_id", id);
+    await supabase.from("collision_media").delete().eq("service_request_id", id);
+    const { error } = await supabase.from("service_requests").delete().eq("id", id);
+    setActionLoading(false);
+    if (error) {
+      toast.error("Erro ao excluir atendimento", { description: error.message });
+    } else {
+      toast.success("Atendimento excluído permanentemente");
+      navigate("/operation/requests");
+    }
+  };
+
   // Build route points
   const routePoints = useMemo<RoutePoint[]>(() => {
     if (!request) return [];
@@ -838,6 +856,15 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
                 Reabrir Atendimento
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              Excluir
+            </Button>
           </div>
 
           {/* Dispatch info */}
@@ -1827,6 +1854,28 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
             >
               {actionLoading && <Loader2 className="h-4 w-4 animate-spin" />}
               Cancelar e Buscar Outro
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Excluir Atendimento
+            </DialogTitle>
+            <DialogDescription>
+              Esta ação é <strong>irreversível</strong>. O atendimento <strong>{request?.protocol}</strong>, todos os despachos, eventos e mídias associados serão excluídos permanentemente.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Voltar</Button>
+            <Button variant="destructive" onClick={handleDeleteRequest} disabled={actionLoading} className="gap-2">
+              {actionLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+              Excluir Permanentemente
             </Button>
           </DialogFooter>
         </DialogContent>
