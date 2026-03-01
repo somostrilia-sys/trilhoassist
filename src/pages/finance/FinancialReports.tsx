@@ -129,18 +129,34 @@ function useBeneficiaryReport(tenantId: string | null | undefined) {
       if (!clients?.length) return { beneficiaries: [], clients: [] };
 
       const clientIds = clients.map((c) => c.id);
-      const { data: bens, error } = await supabase
-        .from("beneficiaries")
-        .select(`
-          id, name, cpf, phone, vehicle_plate, vehicle_model, vehicle_year,
-          vehicle_chassis, cooperativa, active, created_at,
-          client_id,
-          plan_id, plans (id, name, plate_fee)
-        `)
-        .in("client_id", clientIds)
-        .order("name");
-      if (error) throw error;
-      return { beneficiaries: bens ?? [], clients };
+      
+      // Fetch ALL beneficiaries using pagination to bypass 1000 row limit
+      let allBens: any[] = [];
+      const pageSize = 1000;
+      
+      for (const clientId of clientIds) {
+        let from = 0;
+        let hasMore = true;
+        while (hasMore) {
+          const { data: bens, error } = await supabase
+            .from("beneficiaries")
+            .select(`
+              id, name, cpf, phone, vehicle_plate, vehicle_model, vehicle_year,
+              vehicle_chassis, cooperativa, active, created_at,
+              client_id,
+              plan_id, plans (id, name, plate_fee)
+            `)
+            .eq("client_id", clientId)
+            .range(from, from + pageSize - 1)
+            .order("name");
+          if (error) throw error;
+          allBens = allBens.concat(bens ?? []);
+          hasMore = (bens?.length ?? 0) === pageSize;
+          from += pageSize;
+        }
+      }
+      
+      return { beneficiaries: allBens, clients };
     },
     enabled: !!tenantId,
   });
