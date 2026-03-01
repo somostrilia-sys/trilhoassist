@@ -189,16 +189,18 @@ Deno.serve(async (req) => {
     if (action === "test") {
       try {
         let response = await fetch(client.api_endpoint, {
-          method: "GET",
+          method: "POST",
           headers: apiHeaders,
+          body: JSON.stringify({}),
         });
 
         if (!response.ok) {
           await response.text();
+          const getHeaders = { ...apiHeaders };
+          delete getHeaders["Content-Type"];
           response = await fetch(client.api_endpoint, {
-            method: "POST",
-            headers: apiHeaders,
-            body: JSON.stringify({}),
+            method: "GET",
+            headers: getHeaders,
           });
         }
 
@@ -411,21 +413,24 @@ Deno.serve(async (req) => {
       }
 
       try {
-        // Fetch data from ERP
-        // Try GET first (Hinova SGA prefers GET), fallback to POST
+        // Fetch data from ERP - POST first, fallback to GET
         let response = await fetch(client.api_endpoint, {
-          method: "GET",
+          method: "POST",
           headers: apiHeaders,
+          body: JSON.stringify({}),
         });
 
         if (!response.ok) {
-          // Consume body before retrying
-          await response.text();
+          const firstStatus = response.status;
+          await response.text(); // consume body before retry
+          // Remove Content-Type for GET request
+          const getHeaders = { ...apiHeaders };
+          delete getHeaders["Content-Type"];
           response = await fetch(client.api_endpoint, {
-            method: "POST",
-            headers: apiHeaders,
-            body: JSON.stringify({}),
+            method: "GET",
+            headers: getHeaders,
           });
+          console.log(`POST returned ${firstStatus}, GET fallback returned ${response.status}`);
         }
 
         if (!response.ok) {
@@ -664,16 +669,18 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
       headers[authHeader] = client.api_key;
     }
     let response = await fetch(client.api_endpoint, {
-      method: "GET",
+      method: "POST",
       headers,
+      body: JSON.stringify({}),
     });
 
     if (!response.ok) {
       await response.text();
+      const getHeaders = { ...headers };
+      delete getHeaders["Content-Type"];
       response = await fetch(client.api_endpoint, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({}),
+        method: "GET",
+        headers: getHeaders,
       });
     }
 
