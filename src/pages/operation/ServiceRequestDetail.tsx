@@ -230,6 +230,9 @@ export default function ServiceRequestDetail() {
   const [editingDestination, setEditingDestination] = useState(false);
   const [editDestAddress, setEditDestAddress] = useState("");
   const [savingDestination, setSavingDestination] = useState(false);
+  const [editingOrigin, setEditingOrigin] = useState(false);
+  const [editOriginAddress, setEditOriginAddress] = useState("");
+  const [savingOrigin, setSavingOrigin] = useState(false);
 
   const logEvent = useCallback(async (eventType: string, description: string, oldValue?: string, newValue?: string) => {
     if (!id) return;
@@ -1095,7 +1098,66 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-            <InfoRow label="Endereço de Origem" value={request.origin_address} />
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-muted-foreground">Endereço de Origem</span>
+                {!editingOrigin && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs gap-1"
+                    onClick={() => {
+                      setEditOriginAddress(request.origin_address || "");
+                      setEditingOrigin(true);
+                    }}
+                  >
+                    <MapPinned className="h-3 w-3" />
+                    Editar
+                  </Button>
+                )}
+              </div>
+              {editingOrigin ? (
+                <div className="space-y-2">
+                  <AddressAutocomplete
+                    value={editOriginAddress}
+                    onChange={setEditOriginAddress}
+                    onPlaceSelect={async (place) => {
+                      setSavingOrigin(true);
+                      const { error: updErr } = await supabase
+                        .from("service_requests")
+                        .update({
+                          origin_address: place.formatted_address,
+                          origin_lat: place.lat,
+                          origin_lng: place.lng,
+                        })
+                        .eq("id", id);
+                      if (updErr) {
+                        toast.error("Erro ao atualizar origem");
+                      } else {
+                        toast.success("Origem atualizada!");
+                        await logEvent("update", `Origem alterada para: ${place.formatted_address}`, request.origin_address || "—", place.formatted_address);
+                        setRequest({ ...request, origin_address: place.formatted_address, origin_lat: place.lat, origin_lng: place.lng });
+                      }
+                      setSavingOrigin(false);
+                      setEditingOrigin(false);
+                    }}
+                    placeholder="Buscar novo endereço de origem..."
+                    tenantId={request.tenant_id}
+                    types="address"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => setEditingOrigin(false)}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm">{request.origin_address || "—"}</p>
+              )}
+            </div>
             <div>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-medium text-muted-foreground">Endereço de Destino</span>
