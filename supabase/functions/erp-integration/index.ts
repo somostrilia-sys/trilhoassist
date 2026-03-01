@@ -240,6 +240,127 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ─── ACTION: AUTO MAP PRODUCTS ───
+    if (action === "auto_map_products") {
+      const serviceSupabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+
+      try {
+        // Fetch ERP data
+        let response = await fetch(client.api_endpoint, {
+          method: "POST",
+          headers: apiHeaders,
+          body: JSON.stringify({}),
+        });
+        if (response.status === 405 || response.status === 404) {
+          response = await fetch(client.api_endpoint, { method: "GET", headers: apiHeaders });
+        }
+        if (!response.ok) {
+          const text = await response.text();
+          return jsonResponse({ error: `ERP erro ${response.status}: ${text.substring(0, 200)}` }, 500);
+        }
+
+        const erpData = await response.json();
+        const records = extractRecords(erpData);
+
+        // Extract unique products with code + description
+        const productMap = new Map<string, string>(); // code -> description
+        for (const r of records) {
+          const code = r.codigo_produto || r.cod_produto || r.product_code || r.codigo || "";
+          const desc = r.descricao_produto || r.produto || r.plano || r.plan || r.plan_name || r.nome_produto || "";
+          if (code && desc) {
+            productMap.set(String(code), desc);
+          }
+        }
+
+        if (productMap.size === 0) {
+          return jsonResponse({ error: "Nenhum código de produto encontrado nos dados do ERP. Campos esperados: codigo_produto, cod_produto, product_code" }, 400);
+        }
+
+        // Get existing plans for this client
+        const { data: existingPlans } = await serviceSupabase
+          .from("plans")
+          .select("id, name, erp_code")
+          .eq("client_id", client_id);
+
+        const existingByCode = new Map((existingPlans || []).filter((p: any) => p.erp_code).map((p: any) => [p.erp_code, p]));
+
+        // Get existing mappings
+        const { data: existingMappings } = await serviceSupabase
+          .from("erp_field_mappings")
+          .select("*")
+          .eq("client_id", client_id)
+          .eq("field_type", "plan");
+
+        const existingMappingByErp = new Map((existingMappings || []).map((m: any) => [m.erp_value, m]));
+
+        let plansCreated = 0;
+        let mappingsCreated = 0;
+        let skipped = 0;
+
+        for (const [code, description] of productMap) {
+          let plan = existingByCode.get(code);
+
+          // Create plan if it doesn't exist with this code
+          if (!plan) {
+            const { data: newPlan, error: planErr } = await serviceSupabase
+              .from("plans")
+              .insert({
+                client_id,
+                name: description,
+                erp_code: code,
+                active: true,
+              })
+              .select("id, name, erp_code")
+              .single();
+
+            if (planErr) {
+              console.error(`Error creating plan for code ${code}:`, planErr.message);
+              continue;
+            }
+            plan = newPlan;
+            plansCreated++;
+          }
+
+          // Create/update mapping description -> plan_id
+          if (!existingMappingByErp.has(description)) {
+            await serviceSupabase.from("erp_field_mappings").insert({
+              client_id,
+              tenant_id,
+              field_type: "plan",
+              erp_value: description,
+              trilho_value: plan.name,
+              trilho_id: plan.id,
+            });
+            mappingsCreated++;
+          } else {
+            // Update existing mapping to point to correct plan
+            const existing = existingMappingByErp.get(description);
+            if (existing.trilho_id !== plan.id) {
+              await serviceSupabase.from("erp_field_mappings")
+                .update({ trilho_id: plan.id, trilho_value: plan.name })
+                .eq("id", existing.id);
+              mappingsCreated++;
+            } else {
+              skipped++;
+            }
+          }
+        }
+
+        return jsonResponse({
+          success: true,
+          products_found: productMap.size,
+          plans_created: plansCreated,
+          mappings_created: mappingsCreated,
+          skipped,
+        });
+      } catch (err: any) {
+        return jsonResponse({ error: `Erro: ${err.message}` }, 500);
+      }
+    }
+
     // ─── ACTION: IMPORT BENEFICIARIES ───
     if (action === "import") {
       // Use service role client for sync log operations (bypasses RLS)
@@ -311,6 +432,13 @@ Deno.serve(async (req) => {
         const planMap = new Map((mappings || []).filter((m: any) => m.field_type === "plan").map((m: any) => [m.erp_value, m.trilho_id]));
         const coopMap = new Map((mappings || []).filter((m: any) => m.field_type === "cooperativa").map((m: any) => [m.erp_value, m.trilho_value]));
 
+        // Also build a plan lookup by erp_code for direct code matching
+        const { data: allPlans } = await serviceSupabase
+          .from("plans")
+          .select("id, erp_code")
+          .eq("client_id", client_id);
+        const planByCode = new Map((allPlans || []).filter((p: any) => p.erp_code).map((p: any) => [p.erp_code, p.id]));
+
         // Fetch ALL existing beneficiaries (paginate to bypass 1000 row limit)
         let existingBeneficiaries: any[] = [];
         let from = 0;
@@ -350,7 +478,8 @@ Deno.serve(async (req) => {
 
           if (!name && !plate) continue;
 
-          const planId = planMap.get(erpPlan) || null;
+          const erpCode = record.codigo_produto || record.cod_produto || record.product_code || record.codigo || "";
+          const planId = planMap.get(erpPlan) || (erpCode ? planByCode.get(String(erpCode)) : null) || null;
           const cooperativa = coopMap.get(erpCoop) || erpCoop;
           const parsedYear = vehicleYear ? parseInt(vehicleYear) : null;
 
