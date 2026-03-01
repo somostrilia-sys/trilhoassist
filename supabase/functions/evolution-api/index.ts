@@ -91,6 +91,34 @@ Deno.serve(async (req) => {
       return { status: resp.status, data: await resp.json() };
     }
 
+    // Helper: configure webhook separately via POST /webhook (UazapiGO ignores webhook in /instance/create)
+    async function configureWebhook(instanceToken: string, tenantId: string): Promise<void> {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?tenant=${tenantId}&source=uazapi`;
+      const webhookBody = {
+        webhook_url: webhookUrl,
+        enabled: true,
+      };
+      console.log("Configuring webhook separately via POST /webhook:", JSON.stringify(webhookBody));
+      try {
+        const resp = await fetch(`${serverUrl}/webhook`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            token: instanceToken,
+          },
+          body: JSON.stringify(webhookBody),
+        });
+        const result = await resp.json();
+        console.log("Webhook config response:", resp.status, JSON.stringify(result));
+        if (!resp.ok) {
+          console.error("Webhook config failed (non-fatal):", result);
+        }
+      } catch (e) {
+        console.error("Webhook config error (non-fatal):", e);
+      }
+    }
+
     // Helper: recreate instance on UazapiGO and update DB row
     async function recreateInstance(instName: string, dbId: string, tenantId: string): Promise<any> {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -109,6 +137,10 @@ Deno.serve(async (req) => {
         return null;
       }
       const newToken = result.token || result.instance?.token || "";
+      // Configure webhook separately after recreation
+      if (newToken) {
+        await configureWebhook(newToken, tenantId);
+      }
       await adminSupabase
         .from("zapi_instances")
         .update({ instance_token: newToken, connection_status: "disconnected" })
@@ -174,6 +206,11 @@ Deno.serve(async (req) => {
 
       const instanceToken = createResult.token || createResult.instance?.token || "";
       const instanceId = createResult.instance?.instanceName || createResult.instanceName || instance_name;
+
+      // Configure webhook separately (UazapiGO ignores webhook param in /instance/create)
+      if (instanceToken) {
+        await configureWebhook(instanceToken, tenant_id);
+      }
 
       const { data: dbInstance, error: dbErr } = await adminSupabase
         .from("zapi_instances")
