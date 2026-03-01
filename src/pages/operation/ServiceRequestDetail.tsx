@@ -734,7 +734,8 @@ export default function ServiceRequestDetail() {
 
   const canChangeStatus = (statusTransitions[request.status] || []).length > 0;
   const canCancel = request.status !== "cancelled" && request.status !== "completed" && request.status !== "refunded";
-  const canDispatch = ["open", "awaiting_dispatch"].includes(request.status);
+  const isCollisionWithoutTow = request.service_type === "collision" && !request.destination_address;
+  const canDispatch = ["open", "awaiting_dispatch"].includes(request.status) && !isCollisionWithoutTow;
   const canReopen = request.status === "cancelled";
 
   return (
