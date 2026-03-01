@@ -547,6 +547,7 @@ Deno.serve(async (req) => {
           const vehicleModel = record.modelo || record.vehicle_model || record.veiculo || record.descricao_modelo || "";
           const vehicleYear = record.ano_modelo || record.ano || record.vehicle_year || record.year || null;
           const vehicleChassis = record.chassi || record.chassis || "";
+          const vehicleColor = record.cor || record.cor_veiculo || record.descricao_cor || record.vehicle_color || record.color || "";
           const erpPlan = record.plano || record.plan || record.plan_name || record.descricao_produto || "";
           const erpCoop = record.nome_cooperativa || record.cooperativa || record.coop || record.cooperative || record.descricao_cooperativa || "";
 
@@ -582,6 +583,7 @@ Deno.serve(async (req) => {
               vehicle_model: vehicleModel || null,
               vehicle_year: parsedYear,
               vehicle_chassis: vehicleChassis || null,
+              vehicle_color: vehicleColor || null,
               plan_id: planId,
               cooperativa: cooperativa || null,
               active: isActive,
@@ -596,6 +598,7 @@ Deno.serve(async (req) => {
               vehicle_model: vehicleModel || null,
               vehicle_year: parsedYear,
               vehicle_chassis: vehicleChassis || null,
+              vehicle_color: vehicleColor || null,
               plan_id: planId,
               cooperativa: cooperativa || null,
               active: isActive,
@@ -781,6 +784,7 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
       const vehicleModel = record.modelo || record.vehicle_model || record.veiculo || record.descricao_modelo || "";
       const vehicleYear = record.ano_modelo || record.ano || record.vehicle_year || record.year || null;
       const vehicleChassis = record.chassi || record.chassis || "";
+      const vehicleColor = record.cor || record.cor_veiculo || record.descricao_cor || record.vehicle_color || record.color || "";
       const erpPlan = record.plano || record.plan || record.plan_name || record.descricao_produto || "";
       const erpCoop = record.nome_cooperativa || record.cooperativa || record.coop || record.cooperative || record.descricao_cooperativa || "";
       const erpCode = record.codigo_produto || record.cod_produto || record.product_code || record.codigo || "";
@@ -803,13 +807,13 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
         toUpdate.push({
           id: existingId, client_id: client.id, name, phone: phone || null, cpf: cpf || null,
           vehicle_model: vehicleModel || null, vehicle_year: parsedYear,
-          vehicle_chassis: vehicleChassis || null, plan_id: planId, cooperativa: cooperativa || null, active: isActive,
+          vehicle_chassis: vehicleChassis || null, vehicle_color: vehicleColor || null, plan_id: planId, cooperativa: cooperativa || null, active: isActive,
         });
       } else {
         toInsert.push({
           client_id: client.id, name, vehicle_plate: plate, phone: phone || null, cpf: cpf || null,
           vehicle_model: vehicleModel || null, vehicle_year: parsedYear,
-          vehicle_chassis: vehicleChassis || null, plan_id: planId, cooperativa: cooperativa || null, active: isActive,
+          vehicle_chassis: vehicleChassis || null, vehicle_color: vehicleColor || null, plan_id: planId, cooperativa: cooperativa || null, active: isActive,
         });
       }
     }
