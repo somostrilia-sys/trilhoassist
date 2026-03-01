@@ -93,12 +93,14 @@ Deno.serve(async (req) => {
       if (headerType === "token") {
         h["token"] = apiKey;
       } else if (headerType === "raw") {
-        // Raw Authorization header without prefix
         h["Authorization"] = apiKey;
+      } else if (headerType === "token_auth") {
+        // Authorization: token <key>
+        h["Authorization"] = `token ${apiKey}`;
       } else {
-        // Default: Bearer token
         h["Authorization"] = `Bearer ${apiKey}`;
       }
+      console.log("buildApiHeaders headerType:", headerType, "keys:", Object.keys(h));
       return h;
     };
 
