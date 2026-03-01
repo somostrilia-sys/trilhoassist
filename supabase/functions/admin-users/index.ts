@@ -6,6 +6,13 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function jsonRes(data: any, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -15,6 +22,9 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+
+    const body = await req.json().catch(() => ({}));
+    const action = body.action || "list";
 
     // Check for bootstrap header (one-time setup)
     const bootstrapKey = req.headers.get("x-bootstrap-key");
@@ -27,38 +37,32 @@ Deno.serve(async (req) => {
     if (!isBootstrap) {
       const authHeader = req.headers.get("Authorization");
       if (!authHeader) {
-        return new Response(JSON.stringify({ error: "Não autorizado" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonRes({ error: "Não autorizado" }, 401);
       }
 
       const callerClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
         global: { headers: { Authorization: authHeader } },
       });
 
-      const { data: { user: callerUser } } = await callerClient.auth.getUser();
-      if (!callerUser) {
-        return new Response(JSON.stringify({ error: "Não autorizado" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      const token = authHeader.replace("Bearer ", "");
+      const { data: claimsData, error: claimsError } = await callerClient.auth.getClaims(token);
+      if (claimsError || !claimsData?.claims) {
+        return jsonRes({ error: "Não autorizado" }, 401);
       }
-      caller = callerUser;
+
+      const userId = claimsData.claims.sub;
+      caller = { id: userId };
 
       const { data: callerRoles } = await adminClient
         .from("user_roles")
         .select("role")
-        .eq("user_id", caller.id);
+        .eq("user_id", userId);
 
       isSuperAdmin = callerRoles?.some((r) => r.role === "super_admin") || false;
       isAdmin = callerRoles?.some((r) => r.role === "admin") || false;
 
       if (!isSuperAdmin && !isAdmin) {
-        return new Response(JSON.stringify({ error: "Apenas administradores podem gerenciar usuários" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonRes({ error: "Apenas administradores podem gerenciar usuários" }, 403);
       }
     } else {
       isSuperAdmin = true;
@@ -66,7 +70,7 @@ Deno.serve(async (req) => {
 
     // Get caller's tenant_ids
     let callerTenantIds: string[] = [];
-    if (!isSuperAdmin) {
+    if (!isSuperAdmin && caller) {
       const { data: callerTenants } = await adminClient
         .from("user_tenants")
         .select("tenant_id")
@@ -74,12 +78,9 @@ Deno.serve(async (req) => {
       callerTenantIds = callerTenants?.map((t) => t.tenant_id) || [];
     }
 
-    const url = new URL(req.url);
-    const method = req.method;
-    const filterTenantId = url.searchParams.get("tenant_id");
-
-    // LIST users
-    if (method === "GET") {
+    // ─── LIST USERS ───
+    if (action === "list") {
+      const filterTenantId = body.tenant_id;
       const { data: { users }, error } = await adminClient.auth.admin.listUsers();
       if (error) throw error;
 
@@ -97,90 +98,32 @@ Deno.serve(async (req) => {
         last_sign_in_at: u.last_sign_in_at,
       }));
 
-      // Non-super_admin: filter to users in their tenants
       if (!isSuperAdmin) {
         enrichedUsers = enrichedUsers.filter((u) =>
           u.tenant_ids.some((tid) => callerTenantIds.includes(tid))
         );
       }
 
-      // Optional tenant_id filter
       if (filterTenantId) {
         enrichedUsers = enrichedUsers.filter((u) =>
           u.tenant_ids.includes(filterTenantId)
         );
       }
 
-      return new Response(JSON.stringify(enrichedUsers), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonRes(enrichedUsers);
     }
 
-    // CREATE user or DELETE via POST
-    if (method === "POST") {
-      const body = await req.json();
-      
-      // Handle delete action via POST
-      if (body.action === "delete") {
-        const user_id = body.user_id;
-        if (!user_id) {
-          return new Response(JSON.stringify({ error: "user_id é obrigatório" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        if (user_id === caller.id) {
-          return new Response(JSON.stringify({ error: "Você não pode excluir sua própria conta" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        if (!isSuperAdmin) {
-          const { data: userTenants } = await adminClient
-            .from("user_tenants")
-            .select("tenant_id")
-            .eq("user_id", user_id);
-          const userTenantIds = userTenants?.map((t: any) => t.tenant_id) || [];
-          if (!userTenantIds.some((tid: string) => callerTenantIds.includes(tid))) {
-            return new Response(JSON.stringify({ error: "Sem permissão para remover este usuário" }), {
-              status: 403,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
-        }
-
-        const { error } = await adminClient.auth.admin.deleteUser(user_id);
-        if (error) throw error;
-
-        return new Response(JSON.stringify({ success: true }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
+    // ─── CREATE USER ───
+    if (action === "create") {
       const { email, password, full_name, role, tenant_id } = body;
 
       if (!email || !password || !full_name || !role) {
-        return new Response(JSON.stringify({ error: "Campos obrigatórios: email, password, full_name, role" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonRes({ error: "Campos obrigatórios: email, password, full_name, role" }, 400);
       }
 
       if (!isSuperAdmin) {
-        if (!tenant_id) {
-          return new Response(JSON.stringify({ error: "tenant_id é obrigatório" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        if (!callerTenantIds.includes(tenant_id)) {
-          return new Response(JSON.stringify({ error: "Sem permissão para esta assistência" }), {
-            status: 403,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
+        if (!tenant_id) return jsonRes({ error: "tenant_id é obrigatório" }, 400);
+        if (!callerTenantIds.includes(tenant_id)) return jsonRes({ error: "Sem permissão para esta assistência" }, 403);
       }
 
       const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
@@ -201,21 +144,13 @@ Deno.serve(async (req) => {
         });
       }
 
-      return new Response(JSON.stringify({ id: newUser.user.id, email, full_name, role }), {
-        status: 201,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonRes({ id: newUser.user.id, email, full_name, role }, 201);
     }
 
-    // UPDATE user role
-    if (method === "PUT") {
-      const { user_id, role } = await req.json();
-      if (!user_id || !role) {
-        return new Response(JSON.stringify({ error: "user_id e role são obrigatórios" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    // ─── UPDATE ROLE ───
+    if (action === "update_role") {
+      const { user_id, role } = body;
+      if (!user_id || !role) return jsonRes({ error: "user_id e role são obrigatórios" }, 400);
 
       if (!isSuperAdmin) {
         const { data: userTenants } = await adminClient
@@ -224,10 +159,7 @@ Deno.serve(async (req) => {
           .eq("user_id", user_id);
         const userTenantIds = userTenants?.map((t) => t.tenant_id) || [];
         if (!userTenantIds.some((tid) => callerTenantIds.includes(tid))) {
-          return new Response(JSON.stringify({ error: "Sem permissão para editar este usuário" }), {
-            status: 403,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return jsonRes({ error: "Sem permissão para editar este usuário" }, 403);
         }
       }
 
@@ -235,26 +167,16 @@ Deno.serve(async (req) => {
       const { error: roleError } = await adminClient.from("user_roles").insert({ user_id, role });
       if (roleError) throw roleError;
 
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonRes({ success: true });
     }
 
-    // DELETE user
-    if (method === "DELETE") {
-      const user_id = url.searchParams.get("user_id");
-      if (!user_id) {
-        return new Response(JSON.stringify({ error: "user_id é obrigatório" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    // ─── DELETE USER ───
+    if (action === "delete") {
+      const user_id = body.user_id;
+      if (!user_id) return jsonRes({ error: "user_id é obrigatório" }, 400);
 
-      if (user_id === caller.id) {
-        return new Response(JSON.stringify({ error: "Você não pode excluir sua própria conta" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (caller && user_id === caller.id) {
+        return jsonRes({ error: "Você não pode excluir sua própria conta" }, 400);
       }
 
       if (!isSuperAdmin) {
@@ -262,27 +184,19 @@ Deno.serve(async (req) => {
           .from("user_tenants")
           .select("tenant_id")
           .eq("user_id", user_id);
-        const userTenantIds = userTenants?.map((t) => t.tenant_id) || [];
-        if (!userTenantIds.some((tid) => callerTenantIds.includes(tid))) {
-          return new Response(JSON.stringify({ error: "Sem permissão para remover este usuário" }), {
-            status: 403,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+        const userTenantIds = userTenants?.map((t: any) => t.tenant_id) || [];
+        if (!userTenantIds.some((tid: string) => callerTenantIds.includes(tid))) {
+          return jsonRes({ error: "Sem permissão para remover este usuário" }, 403);
         }
       }
 
       const { error } = await adminClient.auth.admin.deleteUser(user_id);
       if (error) throw error;
 
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonRes({ success: true });
     }
 
-    return new Response(JSON.stringify({ error: "Método não suportado" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonRes({ error: `Ação desconhecida: ${action}` }, 400);
   } catch (error) {
     return new Response(JSON.stringify({ error: (error as Error).message }), {
       status: 500,

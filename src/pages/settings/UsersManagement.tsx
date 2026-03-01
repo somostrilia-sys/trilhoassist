@@ -94,15 +94,15 @@ export default function UsersManagement() {
   const { data: users = [], isLoading } = useQuery<UserItem[]>({
     queryKey: ["admin-users", selectedTenantId],
     queryFn: async () => {
-      const params: Record<string, string> = {};
+      const body: Record<string, any> = { action: "list" };
       if (selectedTenantId && selectedTenantId !== "all") {
-        params.tenant_id = selectedTenantId;
+        body.tenant_id = selectedTenantId;
       }
-      const queryString = new URLSearchParams(params).toString();
-      const res = await supabase.functions.invoke(`admin-users${queryString ? `?${queryString}` : ""}`, {
-        method: "GET",
+      const res = await supabase.functions.invoke("admin-users", {
+        body,
       });
       if (res.error) throw res.error;
+      if (res.data?.error) throw new Error(res.data.error);
       return res.data;
     },
   });
@@ -110,8 +110,7 @@ export default function UsersManagement() {
   const createMutation = useMutation({
     mutationFn: async (userData: typeof newUser) => {
       const res = await supabase.functions.invoke("admin-users", {
-        method: "POST",
-        body: userData,
+        body: { action: "create", ...userData },
       });
       if (res.error) throw res.error;
       if (res.data?.error) throw new Error(res.data.error);
@@ -131,8 +130,7 @@ export default function UsersManagement() {
   const updateRoleMutation = useMutation({
     mutationFn: async ({ user_id, role }: { user_id: string; role: string }) => {
       const res = await supabase.functions.invoke("admin-users", {
-        method: "PUT",
-        body: { user_id, role },
+        body: { action: "update_role", user_id, role },
       });
       if (res.error) throw res.error;
       if (res.data?.error) throw new Error(res.data.error);
