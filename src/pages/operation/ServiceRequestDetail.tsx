@@ -977,20 +977,15 @@ ${trackingLink ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingLink}` : ""}`.trim
                     const leg2 = await fetchDist({lat: request.destination_lat, lng: request.destination_lng}, {lat: request.origin_lat, lng: request.origin_lng});
                     if (leg1 && leg2) {
                       const totalKm = leg1.km + leg2.km + kmMargin;
-                      const totalMin = leg1.min + leg2.min;
-                      routeSection = `\n*ROTEIRIZAÇÃO*
-  • Origem → Destino: ${leg1.km.toFixed(1)} km (~${fmtDur(leg1.min)})
-  • Destino → Retorno: ${leg2.km.toFixed(1)} km (~${fmtDur(leg2.min)})
-*TOTAL*: ${(leg1.km + leg2.km).toFixed(1)} km (~${fmtDur(totalMin)})
-*COM MARGEM (+${kmMargin}km)*: ${totalKm.toFixed(1)} km`;
+                      routeSection = `\n*ROTEIRIZAÇÃO ESTIMADA*: ${totalKm.toFixed(1)} km`;
                     }
                   } catch (e) {
                     console.error("Route calc error:", e);
                   }
                 }
-                // Fallback to estimated_km if route calc failed
                 if (!routeSection && request.estimated_km) {
-                  routeSection = `\n*ROTEIRIZAÇÃO*\n*KM ESTIMADO*: ${Math.round(request.estimated_km)} km\n*COM MARGEM (+${kmMargin}km)*: ${Math.round(request.estimated_km + kmMargin)} km`;
+                  const kmMarginVal = (request as any).clients?.km_margin || 10;
+                  routeSection = `\n*ROTEIRIZAÇÃO ESTIMADA*: ${Math.round(request.estimated_km + kmMarginVal)} km`;
                 }
 
                 const label = `*ATENDIMENTO*
