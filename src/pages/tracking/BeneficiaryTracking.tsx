@@ -265,91 +265,122 @@ export default function BeneficiaryTracking() {
     }, 30000);
   }, []);
 
-  // Force map key to re-render after SPA redirect
-  const [mapReady, setMapReady] = useState(false);
-  useEffect(() => {
-    // Longer delay to ensure DOM is fully settled after SPA redirect on custom domains
-    const timer = setTimeout(() => setMapReady(true), 300);
-    return () => clearTimeout(timer);
-  }, []);
+  // Map initialization counter - used to force re-init if needed
+  const [mapInitAttempt, setMapInitAttempt] = useState(0);
+  const mapInitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Initialize map
-  useEffect(() => {
-    if (!mapReady || !mapRef.current || mapInstanceRef.current) return;
-    if (!request) return;
+  // Initialize map using a callback ref for more reliable DOM access
+  const initMap = useCallback((container: HTMLDivElement | null) => {
+    // Store the ref for other effects
+    mapRef.current = container;
+    
+    if (!container || !request || mapInstanceRef.current) return;
 
-    // Ensure container has dimensions before initializing
-    const container = mapRef.current;
-    if (container.clientWidth === 0 || container.clientHeight === 0) {
-      // Retry after a short delay if container has no dimensions yet
-      const retryTimer = setTimeout(() => {
-        setMapReady(false);
-        setTimeout(() => setMapReady(true), 100);
-      }, 200);
-      return () => clearTimeout(retryTimer);
-    }
+    // Clear any previous initialization timer
+    if (mapInitTimerRef.current) clearTimeout(mapInitTimerRef.current);
 
-    const centerLat = request.origin_lat || -15.79;
-    const centerLng = request.origin_lng || -47.88;
-    const zoom = request.origin_lat ? 14 : 5;
-
-    try {
-      const map = L.map(container, {
-        zoomControl: false,
-      }).setView([centerLat, centerLng], zoom);
-
-      L.control.zoom({ position: "bottomright" }).addTo(map);
-
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap",
-        maxZoom: 19,
-      }).addTo(map);
-
-      if (request.origin_lat && request.origin_lng) {
-        const originIcon = L.divIcon({
-          html: `<div style="position:relative">
-            <div style="width:18px;height:18px;border-radius:50%;background:hsl(var(--primary));border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)"></div>
-            <div style="position:absolute;top:-2px;left:-2px;width:22px;height:22px;border-radius:50%;border:2px solid hsl(var(--primary));opacity:0.4;animation:pulse-ring 2s ease-out infinite"></div>
-          </div>`,
-          iconSize: [22, 22],
-          iconAnchor: [11, 11],
-          className: "",
-        });
-        originMarkerRef.current = L.marker([request.origin_lat, request.origin_lng], { icon: originIcon })
-          .addTo(map)
-          .bindPopup(`<b>📍 Localização do veículo</b><br/>${request.origin_address || ""}`);
+    // Wait for container to have dimensions
+    const tryInit = () => {
+      if (!container.isConnected) return;
+      
+      const rect = container.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) {
+        // Container not ready yet, retry
+        mapInitTimerRef.current = setTimeout(tryInit, 200);
+        return;
       }
 
-      mapInstanceRef.current = map;
+      if (mapInstanceRef.current) return; // Already initialized
 
-      // Multiple invalidateSize calls to handle various timing scenarios
-      [0, 100, 300, 500, 1000, 2000].forEach(delay => {
-        setTimeout(() => {
+      const centerLat = request.origin_lat || -15.79;
+      const centerLng = request.origin_lng || -47.88;
+      const zoom = request.origin_lat ? 14 : 5;
+
+      try {
+        const map = L.map(container, {
+          zoomControl: false,
+        }).setView([centerLat, centerLng], zoom);
+
+        L.control.zoom({ position: "bottomright" }).addTo(map);
+
+        const tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: "&copy; OpenStreetMap",
+          maxZoom: 19,
+        });
+        tileLayer.addTo(map);
+
+        // Listen for tile errors to detect loading issues
+        tileLayer.on('tileerror', (e: any) => {
+          console.warn("Tile load error:", e.tile?.src);
+        });
+
+        if (request.origin_lat && request.origin_lng) {
+          const originIcon = L.divIcon({
+            html: `<div style="position:relative">
+              <div style="width:18px;height:18px;border-radius:50%;background:hsl(var(--primary));border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)"></div>
+              <div style="position:absolute;top:-2px;left:-2px;width:22px;height:22px;border-radius:50%;border:2px solid hsl(var(--primary));opacity:0.4;animation:pulse-ring 2s ease-out infinite"></div>
+            </div>`,
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+            className: "",
+          });
+          originMarkerRef.current = L.marker([request.origin_lat, request.origin_lng], { icon: originIcon })
+            .addTo(map)
+            .bindPopup(`<b>📍 Localização do veículo</b><br/>${request.origin_address || ""}`);
+        }
+
+        mapInstanceRef.current = map;
+
+        // Aggressive invalidateSize calls
+        [0, 50, 150, 300, 600, 1000, 2000, 3000].forEach(delay => {
+          setTimeout(() => {
+            if (mapInstanceRef.current) {
+              mapInstanceRef.current.invalidateSize();
+            }
+          }, delay);
+        });
+
+        // ResizeObserver for ongoing size changes
+        const ro = new ResizeObserver(() => {
           if (mapInstanceRef.current) {
             mapInstanceRef.current.invalidateSize();
           }
-        }, delay);
-      });
+        });
+        ro.observe(container);
 
-      // Also use ResizeObserver for robust handling
-      const ro = new ResizeObserver(() => {
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.invalidateSize();
-        }
-      });
-      ro.observe(container);
+        // Store cleanup
+        (container as any)._mapCleanup = () => {
+          ro.disconnect();
+          map.remove();
+          mapInstanceRef.current = null;
+          providerMarkerRef.current = null;
+          routePolylineRef.current = null;
+        };
+      } catch (err) {
+        console.error("Map initialization error:", err);
+      }
+    };
 
-      return () => {
-        ro.disconnect();
-        map.remove();
-        mapInstanceRef.current = null;
-        providerMarkerRef.current = null;
-        routePolylineRef.current = null;
-      };
-    } catch (err) {
-      console.error("Map initialization error:", err);
+    // Small initial delay for SPA redirect scenarios
+    mapInitTimerRef.current = setTimeout(tryInit, 100);
+  }, [request]);
+
+  // Cleanup map on unmount
+  useEffect(() => {
+    return () => {
+      if (mapInitTimerRef.current) clearTimeout(mapInitTimerRef.current);
+      if (mapRef.current && (mapRef.current as any)._mapCleanup) {
+        (mapRef.current as any)._mapCleanup();
+      }
+    };
+  }, []);
+
+  // Re-trigger map init when request loads
+  useEffect(() => {
+    if (request && mapRef.current && !mapInstanceRef.current) {
+      initMap(mapRef.current);
     }
-  }, [request, mapReady]);
+  }, [request, initMap]);
 
   // Update provider marker with smooth animation
   useEffect(() => {
@@ -798,7 +829,7 @@ export default function BeneficiaryTracking() {
             )}
 
             <div
-              ref={mapRef}
+              ref={initMap}
               className="w-full"
               style={{ height: "400px", minHeight: "400px" }}
             />
