@@ -146,7 +146,7 @@ export default function BeneficiaryTracking() {
 
       const { data: d } = await supabase
         .from("dispatches")
-        .select("*, providers(name)")
+        .select("*, providers(name, latitude, longitude, phone)")
         .eq("service_request_id", sr.id)
         .in("status", ["accepted", "sent", "pending", "completed"])
         .order("created_at", { ascending: false })
@@ -155,7 +155,8 @@ export default function BeneficiaryTracking() {
 
       if (d) {
         setDispatch(d);
-        setProviderName((d as any).providers?.name || "Prestador");
+        const prov = (d as any).providers;
+        setProviderName(prov?.name || "Prestador");
         if (d.provider_arrived_at) setProviderArrived(true);
 
         const { data: track } = await supabase
@@ -169,6 +170,9 @@ export default function BeneficiaryTracking() {
         if (track) {
           setProviderPos({ lat: track.latitude, lng: track.longitude });
           setLastUpdate(new Date(track.created_at));
+        } else if (prov?.latitude && prov?.longitude) {
+          // Use provider base location as initial position
+          setProviderPos({ lat: prov.latitude, lng: prov.longitude });
         }
       }
       setLoading(false);
