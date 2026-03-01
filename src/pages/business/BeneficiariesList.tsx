@@ -73,10 +73,22 @@ export default function BeneficiariesList() {
     queryKey: ["admin-beneficiaries", clientIds],
     queryFn: async () => {
       if (clientIds.length === 0) return [];
-      let query = supabase.from("beneficiaries").select("*").in("client_id", clientIds).order("name");
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
+      let allData: any[] = [];
+      let from = 0;
+      const pageSize = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from("beneficiaries")
+          .select("*")
+          .in("client_id", clientIds)
+          .order("name")
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        allData = allData.concat(data || []);
+        if (!data || data.length < pageSize) break;
+        from += pageSize;
+      }
+      return allData;
     },
     enabled: clientIds.length > 0,
   });
