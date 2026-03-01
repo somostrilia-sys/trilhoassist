@@ -152,7 +152,7 @@ function buildRouteSection(route: RouteBreakdown | null, kmMargin: number): stri
 
 function buildCreationLabel(sr: any, client: any, beneficiary: any, tenant: any, operator: any, route: RouteBreakdown | null, kmMargin: number): string {
   const benName = beneficiary?.name || sr.requester_name;
-  const baseUrl = "https://veniti-watch.lovable.app";
+  const baseUrl = "https://trilhoassist.com.br";
   const trackingLink = sr.beneficiary_token ? `${baseUrl}/tracking/${sr.beneficiary_token}` : "";
 
   return `*ATENDIMENTO*
