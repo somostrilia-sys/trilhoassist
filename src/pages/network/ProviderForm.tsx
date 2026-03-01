@@ -117,9 +117,29 @@ export default function ProviderForm() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const cleanCnpj = form.cnpj ? form.cnpj.replace(/\D/g, "") : null;
+
+      // Check for duplicate CNPJ before saving
+      if (cleanCnpj) {
+        const query = supabase
+          .from("providers")
+          .select("id, name")
+          .eq("cnpj", cleanCnpj);
+
+        // If editing, exclude current provider from check
+        if (isEdit) {
+          query.neq("id", id!);
+        }
+
+        const { data: existing } = await query.maybeSingle();
+        if (existing) {
+          throw new Error(`CNPJ já cadastrado para o prestador "${existing.name}"`);
+        }
+      }
+
       const payload = {
         name: form.name,
-        cnpj: form.cnpj || null,
+        cnpj: cleanCnpj || null,
         email: form.email || null,
         phone: form.phone,
         services: form.services,
