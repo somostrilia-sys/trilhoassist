@@ -72,6 +72,7 @@ export default function DispatchPanel() {
   const { toast } = useToast();
   const [requests, setRequests] = useState<any[]>([]);
   const [dispatches, setDispatches] = useState<any[]>([]);
+  const [reopenMap, setReopenMap] = useState<Record<string, string>>({});
   const [alertDispatchMin, setAlertDispatchMin] = useState(15);
   const [alertLateMin, setAlertLateMin] = useState(10);
   const [loading, setLoading] = useState(true);
@@ -113,15 +114,38 @@ export default function DispatchPanel() {
     setRequests(reqs || []);
 
     if (reqs && reqs.length > 0) {
-      const { data: disps } = await supabase
-        .from("dispatches")
-        .select("*, providers(name)")
-        .in("service_request_id", reqs.map((r) => r.id))
-        .in("status", ["pending", "sent", "accepted"])
-        .order("created_at", { ascending: false });
-      setDispatches(disps || []);
+      const reqIds = reqs.map((r) => r.id);
+
+      // Fetch dispatches and reopen events in parallel
+      const [dispResult, reopenResult] = await Promise.all([
+        supabase
+          .from("dispatches")
+          .select("*, providers(name)")
+          .in("service_request_id", reqIds)
+          .in("status", ["pending", "sent", "accepted"])
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("service_request_events")
+          .select("service_request_id, created_at")
+          .in("service_request_id", reqIds)
+          .eq("event_type", "status_change")
+          .eq("new_value", "open")
+          .order("created_at", { ascending: false }),
+      ]);
+
+      setDispatches(dispResult.data || []);
+
+      // Build map: request_id -> latest reopen timestamp
+      const rMap: Record<string, string> = {};
+      for (const ev of (reopenResult.data || [])) {
+        if (!rMap[ev.service_request_id]) {
+          rMap[ev.service_request_id] = ev.created_at;
+        }
+      }
+      setReopenMap(rMap);
     } else {
       setDispatches([]);
+      setReopenMap({});
     }
     setLoading(false);
   }, [user?.id]);
@@ -151,7 +175,9 @@ export default function DispatchPanel() {
     const filtered = requests.filter((r) => !(r.service_type === "collision" && !r.destination_address));
     return filtered.map((r) => {
       const disp = dispatches.find((d) => d.service_request_id === r.id);
-      const elapsedSinceCreation = minutesElapsed(r.created_at);
+      // Use reopen time if available, otherwise created_at
+      const effectiveCreatedAt = reopenMap[r.id] || r.created_at;
+      const elapsedSinceCreation = minutesElapsed(effectiveCreatedAt);
       const elapsedSinceDispatch = disp?.accepted_at
         ? minutesElapsed(disp.accepted_at)
         : null;
@@ -187,7 +213,7 @@ export default function DispatchPanel() {
       return a.elapsedSinceCreation - b.elapsedSinceCreation;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requests, dispatches, alertDispatchMin, alertLateMin, tick]);
+  }, [requests, dispatches, reopenMap, alertDispatchMin, alertLateMin, tick]);
 
   // Play siren for new alerts
   useEffect(() => {
