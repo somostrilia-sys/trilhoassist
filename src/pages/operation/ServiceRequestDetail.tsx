@@ -997,7 +997,7 @@ ${trackingLink ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingLink}` : ""}`.trim
 *BENEFICIÁRIO*: ${benName.toUpperCase()}
 *TELEFONE ASSOCIADO*: ${benPhone}
 *VEÍCULO*: ${(request.vehicle_model || "").toUpperCase()} (${(request.vehicle_plate || "").toUpperCase()})
-*COR DO VEÍCULO*: —
+*COR DO VEÍCULO*: ${(beneficiary?.vehicle_color || "—").toUpperCase()}
 *SERVIÇO*: ${serviceTypeMap[request.service_type] || request.service_type}
 *PROTOCOLO*: ${request.protocol}
 *OBSERVAÇÕES*: ${eventTypeMap[request.event_type] || request.event_type}

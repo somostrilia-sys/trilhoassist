@@ -26,13 +26,14 @@ interface BeneficiaryFormData {
   vehicle_model: string;
   vehicle_year: string;
   vehicle_chassis: string;
+  vehicle_color: string;
   active: boolean;
 }
 
 const emptyForm: BeneficiaryFormData = {
   name: "", cpf: "", phone: "", client_id: "", plan_id: "", cooperativa: "",
   vehicle_plate: "", vehicle_model: "", vehicle_year: "", vehicle_chassis: "",
-  active: true,
+  vehicle_color: "", active: true,
 };
 
 export default function BeneficiaryForm() {
@@ -96,6 +97,7 @@ export default function BeneficiaryForm() {
         vehicle_model: beneficiary.vehicle_model || "",
         vehicle_year: beneficiary.vehicle_year?.toString() || "",
         vehicle_chassis: beneficiary.vehicle_chassis || "",
+        vehicle_color: beneficiary.vehicle_color || "",
         active: beneficiary.active,
       });
     }
@@ -126,6 +128,7 @@ export default function BeneficiaryForm() {
         vehicle_model: form.vehicle_model || null,
         vehicle_year: form.vehicle_year ? Number(form.vehicle_year) : null,
         vehicle_chassis: form.vehicle_chassis || null,
+        vehicle_color: form.vehicle_color || null,
         active: form.active,
       };
 
@@ -277,6 +280,10 @@ export default function BeneficiaryForm() {
               <div className="space-y-2">
                 <Label htmlFor="vehicle_chassis">Chassi</Label>
                 <Input id="vehicle_chassis" value={form.vehicle_chassis} onChange={(e) => updateField("vehicle_chassis", e.target.value.toUpperCase())} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="vehicle_color">Cor do Veículo</Label>
+                <Input id="vehicle_color" value={form.vehicle_color} onChange={(e) => updateField("vehicle_color", e.target.value)} placeholder="Ex: Branco" />
               </div>
             </div>
           </CardContent>

@@ -171,6 +171,7 @@ function buildRouteSection(route: RouteBreakdown | null, kmMargin: number, estim
 function buildCreationLabel(sr: any, client: any, beneficiary: any, tenant: any, operator: any, route: RouteBreakdown | null, kmMargin: number): string {
   const benName = beneficiary?.name || sr.requester_name;
   const benPhone = beneficiary?.phone || sr.requester_phone || "";
+  const benColor = beneficiary?.vehicle_color || "—";
   const baseUrl = "https://trilhoassist.com.br";
   const trackingLink = sr.beneficiary_token ? `${baseUrl}/tracking/${sr.beneficiary_token}` : "";
 
@@ -181,6 +182,7 @@ function buildCreationLabel(sr: any, client: any, beneficiary: any, tenant: any,
 *SOLICITANTE*: ${sr.requester_name.toUpperCase()}
 *CONTATO SOLICITANTE*: ${sr.requester_phone}${sr.requester_phone_secondary ? `\n*CONTATO 2*: ${sr.requester_phone_secondary}` : ""}
 *VEÍCULO*: ${(sr.vehicle_model || "").toUpperCase()} (${(sr.vehicle_plate || "").toUpperCase()})
+*COR DO VEÍCULO*: ${benColor.toUpperCase()}
 *CLIENTE*: ${(client?.name || "").toUpperCase()}
 *SERVIÇO*: ${serviceTypeMap[sr.service_type] || sr.service_type}
 *DATA*: ${formatDate(sr.created_at)}
@@ -390,7 +392,7 @@ Deno.serve(async (req) => {
     if (sr.beneficiary_id) {
       const { data: ben } = await adminSupabase
         .from("beneficiaries")
-        .select("name, phone")
+        .select("name, phone, vehicle_color")
         .eq("id", sr.beneficiary_id)
         .single();
       beneficiary = ben;
