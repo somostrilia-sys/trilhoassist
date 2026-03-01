@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
     // Get client's API config
     const { data: client, error: clientError } = await supabase
       .from("clients")
-      .select("id, name, api_endpoint, api_key")
+      .select("id, name, api_endpoint, api_key, api_auth_header")
       .eq("id", client_id)
       .single();
 
@@ -104,15 +104,8 @@ Deno.serve(async (req) => {
       return h;
     };
 
-    // Get extended client config (auth header type)
-    const { data: clientExt } = await supabase
-      .from("clients")
-      .select("api_auth_header")
-      .eq("id", client_id)
-      .single();
-
-    const apiHeaders = buildApiHeaders(client.api_key, clientExt?.api_auth_header);
-    console.log("API headers keys:", Object.keys(apiHeaders), "authHeader config:", clientExt?.api_auth_header);
+    const apiHeaders = buildApiHeaders(client.api_key, client.api_auth_header);
+    console.log("API headers keys:", Object.keys(apiHeaders), "authHeader config:", client.api_auth_header);
     // ─── ACTION: TEST CONNECTION ───
     if (action === "test") {
       try {
@@ -396,7 +389,10 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
       headers["Authorization"] = `Bearer ${client.api_key}`;
     } else if (authHeader === "raw") {
       headers["Authorization"] = client.api_key;
+    } else if (authHeader === "token_auth") {
+      headers["Authorization"] = `token ${client.api_key}`;
     } else {
+      // Default: custom header name (e.g. "token")
       headers[authHeader] = client.api_key;
     }
     let response = await fetch(client.api_endpoint, {
