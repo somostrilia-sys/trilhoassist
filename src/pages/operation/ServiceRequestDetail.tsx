@@ -991,9 +991,11 @@ ${trackingLink ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingLink}` : ""}`.trim
                   routeSection = `\n*ROTEIRIZAÇÃO ESTIMADA*: ${Math.round(request.estimated_km + kmMarginVal)} km`;
                 }
 
+                const benPhone = beneficiary?.phone || request.requester_phone || "";
                 const label = `*ATENDIMENTO*
 
 *BENEFICIÁRIO*: ${benName.toUpperCase()}
+*TELEFONE ASSOCIADO*: ${benPhone}
 *VEÍCULO*: ${(request.vehicle_model || "").toUpperCase()} (${(request.vehicle_plate || "").toUpperCase()})
 *COR DO VEÍCULO*: —
 *SERVIÇO*: ${serviceTypeMap[request.service_type] || request.service_type}
