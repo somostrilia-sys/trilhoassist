@@ -548,23 +548,54 @@ export default function BeneficiaryTracking() {
     }
   }, [providerPos, request?.origin_lat, request?.origin_lng, isNearby]);
 
-  // Show manual ETA from dispatch (estimated_arrival_min)
+  // Countdown timer for ETA
   useEffect(() => {
-    if (!dispatch?.estimated_arrival_min) {
+    let targetTime: Date | null = null;
+
+    if (dispatch?.scheduled_arrival_date) {
+      const timeStr = dispatch.scheduled_arrival_time || "00:00:00";
+      targetTime = new Date(`${dispatch.scheduled_arrival_date}T${timeStr}`);
+    } else if (dispatch?.estimated_arrival_min && (dispatch?.accepted_at || dispatch?.created_at)) {
+      const baseTime = new Date(dispatch.accepted_at || dispatch.created_at);
+      targetTime = new Date(baseTime.getTime() + dispatch.estimated_arrival_min * 60 * 1000);
+    }
+
+    if (!targetTime || providerArrived) {
       setEtaText(null);
       setEtaMinutes(null);
       return;
     }
-    const mins = dispatch.estimated_arrival_min;
-    setEtaMinutes(mins);
-    if (mins < 60) {
-      setEtaText(`~${mins} min`);
-    } else {
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      setEtaText(`~${h}h${m > 0 ? ` ${m}min` : ""}`);
-    }
-  }, [dispatch?.estimated_arrival_min]);
+
+    const updateCountdown = () => {
+      const now = Date.now();
+      const diffMs = targetTime!.getTime() - now;
+
+      if (diffMs <= 0) {
+        setEtaText("Chegando...");
+        setEtaMinutes(0);
+        return;
+      }
+
+      const totalSec = Math.floor(diffMs / 1000);
+      const hours = Math.floor(totalSec / 3600);
+      const mins = Math.floor((totalSec % 3600) / 60);
+      const secs = totalSec % 60;
+
+      setEtaMinutes(Math.ceil(diffMs / 60000));
+
+      if (hours > 0) {
+        setEtaText(`${hours}h ${String(mins).padStart(2, "0")}min ${String(secs).padStart(2, "0")}s`);
+      } else if (mins > 0) {
+        setEtaText(`${mins}min ${String(secs).padStart(2, "0")}s`);
+      } else {
+        setEtaText(`${secs}s`);
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [dispatch?.estimated_arrival_min, dispatch?.accepted_at, dispatch?.created_at, dispatch?.scheduled_arrival_date, dispatch?.scheduled_arrival_time, providerArrived]);
 
   // Set arrived state from dispatch data
   useEffect(() => {
@@ -738,30 +769,25 @@ export default function BeneficiaryTracking() {
                 </div>
               </div>
             )}
-            {etaText && !providerArrived && !dispatch?.scheduled_arrival_date && (
+            {etaText && !providerArrived && (
               <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
                 <div className="bg-blue-500 rounded-full p-2 shrink-0">
-                  <Clock className="h-5 w-5 text-white" />
+                  {dispatch?.scheduled_arrival_date ? (
+                    <CalendarIcon className="h-5 w-5 text-white" />
+                  ) : (
+                    <Clock className="h-5 w-5 text-white" />
+                  )}
                 </div>
                 <div className="flex-1">
-                  <p className="text-lg font-bold text-blue-700 dark:text-blue-300">
-                    ETA: {etaText}
+                  <p className="text-2xl font-bold text-blue-700 dark:text-blue-300 tabular-nums tracking-tight">
+                    {etaText}
                   </p>
-                  <p className="text-xs text-muted-foreground">Previsão de chegada do prestador</p>
-                </div>
-              </div>
-            )}
-            {dispatch?.scheduled_arrival_date && !providerArrived && (
-              <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-                <div className="bg-blue-500 rounded-full p-2 shrink-0">
-                  <CalendarIcon className="h-5 w-5 text-white" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-lg font-bold text-blue-700 dark:text-blue-300">
-                    {new Date(dispatch.scheduled_arrival_date + "T00:00:00").toLocaleDateString("pt-BR")}
-                    {dispatch.scheduled_arrival_time && ` às ${dispatch.scheduled_arrival_time.slice(0, 5)}`}
+                  <p className="text-xs text-muted-foreground">
+                    {dispatch?.scheduled_arrival_date
+                      ? `Chegada prevista: ${new Date(dispatch.scheduled_arrival_date + "T00:00:00").toLocaleDateString("pt-BR")}${dispatch.scheduled_arrival_time ? ` às ${dispatch.scheduled_arrival_time.slice(0, 5)}` : ""}`
+                      : "Previsão de chegada do prestador"
+                    }
                   </p>
-                  <p className="text-xs text-muted-foreground">Previsão de chegada do prestador</p>
                 </div>
               </div>
             )}
