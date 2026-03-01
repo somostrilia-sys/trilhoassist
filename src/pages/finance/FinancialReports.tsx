@@ -227,7 +227,8 @@ export default function FinancialReports() {
     const totalCusto = requests.reduce((s, r) => s + (Number(r.provider_cost) || 0), 0);
     const totalFaturado = requests.reduce((s, r) => s + (Number(r.charged_amount) || 0), 0);
     const totalMarkup = totalFaturado - totalCusto;
-    const totalPlacasAtivas = beneficiaries.filter((b) => b.active).length;
+    const activeBens = beneficiaries.filter((b) => b.active && b.vehicle_plate);
+    const totalPlacasAtivas = new Set(activeBens.map((b) => b.vehicle_plate!.toUpperCase().replace(/[^A-Z0-9]/g, ""))).size;
     return { totalAtendimentos, totalCusto, totalFaturado, totalMarkup, totalPlacasAtivas };
   }, [requests, beneficiaries]);
 
