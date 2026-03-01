@@ -76,6 +76,25 @@ Deno.serve(async (req) => {
       admintoken: adminToken,
     };
 
+      // Helper: POST /webhook to configure webhook on instance
+      async function configureWebhook(instanceToken: string, tenantId: string): Promise<any> {
+            const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/whatsapp-webhook?tenant=${tenantId}&source=uazapi`;
+            console.log("Configuring webhook for instance, url:", webhookUrl);
+            try {
+                    const resp = await fetch(`${serverUrl}/webhook`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', 'token': instanceToken },
+                              body: JSON.stringify({ url: webhookUrl, enabled: true, events: ['messages', 'connection'] })
+                    });
+                    const result = await resp.json();
+                    console.log("Webhook configured:", JSON.stringify(result));
+                    return result;
+            } catch (err) {
+                    console.error("Error configuring webhook:", err);
+                    return null;
+            }
+      }
+
     // Helper: POST /instance/connect with instance token
     async function fetchConnect(instName: string, instanceToken: string): Promise<any> {
       const url = `${serverUrl}/instance/connect`;
