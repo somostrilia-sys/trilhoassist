@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS providers_cnpj_unique ON providers (cnpj) WHERE cnpj IS NOT NULL;
