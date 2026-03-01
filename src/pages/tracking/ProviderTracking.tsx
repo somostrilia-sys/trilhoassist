@@ -492,8 +492,20 @@ export default function ProviderTracking() {
                     <span>Tela mantida ligada</span>
                   </div>
                 )}
-                <div className="rounded-md bg-amber-50 border border-amber-200 p-2 text-xs text-amber-800">
-                  <strong>⚠️ Mantenha esta página aberta</strong> para que sua localização continue sendo compartilhada. Se minimizar o navegador, o envio será pausado.
+                <div className="rounded-lg bg-amber-50 border-2 border-amber-400 p-4 text-amber-900 shadow-md">
+                  <div className="flex items-start gap-3">
+                    <div className="text-2xl mt-0.5">📱</div>
+                    <div className="space-y-1.5">
+                      <p className="font-bold text-sm">NÃO FECHE ESTA PÁGINA!</p>
+                      <p className="text-xs leading-relaxed">
+                        O beneficiário está acompanhando sua localização em tempo real. 
+                        Para que ele tenha a melhor experiência, <strong>mantenha esta tela aberta</strong> durante todo o atendimento.
+                      </p>
+                      <p className="text-xs leading-relaxed text-amber-700">
+                        Se você minimizar o navegador ou trocar de app, o envio da localização será <strong>pausado</strong> e o beneficiário perderá o rastreamento.
+                      </p>
+                    </div>
+                  </div>
                 </div>
                 {isAccepted && (
                   <Button onClick={stopTracking} variant="outline" size="sm" className="w-full">
