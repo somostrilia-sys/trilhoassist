@@ -578,9 +578,41 @@ export default function ServiceRequestDetail() {
       estimated_km: request.estimated_km,
     } as any);
 
+    // Generate dispatch label for copy (without provider name)
+    const benName = beneficiary?.name || request.requester_name;
+    const clientName = (request as any).clients?.name || "";
+    const baseTrackingUrl = "https://trilhoassist.com.br";
+    const trackingLink = request.beneficiary_token
+      ? `${baseTrackingUrl}/tracking/${request.beneficiary_token}`
+      : "";
+
+    const dispatchLabel = `*ACIONAMENTO CONFIRMADO* 🚗
+
+*PROTOCOLO*: ${request.protocol}
+*BENEFICIÁRIO*: ${benName.toUpperCase()}
+*SOLICITANTE*: ${request.requester_name.toUpperCase()}
+*CONTATO*: ${request.requester_phone}${request.requester_phone_secondary ? `\n*CONTATO 2*: ${request.requester_phone_secondary}` : ""}
+*VEÍCULO*: ${(request.vehicle_model || "").toUpperCase()} (${(request.vehicle_plate || "").toUpperCase()})
+*CLIENTE*: ${clientName.toUpperCase() || "—"}
+*SERVIÇO*: ${serviceTypeMap[request.service_type] || request.service_type}
+*TIPO DE EVENTO*: ${eventTypeMap[request.event_type] || request.event_type}
+
+*ORIGEM*: ${(request.origin_address || "").toUpperCase()}
+*DESTINO*: ${(request.destination_address || "").toUpperCase()}
+
+*VALOR COBRADO*: R$ ${parseFloat(chargedAmount).toFixed(2).replace(".", ",")}
+*FORMA DE PAGAMENTO*: ${paymentMethod || "—"}
+${request.estimated_km ? `*DISTÂNCIA ESTIMADA*: APROX ${Math.round(request.estimated_km)} KM` : ""}
+${trackingLink ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingLink}` : ""}`.trim();
+
     setActionLoading(false);
     toast.success("Prestador acionado!", { description: dispatchMode === "quick" ? "Prestador cadastrado e acionado. Links enviados via WhatsApp." : "Links de rastreamento enviados via WhatsApp." });
     setDispatchDialogOpen(false);
+
+    // Show dispatch label dialog
+    setLabelText(dispatchLabel);
+    setLabelDialogOpen(true);
+
     setSelectedProviderId("");
     setQuotedAmount("");
     setChargedAmount("");
