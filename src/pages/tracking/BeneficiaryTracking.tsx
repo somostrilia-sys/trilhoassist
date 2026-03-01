@@ -302,6 +302,11 @@ export default function BeneficiaryTracking() {
 
     mapInstanceRef.current = map;
 
+    // Force invalidateSize after a short delay to fix rendering in some environments
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 300);
+
     return () => {
       map.remove();
       mapInstanceRef.current = null;
