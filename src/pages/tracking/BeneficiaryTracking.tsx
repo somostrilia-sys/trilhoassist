@@ -523,13 +523,20 @@ export default function BeneficiaryTracking() {
     if (!providerPos || !request?.origin_lat || !request?.origin_lng) return;
     const dist = haversineDistance(providerPos.lat, providerPos.lng, request.origin_lat, request.origin_lng);
     setDistanceKm(dist);
-    if (dist <= 1 && !notifiedRef.current) {
-      setIsNearby(true);
-      notifiedRef.current = true;
-      playNotificationSound();
-      if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
+    // Set nearby when within 1km, clear when beyond 1.5km (hysteresis to prevent flickering)
+    if (dist <= 1) {
+      if (!isNearby && !notifiedRef.current) {
+        setIsNearby(true);
+        notifiedRef.current = true;
+        playNotificationSound();
+        if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
+      } else if (!isNearby) {
+        setIsNearby(true);
+      }
+    } else if (dist > 1.5) {
+      setIsNearby(false);
     }
-  }, [providerPos, request?.origin_lat, request?.origin_lng]);
+  }, [providerPos, request?.origin_lat, request?.origin_lng, isNearby]);
 
   // Show manual ETA from dispatch (estimated_arrival_min)
   useEffect(() => {
