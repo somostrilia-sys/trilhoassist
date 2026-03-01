@@ -198,6 +198,7 @@ export default function ServiceRequestDetail() {
   const [chargedAmount, setChargedAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [dispatchNotes, setDispatchNotes] = useState("");
+  const [estimatedArrival, setEstimatedArrival] = useState("");
   const [dispatchMode, setDispatchMode] = useState<"existing" | "quick" | "external">("existing");
   const [quickProvider, setQuickProvider] = useState({
     name: "", document: "", phone: "", cep: "", street: "", address_number: "",
@@ -451,6 +452,7 @@ export default function ServiceRequestDetail() {
       service_request_id: id,
       provider_id: finalProviderId,
       quoted_amount: quotedAmount ? parseFloat(quotedAmount) : null,
+      estimated_arrival_min: estimatedArrival ? parseInt(estimatedArrival) : null,
       notes: dispatchNotes || null,
       status: "sent",
       provider_token: providerToken,
@@ -521,7 +523,7 @@ export default function ServiceRequestDetail() {
     // Notify beneficiary via WhatsApp: "prestador a caminho"
     sendAutoNotify(id!, "beneficiary_dispatch", {
       provider_name: finalProviderName,
-      estimated_arrival_min: undefined,
+      estimated_arrival_min: estimatedArrival ? parseInt(estimatedArrival) : undefined,
       beneficiary_tracking_url: beneficiaryTrackingUrl,
     });
 
@@ -540,6 +542,7 @@ export default function ServiceRequestDetail() {
     setQuotedAmount("");
     setChargedAmount("");
     setPaymentMethod("");
+    setEstimatedArrival("");
     setDispatchNotes("");
     setDispatchMode("existing");
     setQuickProvider({ name: "", document: "", phone: "", cep: "", street: "", address_number: "", neighborhood: "", city: "", state: "" });
@@ -1546,6 +1549,18 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
                   <SelectItem value="boleto">Boleto</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Previsão de chegada (minutos)</Label>
+              <Input
+                type="number"
+                min="1"
+                placeholder="Ex: 40"
+                value={estimatedArrival}
+                onChange={(e) => setEstimatedArrival(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">Tempo estimado em minutos para o prestador chegar ao local</p>
             </div>
 
             <div className="space-y-2">
