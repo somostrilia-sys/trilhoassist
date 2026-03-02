@@ -36,36 +36,24 @@ function buildWazeUrl(points: RoutePoint[]): string {
   return `https://www.waze.com/ul?ll=${dest.lat},${dest.lng}&navigate=yes`;
 }
 
-async function fetchOSRMRoute(points: RoutePoint[]): Promise<[number, number][]> {
-  const coords = points.map((p) => `${p.lng},${p.lat}`).join(";");
+async function fetchOSRMRoute(points: RoutePoint[]): Promise<{ coords: [number, number][]; distanceKm: number }> {
+  const coordsStr = points.map((p) => `${p.lng},${p.lat}`).join(";");
   try {
     const res = await fetch(
-      `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`
+      `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`
     );
     const data = await res.json();
     if (data.routes?.[0]?.geometry?.coordinates) {
-      return data.routes[0].geometry.coordinates as [number, number][];
+      const distanceKm = (data.routes[0].distance || 0) / 1000;
+      return {
+        coords: data.routes[0].geometry.coordinates as [number, number][],
+        distanceKm,
+      };
     }
   } catch (err) {
     console.error("OSRM routing failed:", err);
   }
-  return points.map((p) => [p.lng, p.lat]);
-}
-
-function haversineDistance(coords: [number, number][]): number {
-  let total = 0;
-  for (let i = 1; i < coords.length; i++) {
-    const [lng1, lat1] = coords[i - 1];
-    const [lng2, lat2] = coords[i];
-    const R = 6371;
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLng = ((lng2 - lng1) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-    total += R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  }
-  return Math.round(total);
+  return { coords: points.map((p) => [p.lng, p.lat]), distanceKm: 0 };
 }
 
 export default function RouteMap({ points, title = "ROTEIRIZAÇÃO" }: RouteMapProps) {
@@ -113,7 +101,7 @@ export default function RouteMap({ points, title = "ROTEIRIZAÇÃO" }: RouteMapP
 
     // Fetch and draw route
     map.on("load", () => {
-      fetchOSRMRoute(points).then((routeCoords) => {
+      fetchOSRMRoute(points).then(({ coords: routeCoords, distanceKm }) => {
         map.addSource("route", {
           type: "geojson",
           data: {
@@ -136,7 +124,8 @@ export default function RouteMap({ points, title = "ROTEIRIZAÇÃO" }: RouteMapP
           },
         });
 
-        setTotalKm(haversineDistance(routeCoords) + 10);
+        // Use OSRM-reported distance (same source as RouteDistanceDisplay)
+        setTotalKm(Math.round(distanceKm + 10));
       });
     });
 
