@@ -10,6 +10,7 @@ const serviceTypeMap: Record<string, string> = {
   tow_light: "REBOQUE LEVE",
   tow_heavy: "REBOQUE PESADO",
   tow_motorcycle: "REBOQUE MOTO",
+  tow_utility: "REBOQUE UTILITÁRIO",
   locksmith: "CHAVEIRO",
   tire_change: "TROCA DE PNEU",
   battery: "BATERIA",
@@ -170,7 +171,7 @@ function buildRouteSection(route: RouteBreakdown | null, kmMargin: number, estim
 
 function buildCreationLabel(sr: any, client: any, beneficiary: any, tenant: any, operator: any, route: RouteBreakdown | null, kmMargin: number): string {
   const benName = beneficiary?.name || sr.requester_name;
-  const benPhone = beneficiary?.phone || sr.requester_phone || "";
+  const benPhone = sr.requester_phone || beneficiary?.phone || "";
   const benColor = beneficiary?.vehicle_color || "—";
   const baseUrl = "https://trilhoassist.com.br";
   const trackingLink = sr.beneficiary_token ? `${baseUrl}/tracking/${sr.beneficiary_token}` : "";
@@ -192,6 +193,7 @@ function buildCreationLabel(sr: any, client: any, beneficiary: any, tenant: any,
 *LOGRADOURO*: ${(sr.origin_address || "").toUpperCase()}
 *BAIRRO*: ${extractNeighborhood(sr.origin_address || "").toUpperCase()}
 *CIDADE*: ${extractCity(sr.origin_address || "").toUpperCase()}
+
 
 *DADOS DESTINO*
 *LOGRADOURO*: ${(sr.destination_address || "").toUpperCase()}

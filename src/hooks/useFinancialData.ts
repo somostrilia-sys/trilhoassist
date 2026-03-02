@@ -119,6 +119,7 @@ export const SERVICE_TYPE_LABELS: Record<string, string> = {
   tow_light: "Guincho Leve",
   tow_heavy: "Guincho Pesado",
   tow_motorcycle: "Guincho Moto",
+  tow_utility: "Guincho Utilitário",
   locksmith: "Chaveiro",
   tire_change: "Troca de Pneu",
   battery: "Bateria",
