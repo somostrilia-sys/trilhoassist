@@ -182,11 +182,21 @@ export default function DispatchPanel() {
         ? minutesElapsed(disp.accepted_at)
         : null;
 
-      // Alert: no dispatch for too long — scheduled requests get 2h grace period
+      // Alert: no dispatch for too long
       const noDispatch = !disp || disp.status === "pending" || disp.status === "sent";
       const isScheduled = !!r.scheduled_date;
-      const effectiveAlertMin = isScheduled ? 120 : alertDispatchMin;
-      const alertDispatch = noDispatch && elapsedSinceCreation >= effectiveAlertMin;
+      let alertDispatch = false;
+      if (noDispatch) {
+        if (isScheduled) {
+          // Scheduled: only alert if scheduled date/time has passed and still no dispatch
+          const schedStr = r.scheduled_date + "T" + (r.scheduled_time || "00:00") + ":00";
+          const schedTime = new Date(schedStr).getTime();
+          alertDispatch = Date.now() > schedTime;
+        } else {
+          // Immediate: alert after configured minutes
+          alertDispatch = elapsedSinceCreation >= alertDispatchMin;
+        }
+      }
 
       // Alert: provider late (accepted but ETA exceeded)
       // For scheduled dispatches, only alert after the scheduled arrival time + tolerance
