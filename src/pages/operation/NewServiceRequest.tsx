@@ -572,6 +572,9 @@ export default function NewServiceRequest() {
         return [{ value: "tire_change", label: "Troca de Pneu" }, towOption];
       case "fuel_empty":
         return [{ value: "fuel", label: "Auxílio Combustível" }, towOption];
+      case "accident":
+        // Colisão → only tow options
+        return [towOption, getTowUtilityOption()];
       default:
         // mechanical_failure, theft, other → tow options
         return [towOption, getTowUtilityOption()];
@@ -877,6 +880,7 @@ export default function NewServiceRequest() {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="mechanical_failure">Pane Mecânica</SelectItem>
+                    <SelectItem value="accident">Colisão</SelectItem>
                     <SelectItem value="theft">Roubo/Furto</SelectItem>
                     <SelectItem value="flat_tire">Pneu Furado</SelectItem>
                     <SelectItem value="locked_out">Chave Trancada</SelectItem>
