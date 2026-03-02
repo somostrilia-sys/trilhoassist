@@ -15,6 +15,7 @@ export interface RoutePoint {
 interface RouteMapProps {
   points: RoutePoint[];
   title?: string;
+  distanceKm?: number | null;
 }
 
 function buildGoogleMapsUrl(points: RoutePoint[]): string {
@@ -56,10 +57,11 @@ async function fetchOSRMRoute(points: RoutePoint[]): Promise<{ coords: [number, 
   return { coords: points.map((p) => [p.lng, p.lat]), distanceKm: 0 };
 }
 
-export default function RouteMap({ points, title = "ROTEIRIZAÇÃO" }: RouteMapProps) {
+export default function RouteMap({ points, title = "ROTEIRIZAÇÃO", distanceKm: externalDistanceKm }: RouteMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const [totalKm, setTotalKm] = useState<number | null>(null);
+  const [calculatedKm, setCalculatedKm] = useState<number | null>(null);
+  const totalKm = externalDistanceKm != null ? Math.round(externalDistanceKm) : calculatedKm;
 
   useEffect(() => {
     if (!mapContainer.current || points.length < 2) return;
@@ -124,8 +126,10 @@ export default function RouteMap({ points, title = "ROTEIRIZAÇÃO" }: RouteMapP
           },
         });
 
-        // Use OSRM-reported distance (same source as RouteDistanceDisplay)
-        setTotalKm(Math.round(distanceKm + 10));
+        // Only set calculated km if no external value provided
+        if (externalDistanceKm == null) {
+          setCalculatedKm(Math.round(distanceKm));
+        }
       });
     });
 
