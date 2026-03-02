@@ -1347,7 +1347,7 @@ ${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim()
       </Card>
 
       {/* Route Map */}
-      {routePoints.length >= 2 && <RouteMap points={routePoints} />}
+      {routePoints.length >= 2 && <RouteMap points={routePoints} distanceKm={request.estimated_km} />}
 
       {/* Collision Media */}
       {request.service_type === "collision" && (
