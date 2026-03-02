@@ -992,24 +992,32 @@ ${trackingLink ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingLink}` : ""}`.trim
                   routeSection = `\n*ROTEIRIZAÇÃO ESTIMADA*: ${Math.round(request.estimated_km + kmMarginVal)} km`;
                 }
 
-                const benPhone = beneficiary?.phone || request.requester_phone || "";
+                const benPhone = request.requester_phone || beneficiary?.phone || "";
                 const label = `*ATENDIMENTO*
 
 *BENEFICIÁRIO*: ${benName.toUpperCase()}
 *TELEFONE ASSOCIADO*: ${benPhone}
+*SOLICITANTE*: ${request.requester_name.toUpperCase()}
+*CONTATO SOLICITANTE*: ${request.requester_phone}${request.requester_phone_secondary ? `\n*CONTATO 2*: ${request.requester_phone_secondary}` : ""}
 *VEÍCULO*: ${(request.vehicle_model || "").toUpperCase()} (${(request.vehicle_plate || "").toUpperCase()})
 *COR DO VEÍCULO*: ${(beneficiary?.vehicle_color || "—").toUpperCase()}
+*CLIENTE*: ${clientName.toUpperCase() || "—"}
 *SERVIÇO*: ${serviceTypeMap[request.service_type] || request.service_type}
+*DATA*: ${new Date(request.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
 *PROTOCOLO*: ${request.protocol}
-*OBSERVAÇÕES*: ${eventTypeMap[request.event_type] || request.event_type}
 
-*ORIGEM*: ${(request.origin_address || "").toUpperCase()}
-*DESTINO*: ${(request.destination_address || "").toUpperCase()}
+*DADOS ORIGEM*
+*LOGRADOURO*: ${(request.origin_address || "").toUpperCase()}
 
+*DADOS DESTINO*
+*LOGRADOURO*: ${(request.destination_address || "").toUpperCase()}
+
+*DADOS DE ACIONAMENTO*
+*TIPO DE EVENTO*: ${eventTypeMap[request.event_type] || request.event_type}
 *ASSISTÊNCIA*: ${clientName.toUpperCase() || "—"}
 *CENTRAL DE ASSISTÊNCIA*: TRILHO SOLUCOES
 ${routeSection}
-${trackingUrl ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingUrl}` : ""}`.trim();
+${trackingUrl ? `\n📍 Olá, segue o link com as informações do serviço: ${trackingUrl}` : ""}`.trim();
 
                 setLabelText(label);
                 setLabelDialogOpen(true);
