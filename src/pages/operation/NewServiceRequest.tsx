@@ -65,6 +65,7 @@ export default function NewServiceRequest() {
     "tow_light",
     "tow_heavy",
     "tow_motorcycle",
+    "tow_utility",
     "locksmith",
     "tire_change",
     "battery",
@@ -557,6 +558,8 @@ export default function NewServiceRequest() {
     return "Reboque Leve";
   };
 
+  const getTowUtilityOption = () => ({ value: "tow_utility", label: "Reboque Utilitário" });
+
   const getServiceOptionsForEvent = (): { value: string; label: string }[] => {
     const towOption = { value: getTowTypeForCategory(), label: getTowLabelForCategory() };
     
@@ -570,8 +573,8 @@ export default function NewServiceRequest() {
       case "fuel_empty":
         return [{ value: "fuel", label: "Auxílio Combustível" }, towOption];
       default:
-        // mechanical_failure, theft, other → only tow
-        return [towOption];
+        // mechanical_failure, theft, other → tow options
+        return [towOption, getTowUtilityOption()];
     }
   };
 
@@ -586,7 +589,7 @@ export default function NewServiceRequest() {
   }, [form.event_type, vehicleCategory, attendanceType]);
 
   // Also skip checklist validation for non-tow pane services
-  const isTowService = ["tow_light", "tow_heavy", "tow_motorcycle"].includes(form.service_type);
+  const isTowService = ["tow_light", "tow_heavy", "tow_motorcycle", "tow_utility"].includes(form.service_type);
 
   const paneServiceOptions = getServiceOptionsForEvent();
 

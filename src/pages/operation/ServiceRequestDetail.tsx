@@ -49,6 +49,7 @@ const serviceTypeMap: Record<string, string> = {
   tow_light: "Reboque Leve",
   tow_heavy: "Reboque Pesado",
   tow_motorcycle: "Reboque Moto",
+  tow_utility: "Reboque Utilitário",
   locksmith: "Chaveiro",
   tire_change: "Troca de Pneu",
   battery: "Bateria",

@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 
 const serviceTypeMap: Record<string, string> = {
-  tow_light: "R. Leve", tow_heavy: "R. Pesado", tow_motorcycle: "R. Moto",
+  tow_light: "R. Leve", tow_heavy: "R. Pesado", tow_motorcycle: "R. Moto", tow_utility: "R. Utilitário",
   locksmith: "Chaveiro", tire_change: "Pneu", battery: "Bateria",
   fuel: "Combustível", lodging: "Hospedagem", collision: "Colisão", other: "Outro",
 };
