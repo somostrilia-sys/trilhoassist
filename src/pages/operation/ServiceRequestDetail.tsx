@@ -491,6 +491,10 @@ export default function ServiceRequestDetail() {
       toast.error("Preencha os valores obrigatórios", { description: "Valor cobrado do cliente e forma de pagamento são obrigatórios." });
       return;
     }
+    if (parseFloat(chargedAmount) < parseFloat(quotedAmount)) {
+      toast.error("Valor cobrado inválido", { description: "O valor cobrado da associação não pode ser menor que o valor pago ao prestador." });
+      return;
+    }
     const hasEstimatedArrival = !!estimatedArrival;
     const hasScheduledArrival = !!arrivalDate;
     if (!hasEstimatedArrival && !hasScheduledArrival) {
