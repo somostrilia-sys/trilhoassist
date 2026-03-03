@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  FileText, Eye, Loader2, CheckCircle2, XCircle, Clock, Download,
+  FileText, Eye, Loader2, CheckCircle2, XCircle, Clock, Download, Upload,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -21,15 +21,34 @@ const NF_STATUS: Record<string, { label: string; variant: "default" | "secondary
   rejected: { label: "Rejeitada", variant: "destructive" },
 };
 
+const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+const MAX_SIZE = 10 * 1024 * 1024;
+
 export function ProviderInvoiceReview({ dispatchId }: { dispatchId: string }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [observation, setObservation] = useState("");
   const [reviewAction, setReviewAction] = useState<"approved" | "rejected">("approved");
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewName, setPreviewName] = useState("");
+
+  const { data: dispatch } = useQuery({
+    queryKey: ["dispatch-for-invoice", dispatchId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("dispatches")
+        .select("id, provider_id")
+        .eq("id", dispatchId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!dispatchId,
+  });
 
   const { data: invoice, isLoading } = useQuery({
     queryKey: ["provider-invoice-review", dispatchId],
@@ -44,6 +63,75 @@ export function ProviderInvoiceReview({ dispatchId }: { dispatchId: string }) {
     },
     enabled: !!dispatchId,
   });
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !dispatch?.provider_id) return;
+
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      toast.error("Formato não suportado. Use PDF, JPG ou PNG.");
+      return;
+    }
+    if (file.size > MAX_SIZE) {
+      toast.error("Arquivo muito grande. Máximo 10MB.");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop();
+      const path = `${dispatch.provider_id}/${dispatchId}/nf-${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("provider-invoices")
+        .upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("provider-invoices")
+        .getPublicUrl(path);
+
+      if (invoice) {
+        // Update existing invoice record
+        const { error } = await supabase
+          .from("provider_invoices")
+          .update({
+            file_url: urlData.publicUrl,
+            file_name: file.name,
+            file_size: file.size,
+            status: "attached",
+            uploaded_at: new Date().toISOString(),
+            observation: null,
+            reviewed_at: null,
+            reviewed_by: null,
+          })
+          .eq("id", invoice.id);
+        if (error) throw error;
+      } else {
+        // Create new invoice record
+        const { error } = await supabase
+          .from("provider_invoices")
+          .insert({
+            dispatch_id: dispatchId,
+            provider_id: dispatch.provider_id,
+            file_url: urlData.publicUrl,
+            file_name: file.name,
+            file_size: file.size,
+            status: "attached",
+            uploaded_at: new Date().toISOString(),
+          });
+        if (error) throw error;
+      }
+
+      toast.success("NF anexada com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["provider-invoice-review", dispatchId] });
+    } catch (err: any) {
+      toast.error("Erro ao anexar NF: " + err.message);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const handleReview = async (action: "approved" | "rejected") => {
     setReviewAction(action);
@@ -76,19 +164,48 @@ export function ProviderInvoiceReview({ dispatchId }: { dispatchId: string }) {
   };
 
   if (isLoading) return null;
+
+  // Hidden file input shared across states
+  const fileInput = (
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept=".pdf,.jpg,.jpeg,.png,.webp"
+      className="hidden"
+      onChange={handleFileUpload}
+    />
+  );
+
+  const uploadButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      className="gap-1"
+      disabled={uploading || !dispatch?.provider_id}
+      onClick={() => fileInputRef.current?.click()}
+    >
+      {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+      {uploading ? "Enviando..." : "Anexar NF"}
+    </Button>
+  );
+
   if (!invoice) {
     return (
       <Card>
+        {fileInput}
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <FileText className="h-5 w-5" /> NOTA FISCAL DO PRESTADOR
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground flex items-center gap-2">
             <Clock className="h-4 w-4" />
             Aguardando envio da NF pelo prestador.
           </p>
+          <div className="pt-2 border-t">
+            {uploadButton}
+          </div>
         </CardContent>
       </Card>
     );
@@ -99,6 +216,7 @@ export function ProviderInvoiceReview({ dispatchId }: { dispatchId: string }) {
   return (
     <>
       <Card>
+        {fileInput}
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <FileText className="h-5 w-5" /> NOTA FISCAL DO PRESTADOR
@@ -143,27 +261,21 @@ export function ProviderInvoiceReview({ dispatchId }: { dispatchId: string }) {
             </div>
           </div>
 
-          {(invoice.status === "attached" || invoice.status === "pending") && (
-            <div className="flex items-center gap-2 pt-2 border-t">
-              <Button
-                size="sm"
-                className="gap-1"
-                onClick={() => handleReview("approved")}
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Aprovar NF
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                className="gap-1"
-                onClick={() => handleReview("rejected")}
-              >
-                <XCircle className="h-4 w-4" />
-                Rejeitar NF
-              </Button>
-            </div>
-          )}
+          <div className="flex items-center gap-2 pt-2 border-t flex-wrap">
+            {(invoice.status === "attached" || invoice.status === "pending") && (
+              <>
+                <Button size="sm" className="gap-1" onClick={() => handleReview("approved")}>
+                  <CheckCircle2 className="h-4 w-4" />
+                  Aprovar NF
+                </Button>
+                <Button size="sm" variant="destructive" className="gap-1" onClick={() => handleReview("rejected")}>
+                  <XCircle className="h-4 w-4" />
+                  Rejeitar NF
+                </Button>
+              </>
+            )}
+            {uploadButton}
+          </div>
         </CardContent>
       </Card>
 
