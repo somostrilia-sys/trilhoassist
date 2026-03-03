@@ -227,6 +227,7 @@ export default function ServiceRequestDetail() {
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [labelText, setLabelText] = useState("");
   const [labelSending, setLabelSending] = useState(false);
+  const [labelType, setLabelType] = useState<"creation" | "dispatch">("creation");
   const [cancelProviderDialogOpen, setCancelProviderDialogOpen] = useState(false);
   const [cancelProviderReason, setCancelProviderReason] = useState("");
   const [cancelProviderCost, setCancelProviderCost] = useState("");
@@ -656,6 +657,7 @@ ${trackingLink ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingLink}` : ""}`.trim
 
     // Show dispatch label dialog
     setLabelText(dispatchLabel);
+    setLabelType("dispatch");
     setLabelDialogOpen(true);
 
     setSelectedProviderId("");
@@ -1023,6 +1025,7 @@ ${routeSection}
 ${trackingUrl ? `\n📍 Olá, segue o link com as informações do serviço: ${trackingUrl}` : ""}`.trim();
 
                 setLabelText(label);
+                setLabelType("creation");
                 setLabelDialogOpen(true);
               }}
             >
@@ -1071,6 +1074,7 @@ ${etaStr ? `*PREVISÃO DE CHEGADA*: ${etaStr}` : ""}
 ${trackingUrl ? `\n📍 Link de acompanhamento: ${trackingUrl}` : ""}`.trim();
 
                   setLabelText(label);
+                  setLabelType("dispatch");
                   setLabelDialogOpen(true);
                 }}
               >
@@ -2265,8 +2269,12 @@ ${trackingUrl ? `\n📍 Link de acompanhamento: ${trackingUrl}` : ""}`.trim();
       <Dialog open={labelDialogOpen} onOpenChange={setLabelDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Etiqueta do Atendimento</DialogTitle>
-            <DialogDescription>Revise a etiqueta gerada e escolha como utilizá-la.</DialogDescription>
+            <DialogTitle>{labelType === "dispatch" ? "Etiqueta de Acionamento" : "Etiqueta de Atendimento"}</DialogTitle>
+            <DialogDescription>
+              {labelType === "dispatch"
+                ? "Etiqueta gerada após acionamento do prestador. Revise e escolha como utilizá-la."
+                : "Revise a etiqueta gerada e escolha como utilizá-la."}
+            </DialogDescription>
           </DialogHeader>
           <Textarea
             value={labelText}
@@ -2293,7 +2301,7 @@ ${trackingUrl ? `\n📍 Link de acompanhamento: ${trackingUrl}` : ""}`.trim();
                 if (!id) return;
                 setLabelSending(true);
                 try {
-                  await sendServiceLabel(id, "creation");
+                  await sendServiceLabel(id, labelType === "dispatch" ? "dispatch_preview" : "creation");
                   toast.success("Etiqueta enviada no WhatsApp!");
                   setLabelDialogOpen(false);
                 } catch {
