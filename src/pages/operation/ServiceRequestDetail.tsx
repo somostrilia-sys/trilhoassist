@@ -183,6 +183,7 @@ export default function ServiceRequestDetail() {
   const [request, setRequest] = useState<any>(null);
   const [beneficiary, setBeneficiary] = useState<any>(null);
   const [provider, setProvider] = useState<any>(null);
+  const [currentDispatch, setCurrentDispatch] = useState<any>(null);
   const [dispatchId, setDispatchId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<any[]>([]);
@@ -320,11 +321,13 @@ export default function ServiceRequestDetail() {
         .maybeSingle();
       if (dispatch) {
         setDispatchId(dispatch.id);
+        setCurrentDispatch(dispatch);
         if ((dispatch as any).providers) {
           setProvider((dispatch as any).providers);
         }
       } else {
         setDispatchId(null);
+        setCurrentDispatch(null);
         setProvider(null);
       }
     }
@@ -1026,6 +1029,55 @@ ${trackingUrl ? `\n📍 Olá, segue o link com as informações do serviço: ${t
               <ClipboardCopy className="h-4 w-4" />
               Gerar Etiqueta
             </Button>
+            {currentDispatch && provider && (
+              <Button
+                variant="outline"
+                className="gap-2 border-primary text-primary hover:bg-primary/10"
+                onClick={() => {
+                  const benName = beneficiary?.name || request.requester_name;
+                  const clientName = (request as any).clients?.name || "";
+
+                  // Build ETA string
+                  let etaStr = "";
+                  if (currentDispatch.estimated_arrival_min) {
+                    etaStr = `${currentDispatch.estimated_arrival_min} minutos`;
+                  } else if (currentDispatch.scheduled_arrival_date) {
+                    const d = new Date(currentDispatch.scheduled_arrival_date);
+                    etaStr = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+                    if (currentDispatch.scheduled_arrival_time) {
+                      etaStr += ` às ${currentDispatch.scheduled_arrival_time.slice(0, 5)}`;
+                    }
+                  }
+
+                  const chargedVal = request.charged_amount != null ? `R$ ${Number(request.charged_amount).toFixed(2).replace(".", ",")}` : "—";
+
+                  const baseTrackingUrl = "https://trilhoassist.com.br";
+                  const trackingUrl = request.beneficiary_token
+                    ? `${baseTrackingUrl}/tracking/${request.beneficiary_token}`
+                    : "";
+
+                  const label = `*ACIONADO* ✅
+
+*PROTOCOLO*: ${request.protocol}
+*PLACA*: ${(request.vehicle_plate || "—").toUpperCase()}
+*VEÍCULO*: ${(request.vehicle_model || "").toUpperCase()}
+*BENEFICIÁRIO*: ${benName.toUpperCase()}
+*CLIENTE*: ${clientName.toUpperCase() || "—"}
+*SERVIÇO*: ${serviceTypeMap[request.service_type] || request.service_type}
+*VALOR COBRADO*: ${chargedVal}
+${etaStr ? `*PREVISÃO DE CHEGADA*: ${etaStr}` : ""}
+*ORIGEM*: ${(request.origin_address || "").toUpperCase()}
+*DESTINO*: ${(request.destination_address || "—").toUpperCase()}
+${trackingUrl ? `\n📍 Link de acompanhamento: ${trackingUrl}` : ""}`.trim();
+
+                  setLabelText(label);
+                  setLabelDialogOpen(true);
+                }}
+              >
+                <ClipboardCopy className="h-4 w-4" />
+                Etiqueta Acionamento
+              </Button>
+            )}
             {canCancel && (
               <Button
                 variant="destructive"
