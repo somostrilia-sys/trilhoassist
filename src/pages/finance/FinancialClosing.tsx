@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter,
 } from "@/components/ui/table";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -14,16 +14,22 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Search, Plus, FileCheck, DollarSign, Clock, CheckCircle, Download, AlertTriangle, Banknote } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Search, Plus, FileCheck, DollarSign, Clock, CheckCircle, Download, AlertTriangle, Banknote, ListChecks, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import {
   useTenantId, useFinancialClosings, useProviders,
   CLOSING_STATUS_LABELS, SERVICE_TYPE_LABELS, formatCurrency,
 } from "@/hooks/useFinancialData";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import { generateFinancialPdf } from "@/lib/generateFinancialPdf";
 import { ProviderInvoiceReview } from "@/components/provider/ProviderInvoiceReview";
+
+const isTermPayment = (method: string | null | undefined) => {
+  if (!method) return true;
+  return method.toLowerCase().trim() === "boleto";
+};
 
 export default function FinancialClosing() {
   const { toast } = useToast();
@@ -32,63 +38,71 @@ export default function FinancialClosing() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [providerFilter, setProviderFilter] = useState<string>("all");
   const [dueDateFilter, setDueDateFilter] = useState<string>("all");
-  const [showCreate, setShowCreate] = useState(false);
-  const [newClosing, setNewClosing] = useState({
-    provider_id: "",
-    period_start: "",
-    period_end: "",
-  });
+  const [pendingProviderFilter, setPendingProviderFilter] = useState<string>("all");
+  const [selectedProviders, setSelectedProviders] = useState<Set<string>>(new Set());
+  const [showConfirmBulk, setShowConfirmBulk] = useState(false);
+  const [bulkTarget, setBulkTarget] = useState<"selected" | "all">("all");
 
   const { data: tenantId } = useTenantId();
   const { data: closings = [], isLoading } = useFinancialClosings(tenantId);
   const { data: providers = [] } = useProviders(tenantId);
 
-  // Get completed service requests with dispatches for selected provider
-  const { data: providerRequests = [] } = useQuery({
-    queryKey: ["provider-closing-requests", tenantId, newClosing.provider_id, newClosing.period_start, newClosing.period_end],
+  // Fetch ALL pending term dispatches (last 30 days) for the new Pendentes tab
+  const thirtyDaysAgo = useMemo(() => subDays(new Date(), 30).toISOString(), []);
+  const { data: allPendingTerm = [], isLoading: pendingLoading } = useQuery({
+    queryKey: ["all-pending-term", tenantId, thirtyDaysAgo],
     queryFn: async () => {
-      if (!newClosing.provider_id || !newClosing.period_start || !newClosing.period_end) return [];
-      
-      // Get dispatches for this provider in the period
       const { data: dispatches, error } = await supabase
         .from("dispatches")
         .select(`
           id, final_amount, quoted_amount, provider_id,
-            service_requests!inner (
+          providers (id, name),
+          service_requests!inner (
             id, protocol, requester_name, vehicle_plate, service_type,
             provider_cost, completed_at, financial_status, tenant_id, status,
-            payment_method, payment_term
+            payment_method, payment_term, client_id, clients (id, name)
           )
         `)
-        .eq("provider_id", newClosing.provider_id)
         .eq("status", "completed");
-
       if (error) throw error;
-      
-      // Filter by period and tenant
       return (dispatches ?? []).filter((d: any) => {
         const sr = d.service_requests;
-        if (!sr || sr.tenant_id !== tenantId) return false;
-        if (sr.status !== "completed") return false;
+        if (!sr || sr.tenant_id !== tenantId || sr.status !== "completed") return false;
         if (sr.financial_status !== "pending") return false;
-        const completedAt = sr.completed_at ? new Date(sr.completed_at) : null;
-        if (!completedAt) return false;
-        return completedAt >= new Date(newClosing.period_start) && completedAt <= new Date(newClosing.period_end + "T23:59:59");
+        if (!isTermPayment(sr.payment_method)) return false;
+        if (!sr.completed_at) return false;
+        return new Date(sr.completed_at) >= new Date(thirtyDaysAgo);
       });
     },
-    enabled: !!tenantId && !!newClosing.provider_id && !!newClosing.period_start && !!newClosing.period_end,
+    enabled: !!tenantId,
   });
 
-  // À vista = pix, cash, dinheiro, etc. A prazo = boleto
-  const isTermPayment = (method: string | null | undefined) => {
-    if (!method) return true; // default to term if not set
-    const lower = method.toLowerCase().trim();
-    return lower === "boleto";
-  };
-  const termRequests = providerRequests.filter((d: any) => isTermPayment(d.service_requests?.payment_method));
-  const cashRequests = providerRequests.filter((d: any) => !isTermPayment(d.service_requests?.payment_method));
+  // Group pending by provider
+  const pendingByProvider = useMemo(() => {
+    const map = new Map<string, { provider_id: string; provider_name: string; dispatches: any[]; total: number }>();
+    allPendingTerm.forEach((d: any) => {
+      const pid = d.provider_id || "unknown";
+      const pname = (d.providers as any)?.name || "Sem prestador";
+      if (!map.has(pid)) map.set(pid, { provider_id: pid, provider_name: pname, dispatches: [], total: 0 });
+      const group = map.get(pid)!;
+      const amount = Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0);
+      group.dispatches.push(d);
+      group.total += amount;
+    });
+    return Array.from(map.values()).sort((a, b) => a.provider_name.localeCompare(b.provider_name));
+  }, [allPendingTerm]);
 
-  // Fetch cash payments across all providers for the cash tab
+  const filteredPending = pendingProviderFilter === "all"
+    ? allPendingTerm
+    : allPendingTerm.filter((d: any) => d.provider_id === pendingProviderFilter);
+
+  const filteredPendingByProvider = pendingProviderFilter === "all"
+    ? pendingByProvider
+    : pendingByProvider.filter((g) => g.provider_id === pendingProviderFilter);
+
+  const pendingTotal = filteredPending.reduce((s: number, d: any) => s + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0), 0);
+
+  // Fetch cash payments for the cash tab
   const { data: allCashPayments = [] } = useQuery({
     queryKey: ["cash-payments", tenantId],
     queryFn: async () => {
@@ -115,68 +129,60 @@ export default function FinancialClosing() {
     enabled: !!tenantId,
   });
 
-  const createClosingMutation = useMutation({
-    mutationFn: async () => {
-      // Only include term requests in the closing
-      if (termRequests.length === 0) throw new Error("Nenhum atendimento a prazo encontrado no período.");
+  // Bulk closing mutation
+  const bulkClosingMutation = useMutation({
+    mutationFn: async (providerIds: string[]) => {
+      const targetGroups = pendingByProvider.filter((g) => providerIds.includes(g.provider_id));
+      if (targetGroups.length === 0) throw new Error("Nenhum prestador selecionado.");
 
-      const totalCost = termRequests.reduce((sum: number, d: any) => {
-        return sum + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0);
-      }, 0);
+      const today = format(new Date(), "yyyy-MM-dd");
+      const periodStart = format(subDays(new Date(), 30), "yyyy-MM-dd");
 
-      const { data: closing, error: closingError } = await supabase
-        .from("financial_closings")
-        .insert({
-          tenant_id: tenantId!,
-          provider_id: newClosing.provider_id,
-          period_start: newClosing.period_start,
-          period_end: newClosing.period_end,
-          total_services: termRequests.length,
-          total_provider_cost: totalCost,
-          status: "open",
-        })
-        .select()
-        .single();
+      for (const group of targetGroups) {
+        const totalCost = group.dispatches.reduce((sum: number, d: any) =>
+          sum + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0), 0);
 
-      if (closingError) throw closingError;
+        const { data: closing, error: closingError } = await supabase
+          .from("financial_closings")
+          .insert({
+            tenant_id: tenantId!,
+            provider_id: group.provider_id,
+            period_start: periodStart,
+            period_end: today,
+            total_services: group.dispatches.length,
+            total_provider_cost: totalCost,
+            status: "open",
+          })
+          .select()
+          .single();
 
-      // Insert closing items - only term requests
-      const items = termRequests.map((d: any) => ({
-        closing_id: closing.id,
-        service_request_id: d.service_requests.id,
-        provider_cost: Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0),
-      }));
+        if (closingError) throw closingError;
 
-      const { error: itemsError } = await supabase
-        .from("financial_closing_items")
-        .insert(items);
+        const items = group.dispatches.map((d: any) => ({
+          closing_id: closing.id,
+          service_request_id: d.service_requests.id,
+          provider_cost: Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0),
+        }));
 
-      if (itemsError) throw itemsError;
+        const { error: itemsError } = await supabase
+          .from("financial_closing_items")
+          .insert(items);
+        if (itemsError) throw itemsError;
 
-      // Update financial_status on term service_requests
-      const srIds = termRequests.map((d: any) => d.service_requests.id);
-      const { error: updateError } = await supabase
-        .from("service_requests")
-        .update({ financial_status: "closing_included" })
-        .in("id", srIds);
-
-      if (updateError) throw updateError;
-
-      // Also mark cash requests as "cash_paid" so they don't appear as pending
-      if (cashRequests.length > 0) {
-        const cashIds = cashRequests.map((d: any) => d.service_requests.id);
-        await supabase
+        const srIds = group.dispatches.map((d: any) => d.service_requests.id);
+        const { error: updateError } = await supabase
           .from("service_requests")
-          .update({ financial_status: "cash_paid" })
-          .in("id", cashIds);
+          .update({ financial_status: "closing_included" })
+          .in("id", srIds);
+        if (updateError) throw updateError;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["financial-closings"] });
-      queryClient.invalidateQueries({ queryKey: ["provider-closing-requests"] });
-      toast({ title: "Fechamento criado com sucesso!" });
-      setShowCreate(false);
-      setNewClosing({ provider_id: "", period_start: "", period_end: "" });
+      queryClient.invalidateQueries({ queryKey: ["all-pending-term"] });
+      toast({ title: "Fechamento(s) criado(s) com sucesso!" });
+      setShowConfirmBulk(false);
+      setSelectedProviders(new Set());
     },
     onError: (err: any) => {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
@@ -188,11 +194,7 @@ export default function FinancialClosing() {
       const updates: any = { status };
       if (status === "closed") updates.closed_at = new Date().toISOString();
       if (status === "paid") updates.paid_at = new Date().toISOString();
-
-      const { error } = await supabase
-        .from("financial_closings")
-        .update(updates)
-        .eq("id", id);
+      const { error } = await supabase.from("financial_closings").update(updates).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -219,8 +221,7 @@ export default function FinancialClosing() {
     }
     if (dueDateFilter === "due_soon") {
       if (c.status === "paid") return false;
-      const dueDate = getDueDate(c);
-      const remaining = Math.ceil((dueDate.getTime() - new Date().getTime()) / 86400000);
+      const remaining = Math.ceil((getDueDate(c).getTime() - new Date().getTime()) / 86400000);
       return remaining >= 0 && remaining <= 7;
     }
     if (dueDateFilter === "on_time") {
@@ -232,12 +233,11 @@ export default function FinancialClosing() {
   });
 
   const openCount = closings.filter((c: any) => c.status === "open").length;
-  const closedCount = closings.filter((c: any) => c.status === "closed").length;
   const paidCount = closings.filter((c: any) => c.status === "paid").length;
   const overdueCount = closings.filter((c: any) => {
     if (c.status === "paid") return false;
     const dueDate = new Date(c.period_end);
-    dueDate.setDate(dueDate.getDate() + 30); // 30 days after period end
+    dueDate.setDate(dueDate.getDate() + 30);
     return new Date() > dueDate;
   }).length;
   const totalValue = closings.reduce((sum: number, c: any) => sum + Number(c.total_provider_cost), 0);
@@ -248,6 +248,22 @@ export default function FinancialClosing() {
     return "outline" as const;
   };
 
+  const toggleProvider = (pid: string) => {
+    setSelectedProviders((prev) => {
+      const next = new Set(prev);
+      if (next.has(pid)) next.delete(pid); else next.add(pid);
+      return next;
+    });
+  };
+
+  const selectAllProviders = () => {
+    if (selectedProviders.size === filteredPendingByProvider.length) {
+      setSelectedProviders(new Set());
+    } else {
+      setSelectedProviders(new Set(filteredPendingByProvider.map((g) => g.provider_id)));
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -255,17 +271,13 @@ export default function FinancialClosing() {
           <h1 className="text-2xl font-bold">Fechamento Financeiro</h1>
           <p className="text-sm text-muted-foreground">Controle de pagamentos a prestadores</p>
         </div>
-        <Button className="gap-2" onClick={() => setShowCreate(true)}>
-          <Plus className="h-4 w-4" />
-          Novo Fechamento
-        </Button>
       </div>
 
       {overdueCount > 0 && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            <strong>{overdueCount}</strong> fechamento{overdueCount !== 1 ? "s" : ""} com pagamento vencido (mais de 30 dias após o fim do período sem registro de pagamento).
+            <strong>{overdueCount}</strong> fechamento{overdueCount !== 1 ? "s" : ""} com pagamento vencido.
           </AlertDescription>
         </Alert>
       )}
@@ -274,18 +286,18 @@ export default function FinancialClosing() {
         <Card>
           <CardContent className="flex items-center gap-4 p-4">
             <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <FileCheck className="h-5 w-5 text-primary" />
+              <ListChecks className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Total</p>
-              <p className="text-2xl font-bold">{closings.length}</p>
+              <p className="text-sm text-muted-foreground">Pendentes</p>
+              <p className="text-2xl font-bold">{allPendingTerm.length}</p>
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="flex items-center gap-4 p-4">
-            <div className="h-10 w-10 rounded-lg bg-yellow-500/10 flex items-center justify-center">
-              <Clock className="h-5 w-5 text-yellow-600" />
+            <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+              <Clock className="h-5 w-5 text-amber-600" />
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Abertos</p>
@@ -306,8 +318,8 @@ export default function FinancialClosing() {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-4 p-4">
-            <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-              <CheckCircle className="h-5 w-5 text-green-600" />
+            <div className="h-10 w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+              <CheckCircle className="h-5 w-5 text-emerald-600" />
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Pagos</p>
@@ -328,18 +340,176 @@ export default function FinancialClosing() {
         </Card>
       </div>
 
-      <Tabs defaultValue="closings" className="space-y-4">
+      <Tabs defaultValue="pending" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="closings">Fechamentos a Prazo</TabsTrigger>
+          <TabsTrigger value="pending" className="gap-1">
+            <ListChecks className="h-4 w-4" />
+            Pendentes
+            {allPendingTerm.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-xs">{allPendingTerm.length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="closings">Fechamentos</TabsTrigger>
           <TabsTrigger value="cash" className="gap-1">
             <Banknote className="h-4 w-4" />
-            Pagamentos à Vista
+            À Vista
             {allCashPayments.length > 0 && (
               <Badge variant="secondary" className="ml-1 text-xs">{allCashPayments.length}</Badge>
             )}
           </TabsTrigger>
         </TabsList>
 
+        {/* ===== PENDENTES TAB ===== */}
+        <TabsContent value="pending">
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+              <Select value={pendingProviderFilter} onValueChange={setPendingProviderFilter}>
+                <SelectTrigger className="w-full sm:w-72"><SelectValue placeholder="Filtrar por prestador" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os prestadores</SelectItem>
+                  {pendingByProvider.map((g) => (
+                    <SelectItem key={g.provider_id} value={g.provider_id}>
+                      {g.provider_name} ({g.dispatches.length})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <div className="flex gap-2">
+                {selectedProviders.size > 0 && (
+                  <Button
+                    className="gap-2"
+                    onClick={() => { setBulkTarget("selected"); setShowConfirmBulk(true); }}
+                  >
+                    <FileCheck className="h-4 w-4" />
+                    Fechar {selectedProviders.size} prestador{selectedProviders.size > 1 ? "es" : ""}
+                  </Button>
+                )}
+                {filteredPendingByProvider.length > 0 && (
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => { setBulkTarget("all"); setShowConfirmBulk(true); }}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Fechar Todos
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Summary bar */}
+            <div className="flex items-center gap-6 p-3 rounded-lg bg-muted/40 border text-sm">
+              <span><strong>{filteredPending.length}</strong> atendimentos pendentes</span>
+              <span><strong>{filteredPendingByProvider.length}</strong> prestadores</span>
+              <span className="font-semibold">{formatCurrency(pendingTotal)}</span>
+            </div>
+
+            {pendingLoading ? (
+              <div className="p-8 text-center text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
+              </div>
+            ) : filteredPendingByProvider.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">Nenhum atendimento a prazo pendente nos últimos 30 dias.</div>
+            ) : (
+              <div className="space-y-4">
+                {filteredPendingByProvider.map((group) => (
+                  <Card key={group.provider_id}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Checkbox
+                            checked={selectedProviders.has(group.provider_id)}
+                            onCheckedChange={() => toggleProvider(group.provider_id)}
+                          />
+                          <CardTitle className="text-base">{group.provider_name}</CardTitle>
+                          <Badge variant="outline">{group.dispatches.length} atendimento{group.dispatches.length > 1 ? "s" : ""}</Badge>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-bold">{formatCurrency(group.total)}</span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1"
+                            onClick={() => {
+                              setSelectedProviders(new Set([group.provider_id]));
+                              setBulkTarget("selected");
+                              setShowConfirmBulk(true);
+                            }}
+                          >
+                            <FileCheck className="h-3.5 w-3.5" />
+                            Fechar
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Protocolo</TableHead>
+                            <TableHead>Beneficiário</TableHead>
+                            <TableHead>Placa</TableHead>
+                            <TableHead>Empresa</TableHead>
+                            <TableHead>Tipo</TableHead>
+                            <TableHead>Data</TableHead>
+                            <TableHead>Valor</TableHead>
+                            <TableHead>NF</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {group.dispatches.map((d: any) => {
+                            const sr = d.service_requests;
+                            return (
+                              <TableRow key={d.id}>
+                                <TableCell className="font-mono text-xs">{sr?.protocol}</TableCell>
+                                <TableCell className="text-sm">{sr?.requester_name}</TableCell>
+                                <TableCell className="font-mono text-xs">{sr?.vehicle_plate || "—"}</TableCell>
+                                <TableCell className="text-sm">{sr?.clients?.name || "—"}</TableCell>
+                                <TableCell className="text-xs">
+                                  <Badge variant="outline" className="text-xs">
+                                    {SERVICE_TYPE_LABELS[sr?.service_type] || sr?.service_type}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-sm text-muted-foreground">
+                                  {sr?.completed_at ? format(new Date(sr.completed_at), "dd/MM/yyyy") : "—"}
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  {formatCurrency(Number(d.final_amount || d.quoted_amount || sr?.provider_cost || 0))}
+                                </TableCell>
+                                <TableCell>
+                                  <ProviderInvoiceReview dispatchId={d.id} />
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                        <TableFooter>
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-right font-medium">Total</TableCell>
+                            <TableCell className="font-bold">{formatCurrency(group.total)}</TableCell>
+                            <TableCell />
+                          </TableRow>
+                        </TableFooter>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                {/* Select all bar */}
+                <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+                  <Checkbox
+                    checked={selectedProviders.size === filteredPendingByProvider.length && filteredPendingByProvider.length > 0}
+                    onCheckedChange={selectAllProviders}
+                  />
+                  <span className="text-sm text-muted-foreground">Selecionar todos os prestadores</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* ===== FECHAMENTOS TAB ===== */}
         <TabsContent value="closings">
           <div className="space-y-4">
             <div className="flex flex-col gap-3">
@@ -501,6 +671,7 @@ export default function FinancialClosing() {
           </div>
         </TabsContent>
 
+        {/* ===== CASH TAB ===== */}
         <TabsContent value="cash">
           <Card>
             <CardHeader>
@@ -562,85 +733,53 @@ export default function FinancialClosing() {
         </TabsContent>
       </Tabs>
 
-      {/* Create Dialog */}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+      {/* Bulk Closing Confirm Dialog */}
+      <Dialog open={showConfirmBulk} onOpenChange={setShowConfirmBulk}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Novo Fechamento</DialogTitle>
+            <DialogTitle>Confirmar Fechamento</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Prestador</Label>
-              <Select value={newClosing.provider_id} onValueChange={(v) => setNewClosing(prev => ({ ...prev, provider_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Selecione o prestador" /></SelectTrigger>
-                <SelectContent>
-                  {providers.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Início do período</Label>
-                <Input type="date" value={newClosing.period_start} onChange={(e) => setNewClosing(prev => ({ ...prev, period_start: e.target.value }))} />
-              </div>
-              <div>
-                <Label>Fim do período</Label>
-                <Input type="date" value={newClosing.period_end} onChange={(e) => setNewClosing(prev => ({ ...prev, period_end: e.target.value }))} />
-              </div>
-            </div>
-
-            {providerRequests.length > 0 && (() => {
-              const termReqs = providerRequests.filter((d: any) => isTermPayment(d.service_requests?.payment_method));
-              const cashReqs = providerRequests.filter((d: any) => !isTermPayment(d.service_requests?.payment_method));
-              const termTotal = termReqs.reduce((sum: number, d: any) => sum + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0), 0);
-              const cashTotal = cashReqs.reduce((sum: number, d: any) => sum + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0), 0);
+          <div className="space-y-3">
+            {(() => {
+              const targetIds = bulkTarget === "all"
+                ? filteredPendingByProvider.map((g) => g.provider_id)
+                : Array.from(selectedProviders);
+              const targetGroups = pendingByProvider.filter((g) => targetIds.includes(g.provider_id));
+              const totalDispatches = targetGroups.reduce((s, g) => s + g.dispatches.length, 0);
+              const totalAmount = targetGroups.reduce((s, g) => s + g.total, 0);
               return (
-                <div className="space-y-3">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">📋 A Prazo (entram no fechamento)</CardTitle>
-                    </CardHeader>
-                    <CardContent className="text-sm space-y-1">
-                      <p>Atendimentos: <strong>{termReqs.length}</strong></p>
-                      <p>Valor: <strong>{formatCurrency(termTotal)}</strong></p>
-                    </CardContent>
-                  </Card>
-                  {cashReqs.length > 0 && (
-                    <Card className="border-amber-200">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          💵 À Vista (NÃO entram no fechamento)
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="text-sm space-y-2">
-                        <p>Atendimentos: <strong>{cashReqs.length}</strong></p>
-                        <p>Valor: <strong>{formatCurrency(cashTotal)}</strong></p>
-                        <div className="space-y-1 mt-2">
-                          {cashReqs.map((d: any) => (
-                            <div key={d.id} className="flex justify-between text-xs border-b py-1">
-                              <span>{d.service_requests?.protocol} — {d.service_requests?.requester_name}</span>
-                              <span className="font-mono">{formatCurrency(Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0))}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                  <p className="text-xs text-muted-foreground">Total geral: {providerRequests.length} atendimentos ({formatCurrency(termTotal + cashTotal)})</p>
-                </div>
+                <>
+                  <p className="text-sm">
+                    Serão criados <strong>{targetGroups.length}</strong> fechamento{targetGroups.length > 1 ? "s" : ""} com
+                    um total de <strong>{totalDispatches}</strong> atendimentos e valor de <strong>{formatCurrency(totalAmount)}</strong>.
+                  </p>
+                  <div className="max-h-60 overflow-auto space-y-1 border rounded-lg p-3">
+                    {targetGroups.map((g) => (
+                      <div key={g.provider_id} className="flex justify-between text-sm border-b py-1.5 last:border-0">
+                        <span>{g.provider_name} <span className="text-muted-foreground">({g.dispatches.length} atd.)</span></span>
+                        <span className="font-mono font-medium">{formatCurrency(g.total)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Período: últimos 30 dias até hoje</p>
+                </>
               );
             })()}
-
-            {newClosing.provider_id && newClosing.period_start && newClosing.period_end && providerRequests.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center">Nenhum atendimento pendente encontrado para este período.</p>
-            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
-            <Button onClick={() => createClosingMutation.mutate()} disabled={providerRequests.length === 0 || createClosingMutation.isPending}>
-              {createClosingMutation.isPending ? "Criando..." : "Criar Fechamento"}
+            <Button variant="outline" onClick={() => setShowConfirmBulk(false)}>Cancelar</Button>
+            <Button
+              onClick={() => {
+                const targetIds = bulkTarget === "all"
+                  ? filteredPendingByProvider.map((g) => g.provider_id)
+                  : Array.from(selectedProviders);
+                bulkClosingMutation.mutate(targetIds);
+              }}
+              disabled={bulkClosingMutation.isPending}
+            >
+              {bulkClosingMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Processando...</>
+              ) : "Confirmar Fechamento"}
             </Button>
           </DialogFooter>
         </DialogContent>
