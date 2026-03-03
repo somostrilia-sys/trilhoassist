@@ -132,7 +132,8 @@ export default function DispatchPanel() {
       }
     }
     return map;
-  }, [pauses]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pauses, tick]);
 
   // Load user name
   useEffect(() => {
@@ -438,13 +439,13 @@ export default function DispatchPanel() {
 
                 {/* Recently resumed info */}
                 {!isPaused && resumed && (
-                  <div className="bg-muted/50 rounded px-2 py-1 space-y-0.5">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded px-2 py-1.5 space-y-0.5">
+                    <div className="flex items-center gap-2 text-xs font-medium text-green-700 dark:text-green-400">
                       <PlayCircle className="h-3.5 w-3.5" />
                       Retomado por {resumed.resumed_by_name || "Operador"} às {formatTime(resumed.resumed_at!)}
                     </div>
-                    <p className="text-xs text-muted-foreground italic ml-5">
-                      Motivo da pausa: "{resumed.justification}" (pausado às {formatTime(resumed.paused_at)})
+                    <p className="text-xs text-green-600 dark:text-green-500 ml-5">
+                      Pausado por {resumed.paused_by_name || "Operador"} às {formatTime(resumed.paused_at)} — "{resumed.justification}"
                     </p>
                   </div>
                 )}
