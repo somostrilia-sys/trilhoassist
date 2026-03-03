@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, FileCheck, DollarSign, Clock, CheckCircle, Download, AlertTriangle } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Search, Plus, FileCheck, DollarSign, Clock, CheckCircle, Download, AlertTriangle, Banknote } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -22,6 +23,7 @@ import {
 } from "@/hooks/useFinancialData";
 import { format } from "date-fns";
 import { generateFinancialPdf } from "@/lib/generateFinancialPdf";
+import { ProviderInvoiceReview } from "@/components/provider/ProviderInvoiceReview";
 
 export default function FinancialClosing() {
   const { toast } = useToast();
@@ -77,11 +79,41 @@ export default function FinancialClosing() {
     enabled: !!tenantId && !!newClosing.provider_id && !!newClosing.period_start && !!newClosing.period_end,
   });
 
+  // Separate term vs cash requests
+  const termRequests = providerRequests.filter((d: any) => d.service_requests?.payment_method !== "cash");
+  const cashRequests = providerRequests.filter((d: any) => d.service_requests?.payment_method === "cash");
+
+  // Fetch cash payments across all providers for the cash tab
+  const { data: allCashPayments = [] } = useQuery({
+    queryKey: ["cash-payments", tenantId],
+    queryFn: async () => {
+      const { data: dispatches, error } = await supabase
+        .from("dispatches")
+        .select(`
+          id, final_amount, quoted_amount, provider_id,
+          providers (id, name),
+          service_requests!inner (
+            id, protocol, requester_name, vehicle_plate, service_type,
+            provider_cost, completed_at, financial_status, tenant_id, status,
+            payment_method, payment_term
+          )
+        `)
+        .eq("status", "completed");
+      if (error) throw error;
+      return (dispatches ?? []).filter((d: any) => {
+        const sr = d.service_requests;
+        return sr?.tenant_id === tenantId && sr?.status === "completed" && sr?.payment_method === "cash";
+      });
+    },
+    enabled: !!tenantId,
+  });
+
   const createClosingMutation = useMutation({
     mutationFn: async () => {
-      if (providerRequests.length === 0) throw new Error("Nenhum atendimento encontrado no período.");
+      // Only include term requests in the closing
+      if (termRequests.length === 0) throw new Error("Nenhum atendimento a prazo encontrado no período.");
 
-      const totalCost = providerRequests.reduce((sum: number, d: any) => {
+      const totalCost = termRequests.reduce((sum: number, d: any) => {
         return sum + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0);
       }, 0);
 
@@ -92,7 +124,7 @@ export default function FinancialClosing() {
           provider_id: newClosing.provider_id,
           period_start: newClosing.period_start,
           period_end: newClosing.period_end,
-          total_services: providerRequests.length,
+          total_services: termRequests.length,
           total_provider_cost: totalCost,
           status: "open",
         })
@@ -101,8 +133,8 @@ export default function FinancialClosing() {
 
       if (closingError) throw closingError;
 
-      // Insert closing items
-      const items = providerRequests.map((d: any) => ({
+      // Insert closing items - only term requests
+      const items = termRequests.map((d: any) => ({
         closing_id: closing.id,
         service_request_id: d.service_requests.id,
         provider_cost: Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0),
@@ -114,14 +146,23 @@ export default function FinancialClosing() {
 
       if (itemsError) throw itemsError;
 
-      // Update financial_status on service_requests
-      const srIds = providerRequests.map((d: any) => d.service_requests.id);
+      // Update financial_status on term service_requests
+      const srIds = termRequests.map((d: any) => d.service_requests.id);
       const { error: updateError } = await supabase
         .from("service_requests")
         .update({ financial_status: "closing_included" })
         .in("id", srIds);
 
       if (updateError) throw updateError;
+
+      // Also mark cash requests as "cash_paid" so they don't appear as pending
+      if (cashRequests.length > 0) {
+        const cashIds = cashRequests.map((d: any) => d.service_requests.id);
+        await supabase
+          .from("service_requests")
+          .update({ financial_status: "cash_paid" })
+          .in("id", cashIds);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["financial-closings"] });
@@ -280,219 +321,239 @@ export default function FinancialClosing() {
         </Card>
       </div>
 
-      <div className="flex flex-col gap-3">
-        <div className="relative w-full sm:max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Buscar por prestador..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Select value={providerFilter} onValueChange={setProviderFilter}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Prestador" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os prestadores</SelectItem>
-              {providers.map((p) => (
-                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os status</SelectItem>
-              <SelectItem value="open">Aberto</SelectItem>
-              <SelectItem value="closed">Fechado</SelectItem>
-              <SelectItem value="paid">Pago</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
-            <SelectTrigger className="w-full"><SelectValue placeholder="Vencimento" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="overdue">Vencidos</SelectItem>
-              <SelectItem value="due_soon">Vence em 7 dias</SelectItem>
-              <SelectItem value="on_time">Em dia</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      <Tabs defaultValue="closings" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="closings">Fechamentos a Prazo</TabsTrigger>
+          <TabsTrigger value="cash" className="gap-1">
+            <Banknote className="h-4 w-4" />
+            Pagamentos à Vista
+            {allCashPayments.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-xs">{allCashPayments.length}</Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-8 text-center text-muted-foreground">Carregando...</div>
-          ) : filtered.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">Nenhum fechamento encontrado.</div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Prestador</TableHead>
-                  <TableHead>Período</TableHead>
-                  <TableHead>Vencimento</TableHead>
-                  <TableHead>Serviços</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Ações</TableHead>
-                  <TableHead>Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((closing: any) => (
-                  <TableRow key={closing.id}>
-                    <TableCell className="font-medium">{closing.providers?.name ?? "—"}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {format(new Date(closing.period_start), "dd/MM/yyyy")} - {format(new Date(closing.period_end), "dd/MM/yyyy")}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {(() => {
-                        const dueDate = getDueDate(closing);
-                        const now = new Date();
-                        const isPaid = closing.status === "paid";
-                        if (isPaid) {
-                          return <span className="text-muted-foreground">{format(dueDate, "dd/MM/yyyy")}</span>;
-                        }
-                        if (now > dueDate) {
-                          const overdueDays = Math.floor((now.getTime() - dueDate.getTime()) / 86400000);
-                          return (
-                            <span className="flex items-center gap-1 text-destructive font-medium">
-                              <AlertTriangle className="h-3.5 w-3.5" />
-                              {format(dueDate, "dd/MM/yyyy")} ({overdueDays}d atraso)
-                            </span>
-                          );
-                        }
-                        const remaining = Math.ceil((dueDate.getTime() - now.getTime()) / 86400000);
-                        if (remaining <= 7) {
-                          return (
-                            <span className="flex items-center gap-1 text-yellow-600 font-medium">
-                              <Clock className="h-3.5 w-3.5" />
-                              {format(dueDate, "dd/MM/yyyy")} ({remaining}d)
-                            </span>
-                          );
-                        }
-                        return <span>{format(dueDate, "dd/MM/yyyy")}</span>;
-                      })()}
-                    </TableCell>
-                    <TableCell>{closing.total_services}</TableCell>
-                    <TableCell className="font-medium">{formatCurrency(closing.total_provider_cost)}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={statusVariant(closing.status)}>
-                          {CLOSING_STATUS_LABELS[closing.status] || closing.status}
-                        </Badge>
-                        {closing.status !== "paid" && (() => {
-                          const dueDate = new Date(closing.period_end);
-                          dueDate.setDate(dueDate.getDate() + 30);
-                          const now = new Date();
-                          if (now > dueDate) {
-                            const overdueDays = Math.floor((now.getTime() - dueDate.getTime()) / 86400000);
-                            return (
-                              <span className="flex items-center gap-1 text-destructive text-xs font-medium" title={`Vencido há ${overdueDays} dias`}>
-                                <AlertTriangle className="h-3.5 w-3.5" /> {overdueDays}d
-                              </span>
-                            );
-                          }
-                          const remaining = Math.ceil((dueDate.getTime() - now.getTime()) / 86400000);
-                          if (remaining <= 7) {
-                            return (
-                              <span className="flex items-center gap-1 text-yellow-600 text-xs font-medium" title={`Vence em ${remaining} dias`}>
-                                <Clock className="h-3.5 w-3.5" /> {remaining}d
-                              </span>
-                            );
-                          }
-                          return null;
-                        })()}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="outline" className="gap-1" onClick={async () => {
-                          // Fetch closing items with extra fields including beneficiary_id
-                          const { data: items } = await supabase
-                            .from("financial_closing_items")
-                            .select("service_request_id, provider_cost, service_requests (protocol, requester_name, vehicle_plate, vehicle_model, service_type, completed_at, origin_address, destination_address, estimated_km, beneficiary_id)")
-                            .eq("closing_id", closing.id);
+        <TabsContent value="closings">
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3">
+              <div className="relative w-full sm:max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Buscar por prestador..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Select value={providerFilter} onValueChange={setProviderFilter}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Prestador" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os prestadores</SelectItem>
+                    {providers.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Status" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os status</SelectItem>
+                    <SelectItem value="open">Aberto</SelectItem>
+                    <SelectItem value="closed">Fechado</SelectItem>
+                    <SelectItem value="paid">Pago</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Vencimento" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="overdue">Vencidos</SelectItem>
+                    <SelectItem value="due_soon">Vence em 7 dias</SelectItem>
+                    <SelectItem value="on_time">Em dia</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-                          // Fetch beneficiary cooperativas for grouping
-                          const beneficiaryIds = [...new Set((items || []).map((it: any) => it.service_requests?.beneficiary_id).filter(Boolean))];
-                          const beneficiaryCoopMap: Record<string, string> = {};
-                          if (beneficiaryIds.length > 0) {
-                            const { data: benefs } = await supabase
-                              .from("beneficiaries")
-                              .select("id, cooperativa")
-                              .in("id", beneficiaryIds);
-                            (benefs || []).forEach((b: any) => {
-                              beneficiaryCoopMap[b.id] = b.cooperativa || "Sem Cooperativa";
-                            });
-                          }
+            <Card>
+              <CardContent className="p-0">
+                {isLoading ? (
+                  <div className="p-8 text-center text-muted-foreground">Carregando...</div>
+                ) : filtered.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">Nenhum fechamento encontrado.</div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Prestador</TableHead>
+                        <TableHead>Período</TableHead>
+                        <TableHead>Vencimento</TableHead>
+                        <TableHead>Serviços</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filtered.map((closing: any) => (
+                        <TableRow key={closing.id}>
+                          <TableCell className="font-medium">{closing.providers?.name ?? "—"}</TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {format(new Date(closing.period_start), "dd/MM/yyyy")} - {format(new Date(closing.period_end), "dd/MM/yyyy")}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {(() => {
+                              const dueDate = getDueDate(closing);
+                              const now = new Date();
+                              const isPaid = closing.status === "paid";
+                              if (isPaid) return <span className="text-muted-foreground">{format(dueDate, "dd/MM/yyyy")}</span>;
+                              if (now > dueDate) {
+                                const overdueDays = Math.floor((now.getTime() - dueDate.getTime()) / 86400000);
+                                return (
+                                  <span className="flex items-center gap-1 text-destructive font-medium">
+                                    <AlertTriangle className="h-3.5 w-3.5" />
+                                    {format(dueDate, "dd/MM/yyyy")} ({overdueDays}d atraso)
+                                  </span>
+                                );
+                              }
+                              const remaining = Math.ceil((dueDate.getTime() - now.getTime()) / 86400000);
+                              if (remaining <= 7) {
+                                return (
+                                  <span className="flex items-center gap-1 text-amber-600 font-medium">
+                                    <Clock className="h-3.5 w-3.5" />
+                                    {format(dueDate, "dd/MM/yyyy")} ({remaining}d)
+                                  </span>
+                                );
+                              }
+                              return <span>{format(dueDate, "dd/MM/yyyy")}</span>;
+                            })()}
+                          </TableCell>
+                          <TableCell>{closing.total_services}</TableCell>
+                          <TableCell className="font-medium">{formatCurrency(closing.total_provider_cost)}</TableCell>
+                          <TableCell>
+                            <Badge variant={statusVariant(closing.status)}>
+                              {CLOSING_STATUS_LABELS[closing.status] || closing.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button size="sm" variant="outline" className="gap-1" onClick={async () => {
+                                const { data: items } = await supabase
+                                  .from("financial_closing_items")
+                                  .select("service_request_id, provider_cost, service_requests (protocol, requester_name, vehicle_plate, vehicle_model, service_type, completed_at, origin_address, destination_address, estimated_km, beneficiary_id)")
+                                  .eq("closing_id", closing.id);
+                                const beneficiaryIds = [...new Set((items || []).map((it: any) => it.service_requests?.beneficiary_id).filter(Boolean))];
+                                const beneficiaryCoopMap: Record<string, string> = {};
+                                if (beneficiaryIds.length > 0) {
+                                  const { data: benefs } = await supabase.from("beneficiaries").select("id, cooperativa").in("id", beneficiaryIds);
+                                  (benefs || []).forEach((b: any) => { beneficiaryCoopMap[b.id] = b.cooperativa || "Sem Cooperativa"; });
+                                }
+                                const mappedItems = (items || []).map((it: any) => ({
+                                  protocol: it.service_requests?.protocol || "",
+                                  date: it.service_requests?.completed_at ? format(new Date(it.service_requests.completed_at), "dd/MM/yyyy") : "",
+                                  requesterName: it.service_requests?.requester_name || "",
+                                  vehiclePlate: it.service_requests?.vehicle_plate || "",
+                                  vehicleModel: it.service_requests?.vehicle_model || "",
+                                  serviceType: SERVICE_TYPE_LABELS[it.service_requests?.service_type] || it.service_requests?.service_type || "",
+                                  chargedAmount: Number(it.provider_cost || 0),
+                                  originAddress: it.service_requests?.origin_address || "",
+                                  destinationAddress: it.service_requests?.destination_address || "",
+                                  estimatedKm: it.service_requests?.estimated_km ?? null,
+                                  cooperativa: beneficiaryCoopMap[it.service_requests?.beneficiary_id] || "Sem Cooperativa",
+                                }));
+                                const coopGroupMap = new Map<string, { items: typeof mappedItems }>();
+                                mappedItems.forEach((item) => {
+                                  const coop = item.cooperativa;
+                                  if (!coopGroupMap.has(coop)) coopGroupMap.set(coop, { items: [] });
+                                  coopGroupMap.get(coop)!.items.push(item);
+                                });
+                                const cooperativaGroups = Array.from(coopGroupMap.entries())
+                                  .map(([cooperativa, data]) => ({ cooperativa, plates: 0, plateValue: 0, items: data.items, totalCharged: data.items.reduce((s, it) => s + it.chargedAmount, 0) }))
+                                  .sort((a, b) => a.cooperativa.localeCompare(b.cooperativa));
+                                generateFinancialPdf({
+                                  providerName: closing.providers?.name || "", periodStart: closing.period_start, periodEnd: closing.period_end,
+                                  items: mappedItems, totalServices: closing.total_services, totalCharged: Number(closing.total_provider_cost),
+                                  totalProviderCost: Number(closing.total_provider_cost), markupAmount: 0, clientName: closing.providers?.name || "",
+                                  notes: closing.notes || undefined, type: "closing",
+                                  cooperativaGroups: cooperativaGroups.length > 1 ? cooperativaGroups : undefined,
+                                });
+                              }}>
+                                <Download className="h-3 w-3" /> PDF
+                              </Button>
+                              {closing.status === "open" && (
+                                <Button size="sm" variant="outline" onClick={() => updateStatusMutation.mutate({ id: closing.id, status: "closed" })}>Fechar</Button>
+                              )}
+                              {closing.status === "closed" && (
+                                <Button size="sm" variant="outline" onClick={() => updateStatusMutation.mutate({ id: closing.id, status: "paid" })}>Marcar Pago</Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
 
-                          const mappedItems = (items || []).map((it: any) => ({
-                            protocol: it.service_requests?.protocol || "",
-                            date: it.service_requests?.completed_at ? format(new Date(it.service_requests.completed_at), "dd/MM/yyyy") : "",
-                            requesterName: it.service_requests?.requester_name || "",
-                            vehiclePlate: it.service_requests?.vehicle_plate || "",
-                            vehicleModel: it.service_requests?.vehicle_model || "",
-                            serviceType: SERVICE_TYPE_LABELS[it.service_requests?.service_type] || it.service_requests?.service_type || "",
-                            chargedAmount: Number(it.provider_cost || 0),
-                            originAddress: it.service_requests?.origin_address || "",
-                            destinationAddress: it.service_requests?.destination_address || "",
-                            estimatedKm: it.service_requests?.estimated_km ?? null,
-                            cooperativa: beneficiaryCoopMap[it.service_requests?.beneficiary_id] || "Sem Cooperativa",
-                          }));
-
-                          // Group by cooperativa
-                          const coopGroupMap = new Map<string, { items: typeof mappedItems }>();
-                          mappedItems.forEach((item) => {
-                            const coop = item.cooperativa;
-                            if (!coopGroupMap.has(coop)) coopGroupMap.set(coop, { items: [] });
-                            coopGroupMap.get(coop)!.items.push(item);
-                          });
-
-                          const cooperativaGroups = Array.from(coopGroupMap.entries())
-                            .map(([cooperativa, data]) => ({
-                              cooperativa,
-                              plates: 0,
-                              plateValue: 0,
-                              items: data.items,
-                              totalCharged: data.items.reduce((s, it) => s + it.chargedAmount, 0),
-                            }))
-                            .sort((a, b) => a.cooperativa.localeCompare(b.cooperativa));
-
-                          generateFinancialPdf({
-                            providerName: closing.providers?.name || "",
-                            periodStart: closing.period_start,
-                            periodEnd: closing.period_end,
-                            items: mappedItems,
-                            totalServices: closing.total_services,
-                            totalCharged: Number(closing.total_provider_cost),
-                            totalProviderCost: Number(closing.total_provider_cost),
-                            markupAmount: 0,
-                            clientName: closing.providers?.name || "",
-                            notes: closing.notes || undefined,
-                            type: "closing",
-                            cooperativaGroups: cooperativaGroups.length > 1 ? cooperativaGroups : undefined,
-                          });
-                        }}>
-                          <Download className="h-3 w-3" /> PDF
-                        </Button>
-                        {closing.status === "open" && (
-                          <Button size="sm" variant="outline" onClick={() => updateStatusMutation.mutate({ id: closing.id, status: "closed" })}>
-                            Fechar
-                          </Button>
-                        )}
-                        {closing.status === "closed" && (
-                          <Button size="sm" variant="outline" onClick={() => updateStatusMutation.mutate({ id: closing.id, status: "paid" })}>
-                            Marcar Pago
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+        <TabsContent value="cash">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Banknote className="h-5 w-5" />
+                Pagamentos à Vista
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {allCashPayments.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">Nenhum pagamento à vista encontrado.</div>
+              ) : (
+                <>
+                  <div className="p-4 border-b bg-muted/30">
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm text-muted-foreground">Total: <strong>{allCashPayments.length}</strong> atendimentos</span>
+                      <span className="text-sm font-semibold">
+                        {formatCurrency(allCashPayments.reduce((s: number, d: any) => s + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0), 0))}
+                      </span>
+                    </div>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Protocolo</TableHead>
+                        <TableHead>Prestador</TableHead>
+                        <TableHead>Beneficiário</TableHead>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>NF</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {allCashPayments.map((d: any) => {
+                        const sr = d.service_requests;
+                        return (
+                          <TableRow key={d.id}>
+                            <TableCell className="font-mono text-xs">{sr?.protocol}</TableCell>
+                            <TableCell>{(d.providers as any)?.name || "—"}</TableCell>
+                            <TableCell>{sr?.requester_name}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {sr?.completed_at ? format(new Date(sr.completed_at), "dd/MM/yyyy") : "—"}
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              {formatCurrency(Number(d.final_amount || d.quoted_amount || sr?.provider_cost || 0))}
+                            </TableCell>
+                            <TableCell>
+                              <ProviderInvoiceReview dispatchId={d.id} />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Create Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
