@@ -187,6 +187,7 @@ export default function ServiceRequestDetail() {
   const [dispatchId, setDispatchId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<any[]>([]);
+  const [clientsList, setClientsList] = useState<{ id: string; name: string }[]>([]);
 
   // Action modals
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
@@ -295,12 +296,20 @@ export default function ServiceRequestDetail() {
 
   const loadData = useCallback(async () => {
     if (!id) return;
-    const { data } = await supabase
-      .from("service_requests")
-      .select("*, clients(name), plans(name)")
-      .eq("id", id)
-      .maybeSingle();
+    const [{ data }, { data: clData }] = await Promise.all([
+      supabase
+        .from("service_requests")
+        .select("*, clients(name), plans(name)")
+        .eq("id", id)
+        .maybeSingle(),
+      supabase
+        .from("clients")
+        .select("id, name")
+        .eq("active", true)
+        .order("name"),
+    ]);
     setRequest(data);
+    setClientsList(clData || []);
 
     if (data?.beneficiary_id) {
       const { data: ben } = await supabase
@@ -1168,7 +1177,27 @@ ${etaStr ? `*PREVISÃO DE CHEGADA*: ${etaStr}` : ""}
             <EditableField label="Email" value={request.requester_email} rawValue={request.requester_email || ""} onSave={(v) => updateField("requester_email", v, "Email")} />
             <EditableField label="Telefone Secundário" value={request.requester_phone_secondary} rawValue={request.requester_phone_secondary || ""} onSave={(v) => updateField("requester_phone_secondary", v, "Telefone secundário")} />
             <EditableField label="Nome do Motorista" value={request.driver_name} rawValue={request.driver_name || ""} onSave={(v) => updateField("driver_name", v, "Nome do motorista")} />
+            <EditableField
+              label="Empresa"
+              value={(request as any).clients?.name}
+              rawValue={request.client_id || ""}
+              type="select"
+              options={clientsList.map((c) => ({ value: c.id, label: c.name }))}
+              placeholder="Selecione a empresa"
+              onSave={async (v) => {
+                const clientName = clientsList.find((c) => c.id === v)?.name || "";
+                await updateField("client_id", v || null, "Empresa", (request as any).clients?.name || "—", clientName);
+              }}
+            />
           </div>
+          {!request.client_id && (
+            <Alert variant="destructive" className="mt-3">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Nenhuma empresa vinculada. Selecione a empresa para prosseguir com o acionamento.
+              </AlertDescription>
+            </Alert>
+          )}
           {beneficiary && (
             <>
               <Separator className="my-4" />
