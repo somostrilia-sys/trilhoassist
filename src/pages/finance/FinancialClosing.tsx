@@ -79,9 +79,14 @@ export default function FinancialClosing() {
     enabled: !!tenantId && !!newClosing.provider_id && !!newClosing.period_start && !!newClosing.period_end,
   });
 
-  // Separate term vs cash requests
-  const termRequests = providerRequests.filter((d: any) => d.service_requests?.payment_method !== "cash");
-  const cashRequests = providerRequests.filter((d: any) => d.service_requests?.payment_method === "cash");
+  // À vista = pix, cash, dinheiro, etc. A prazo = boleto
+  const isTermPayment = (method: string | null | undefined) => {
+    if (!method) return true; // default to term if not set
+    const lower = method.toLowerCase().trim();
+    return lower === "boleto";
+  };
+  const termRequests = providerRequests.filter((d: any) => isTermPayment(d.service_requests?.payment_method));
+  const cashRequests = providerRequests.filter((d: any) => !isTermPayment(d.service_requests?.payment_method));
 
   // Fetch cash payments across all providers for the cash tab
   const { data: allCashPayments = [] } = useQuery({
@@ -102,7 +107,9 @@ export default function FinancialClosing() {
       if (error) throw error;
       return (dispatches ?? []).filter((d: any) => {
         const sr = d.service_requests;
-        return sr?.tenant_id === tenantId && sr?.status === "completed" && sr?.payment_method === "cash";
+        if (!sr || sr.tenant_id !== tenantId || sr.status !== "completed") return false;
+        const method = (sr.payment_method || "").toLowerCase().trim();
+        return method !== "boleto" && method !== "";
       });
     },
     enabled: !!tenantId,
@@ -585,10 +592,10 @@ export default function FinancialClosing() {
             </div>
 
             {providerRequests.length > 0 && (() => {
-              const termRequests = providerRequests.filter((d: any) => d.service_requests?.payment_method !== "cash");
-              const cashRequests = providerRequests.filter((d: any) => d.service_requests?.payment_method === "cash");
-              const termTotal = termRequests.reduce((sum: number, d: any) => sum + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0), 0);
-              const cashTotal = cashRequests.reduce((sum: number, d: any) => sum + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0), 0);
+              const termReqs = providerRequests.filter((d: any) => isTermPayment(d.service_requests?.payment_method));
+              const cashReqs = providerRequests.filter((d: any) => !isTermPayment(d.service_requests?.payment_method));
+              const termTotal = termReqs.reduce((sum: number, d: any) => sum + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0), 0);
+              const cashTotal = cashReqs.reduce((sum: number, d: any) => sum + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0), 0);
               return (
                 <div className="space-y-3">
                   <Card>
@@ -596,11 +603,11 @@ export default function FinancialClosing() {
                       <CardTitle className="text-sm">📋 A Prazo (entram no fechamento)</CardTitle>
                     </CardHeader>
                     <CardContent className="text-sm space-y-1">
-                      <p>Atendimentos: <strong>{termRequests.length}</strong></p>
+                      <p>Atendimentos: <strong>{termReqs.length}</strong></p>
                       <p>Valor: <strong>{formatCurrency(termTotal)}</strong></p>
                     </CardContent>
                   </Card>
-                  {cashRequests.length > 0 && (
+                  {cashReqs.length > 0 && (
                     <Card className="border-amber-200">
                       <CardHeader className="pb-2">
                         <CardTitle className="text-sm flex items-center gap-2">
@@ -608,10 +615,10 @@ export default function FinancialClosing() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="text-sm space-y-2">
-                        <p>Atendimentos: <strong>{cashRequests.length}</strong></p>
+                        <p>Atendimentos: <strong>{cashReqs.length}</strong></p>
                         <p>Valor: <strong>{formatCurrency(cashTotal)}</strong></p>
                         <div className="space-y-1 mt-2">
-                          {cashRequests.map((d: any) => (
+                          {cashReqs.map((d: any) => (
                             <div key={d.id} className="flex justify-between text-xs border-b py-1">
                               <span>{d.service_requests?.protocol} — {d.service_requests?.requester_name}</span>
                               <span className="font-mono">{formatCurrency(Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0))}</span>
