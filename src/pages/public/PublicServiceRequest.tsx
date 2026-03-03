@@ -239,9 +239,18 @@ export default function PublicServiceRequest() {
       },
       (err) => {
         setGpsLoading(false);
-        toast({ title: "Erro ao capturar localização", description: err.message, variant: "destructive" });
+        const friendlyMessages: Record<number, string> = {
+          1: "Permissão de localização negada. Por favor, habilite nas configurações do navegador e tente novamente.",
+          2: "Não foi possível determinar sua localização. Verifique se o GPS está ativado.",
+          3: "O tempo para obter a localização esgotou. Tente novamente em um local com melhor sinal.",
+        };
+        toast({
+          title: "Não foi possível obter localização",
+          description: friendlyMessages[err.code] || "Erro desconhecido. Tente novamente.",
+          variant: "destructive",
+        });
       },
-      { enableHighAccuracy: true, timeout: 15000 }
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 }
     );
   };
 
