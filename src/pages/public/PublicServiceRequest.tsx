@@ -241,7 +241,7 @@ export default function PublicServiceRequest() {
     const onError = (err: GeolocationPositionError) => {
       setGpsLoading(false);
       const friendlyMessages: Record<number, string> = {
-        1: "Permissão de localização negada. Verifique as configurações do navegador e tente novamente.",
+        1: "Permissão de localização negada. No Safari, acesse Ajustes > Privacidade > Serviços de Localização e habilite para o Safari.",
         2: "Não foi possível determinar sua localização. Verifique se o GPS está ativado.",
         3: "O tempo para obter a localização esgotou. Tente novamente em um local com melhor sinal.",
       };
@@ -252,22 +252,22 @@ export default function PublicServiceRequest() {
       });
     };
 
-    // Try high accuracy first; if it fails with timeout or unavailable, retry with low accuracy
+    // Safari often fails with enableHighAccuracy:true even without explicit denial.
+    // Strategy: try low accuracy first (faster, more compatible), then high accuracy as upgrade.
     navigator.geolocation.getCurrentPosition(
       onSuccess,
-      (err) => {
-        if (err.code === 2 || err.code === 3) {
-          // Retry without high accuracy (uses network/WiFi instead of GPS)
-          navigator.geolocation.getCurrentPosition(onSuccess, onError, {
-            enableHighAccuracy: false,
-            timeout: 20000,
-            maximumAge: 120000,
-          });
-        } else {
-          onError(err);
-        }
+      (firstErr) => {
+        // If low accuracy also fails, try high accuracy as last resort
+        navigator.geolocation.getCurrentPosition(
+          onSuccess,
+          (secondErr) => {
+            // Both attempts failed — show the most relevant error
+            onError(firstErr.code === 1 ? firstErr : secondErr);
+          },
+          { enableHighAccuracy: true, timeout: 20000, maximumAge: 120000 }
+        );
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 120000 }
     );
   };
 
