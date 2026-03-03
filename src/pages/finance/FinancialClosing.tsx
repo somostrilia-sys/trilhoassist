@@ -523,32 +523,47 @@ export default function FinancialClosing() {
               </div>
             </div>
 
-            {providerRequests.length > 0 && (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Resumo</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm space-y-1">
-                  <p>Atendimentos encontrados: <strong>{providerRequests.length}</strong></p>
-                  <p>Valor total: <strong>{formatCurrency(providerRequests.reduce((sum: number, d: any) => sum + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0), 0))}</strong></p>
-                  {(() => {
-                    const methods = providerRequests.reduce((acc: Record<string, number>, d: any) => {
-                      const m = d.service_requests?.payment_method || "undefined";
-                      acc[m] = (acc[m] || 0) + 1;
-                      return acc;
-                    }, {});
-                    const labels: Record<string, string> = { cash: "À Vista", invoiced: "Faturado", undefined: "Sem definição" };
-                    return (
-                      <div className="flex gap-2 flex-wrap mt-1">
-                        {Object.entries(methods).map(([k, v]) => (
-                          <Badge key={k} variant="outline" className="text-xs">{labels[k] || k}: {v}</Badge>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </CardContent>
-              </Card>
-            )}
+            {providerRequests.length > 0 && (() => {
+              const termRequests = providerRequests.filter((d: any) => d.service_requests?.payment_method !== "cash");
+              const cashRequests = providerRequests.filter((d: any) => d.service_requests?.payment_method === "cash");
+              const termTotal = termRequests.reduce((sum: number, d: any) => sum + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0), 0);
+              const cashTotal = cashRequests.reduce((sum: number, d: any) => sum + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0), 0);
+              return (
+                <div className="space-y-3">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">📋 A Prazo (entram no fechamento)</CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm space-y-1">
+                      <p>Atendimentos: <strong>{termRequests.length}</strong></p>
+                      <p>Valor: <strong>{formatCurrency(termTotal)}</strong></p>
+                    </CardContent>
+                  </Card>
+                  {cashRequests.length > 0 && (
+                    <Card className="border-amber-200">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          💵 À Vista (NÃO entram no fechamento)
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="text-sm space-y-2">
+                        <p>Atendimentos: <strong>{cashRequests.length}</strong></p>
+                        <p>Valor: <strong>{formatCurrency(cashTotal)}</strong></p>
+                        <div className="space-y-1 mt-2">
+                          {cashRequests.map((d: any) => (
+                            <div key={d.id} className="flex justify-between text-xs border-b py-1">
+                              <span>{d.service_requests?.protocol} — {d.service_requests?.requester_name}</span>
+                              <span className="font-mono">{formatCurrency(Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0))}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                  <p className="text-xs text-muted-foreground">Total geral: {providerRequests.length} atendimentos ({formatCurrency(termTotal + cashTotal)})</p>
+                </div>
+              );
+            })()}
 
             {newClosing.provider_id && newClosing.period_start && newClosing.period_end && providerRequests.length === 0 && (
               <p className="text-sm text-muted-foreground text-center">Nenhum atendimento pendente encontrado para este período.</p>

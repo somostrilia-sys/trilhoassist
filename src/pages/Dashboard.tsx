@@ -84,31 +84,52 @@ export default function Dashboard() {
   }, []);
 
   const loadData = async () => {
-    const [reqRes, dispRes, clientRes] = await Promise.all([
-      supabase.from("service_requests").select("*"),
-      supabase.from("dispatches").select("*"),
+    // Paginated fetch to bypass 1000-row limit
+    const fetchAll = async (table: string, selectStr: string) => {
+      let all: any[] = [];
+      let from = 0;
+      const size = 1000;
+      while (true) {
+        const { data } = await (supabase.from as any)(table).select(selectStr).range(from, from + size - 1);
+        if (!data || data.length === 0) break;
+        all = all.concat(data);
+        if (data.length < size) break;
+        from += size;
+      }
+      return all;
+    };
+
+    const [reqs, disps, clientRes] = await Promise.all([
+      fetchAll("service_requests", "*"),
+      fetchAll("dispatches", "*"),
       supabase.from("clients").select("id, name").order("name"),
     ]);
 
-    setAllRequests(reqRes.data || []);
-    setAllDispatches(dispRes.data || []);
+    setAllRequests(reqs);
+    setAllDispatches(disps);
     setClients(clientRes.data || []);
     setLoading(false);
   };
 
-  // Filter requests and dispatches by client
+  const days = Number(periodDays);
+
+  // Filter requests by client AND period
   const requests = useMemo(() => {
-    if (clientFilter === "all") return allRequests;
-    return allRequests.filter((r) => r.client_id === clientFilter);
-  }, [allRequests, clientFilter]);
+    const now = new Date();
+    const startDate = new Date(now);
+    startDate.setDate(startDate.getDate() - days + 1);
+    startDate.setHours(0, 0, 0, 0);
+    let filtered = allRequests.filter(r => new Date(r.created_at) >= startDate);
+    if (clientFilter !== "all") filtered = filtered.filter((r) => r.client_id === clientFilter);
+    return filtered;
+  }, [allRequests, clientFilter, days]);
 
   const dispatches = useMemo(() => {
-    if (clientFilter === "all") return allDispatches;
     const reqIds = new Set(requests.map((r) => r.id));
     return allDispatches.filter((d) => reqIds.has(d.service_request_id));
-  }, [allDispatches, clientFilter, requests]);
+  }, [allDispatches, requests]);
 
-  const days = Number(periodDays);
+  // days already declared above
 
   // ===== COMPUTED KPIs =====
   const kpiData = useMemo(() => {

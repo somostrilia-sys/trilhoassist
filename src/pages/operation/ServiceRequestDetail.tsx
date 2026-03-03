@@ -409,6 +409,12 @@ export default function ServiceRequestDetail() {
   // --- Actions ---
   const handleStatusChange = async () => {
     if (!newStatus || !id) return;
+    // Block completion without client
+    if (newStatus === "completed" && !request.client_id) {
+      toast.error("Empresa obrigatória", { description: "Vincule uma empresa ao atendimento antes de concluir." });
+      setStatusDialogOpen(false);
+      return;
+    }
     setActionLoading(true);
     const oldStatus = request.status;
     const updates: any = { status: newStatus };
@@ -471,6 +477,11 @@ export default function ServiceRequestDetail() {
   };
 
   const handleDispatch = async () => {
+    // Block dispatch without client
+    if (!request.client_id) {
+      toast.error("Empresa obrigatória", { description: "Vincule uma empresa ao atendimento antes de acionar o prestador." });
+      return;
+    }
     if (dispatchMode === "existing" && !selectedProviderId) return;
     if (dispatchMode === "quick" && (!quickProvider.name.trim() || !quickProvider.phone.trim() || !unmask(quickProvider.document).trim())) {
       toast.error("Preencha os campos obrigatórios", { description: "Razão Social, CPF/CNPJ e Telefone são obrigatórios para cadastro rápido." });
