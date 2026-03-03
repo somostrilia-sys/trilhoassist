@@ -635,21 +635,21 @@ export default function ServiceRequestDetail() {
       ? `${baseTrackingUrl}/tracking/${request.beneficiary_token}`
       : "";
 
+    // Build ETA string for dispatch label
+    let dispatchEtaStr = "";
+    if (arrivalDate) {
+      const dateStr = arrivalDate.toLocaleDateString("pt-BR");
+      dispatchEtaStr = arrivalTime ? `${dateStr} às ${arrivalTime}` : dateStr;
+    } else if (estimatedArrival) {
+      dispatchEtaStr = `${estimatedArrival} minutos`;
+    }
+
     const dispatchLabel = `*ACIONAMENTO CONFIRMADO* 🚗
 
 *PROTOCOLO*: ${request.protocol}
 *PLACA*: ${(request.vehicle_plate || "").toUpperCase()}
-*VEÍCULO*: ${(request.vehicle_model || "").toUpperCase()}
-
-*SERVIÇO*: ${serviceTypeMap[request.service_type] || request.service_type}
-*TIPO DE EVENTO*: ${eventTypeMap[request.event_type] || request.event_type}
-
-*ORIGEM*: ${(request.origin_address || "").toUpperCase()}
-*DESTINO*: ${(request.destination_address || "—").toUpperCase()}
-
-*VALOR COBRADO*: R$ ${parseFloat(chargedAmount).toFixed(2).replace(".", ",")}
-${request.estimated_km ? `*DISTÂNCIA ESTIMADA*: APROX ${Math.round(request.estimated_km)} KM` : ""}
-${trackingLink ? `\n📍 *LINK DE ACOMPANHAMENTO*:\n${trackingLink}` : ""}`.trim();
+${dispatchEtaStr ? `*PREVISÃO DE CHEGADA*: ${dispatchEtaStr}` : ""}
+*VALOR COBRADO*: R$ ${parseFloat(chargedAmount).toFixed(2).replace(".", ",")}`.trim();
 
     setActionLoading(false);
     toast.success("Prestador acionado!", { description: dispatchMode === "quick" ? "Prestador cadastrado e acionado. Links enviados via WhatsApp." : "Links de rastreamento enviados via WhatsApp." });
@@ -1059,19 +1059,12 @@ ${trackingUrl ? `\n📍 Olá, segue o link com as informações do serviço: ${t
                     ? `${baseTrackingUrl}/tracking/${request.beneficiary_token}`
                     : "";
 
-                  const label = `*ACIONADO* ✅
+                  const label = `*ACIONAMENTO CONFIRMADO* 🚗
 
 *PROTOCOLO*: ${request.protocol}
 *PLACA*: ${(request.vehicle_plate || "—").toUpperCase()}
-*VEÍCULO*: ${(request.vehicle_model || "").toUpperCase()}
-*BENEFICIÁRIO*: ${benName.toUpperCase()}
-*CLIENTE*: ${clientName.toUpperCase() || "—"}
-*SERVIÇO*: ${serviceTypeMap[request.service_type] || request.service_type}
-*VALOR COBRADO*: ${chargedVal}
 ${etaStr ? `*PREVISÃO DE CHEGADA*: ${etaStr}` : ""}
-*ORIGEM*: ${(request.origin_address || "").toUpperCase()}
-*DESTINO*: ${(request.destination_address || "—").toUpperCase()}
-${trackingUrl ? `\n📍 Link de acompanhamento: ${trackingUrl}` : ""}`.trim();
+*VALOR COBRADO*: ${chargedVal}`.trim();
 
                   setLabelText(label);
                   setLabelType("dispatch");
