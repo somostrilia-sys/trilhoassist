@@ -218,39 +218,56 @@ export default function PublicServiceRequest() {
 
   const captureGPS = async () => {
     if (!navigator.geolocation) {
-      toast({ title: "GPS não disponível", variant: "destructive" });
+      toast({ title: "GPS não disponível", description: "Seu navegador não suporta geolocalização.", variant: "destructive" });
       return;
     }
     setGpsLoading(true);
+
+    const onSuccess = async (pos: GeolocationPosition) => {
+      const { latitude, longitude } = pos.coords;
+      setOriginCoords({ lat: latitude, lng: longitude });
+      const geo = await reverseGeocode(latitude, longitude);
+      setForm((f) => ({
+        ...f,
+        origin_address: geo.address,
+        origin_city: geo.city,
+        origin_uf: geo.state,
+      }));
+      setErrors((p) => ({ ...p, origin_address: "", origin_city: "" }));
+      setGpsLoading(false);
+      toast({ title: "Localização capturada!" });
+    };
+
+    const onError = (err: GeolocationPositionError) => {
+      setGpsLoading(false);
+      const friendlyMessages: Record<number, string> = {
+        1: "Permissão de localização negada. Verifique as configurações do navegador e tente novamente.",
+        2: "Não foi possível determinar sua localização. Verifique se o GPS está ativado.",
+        3: "O tempo para obter a localização esgotou. Tente novamente em um local com melhor sinal.",
+      };
+      toast({
+        title: "Não foi possível obter localização",
+        description: friendlyMessages[err.code] || "Erro desconhecido. Tente novamente.",
+        variant: "destructive",
+      });
+    };
+
+    // Try high accuracy first; if it fails with timeout or unavailable, retry with low accuracy
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        setOriginCoords({ lat: latitude, lng: longitude });
-        const geo = await reverseGeocode(latitude, longitude);
-        setForm((f) => ({
-          ...f,
-          origin_address: geo.address,
-          origin_city: geo.city,
-          origin_uf: geo.state,
-        }));
-        setErrors((p) => ({ ...p, origin_address: "", origin_city: "" }));
-        setGpsLoading(false);
-        toast({ title: "Localização capturada!" });
-      },
+      onSuccess,
       (err) => {
-        setGpsLoading(false);
-        const friendlyMessages: Record<number, string> = {
-          1: "Permissão de localização negada. Por favor, habilite nas configurações do navegador e tente novamente.",
-          2: "Não foi possível determinar sua localização. Verifique se o GPS está ativado.",
-          3: "O tempo para obter a localização esgotou. Tente novamente em um local com melhor sinal.",
-        };
-        toast({
-          title: "Não foi possível obter localização",
-          description: friendlyMessages[err.code] || "Erro desconhecido. Tente novamente.",
-          variant: "destructive",
-        });
+        if (err.code === 2 || err.code === 3) {
+          // Retry without high accuracy (uses network/WiFi instead of GPS)
+          navigator.geolocation.getCurrentPosition(onSuccess, onError, {
+            enableHighAccuracy: false,
+            timeout: 20000,
+            maximumAge: 120000,
+          });
+        } else {
+          onError(err);
+        }
       },
-      { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
     );
   };
 
