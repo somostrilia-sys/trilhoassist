@@ -6,6 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from "@/components/ui/dialog";
 import {
   AlertTriangle, Clock, Siren, Volume2, VolumeX,
   User, MapPin, Car, ExternalLink, CheckCircle2, Timer, PauseCircle, PlayCircle,
@@ -34,14 +38,11 @@ function playSiren() {
     gain.connect(ctx.destination);
     osc.type = "sawtooth";
     gain.gain.setValueAtTime(0.3, ctx.currentTime);
-
-    // Siren sweep
     osc.frequency.setValueAtTime(600, ctx.currentTime);
     osc.frequency.linearRampToValueAtTime(1200, ctx.currentTime + 0.5);
     osc.frequency.linearRampToValueAtTime(600, ctx.currentTime + 1.0);
     osc.frequency.linearRampToValueAtTime(1200, ctx.currentTime + 1.5);
     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 2);
-
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 2);
   } catch {}
@@ -56,6 +57,23 @@ function formatElapsed(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = Math.round(minutes % 60);
   return h > 0 ? `${h}h ${m}min` : `${m}min`;
+}
+
+function formatTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+interface PauseRecord {
+  id: string;
+  service_request_id: string;
+  paused_by: string;
+  paused_by_name: string | null;
+  justification: string;
+  paused_at: string;
+  resumed_at: string | null;
+  resumed_by: string | null;
+  resumed_by_name: string | null;
+  tenant_id: string;
 }
 
 interface PanelItem {
@@ -77,10 +95,51 @@ export default function DispatchPanel() {
   const [alertLateMin, setAlertLateMin] = useState(10);
   const [loading, setLoading] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [pausedIds, setPausedIds] = useState<Set<string>>(new Set());
+  const [pauses, setPauses] = useState<PauseRecord[]>([]);
+  const [tenantId, setTenantId] = useState<string | null>(null);
+  const [userFullName, setUserFullName] = useState<string>("");
   const lastAlertRef = useRef<Set<string>>(new Set());
   const tickRef = useRef(0);
   const [tick, setTick] = useState(0);
+
+  // Pause dialog state
+  const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
+  const [pauseTarget, setPauseTarget] = useState<any>(null);
+  const [pauseJustification, setPauseJustification] = useState("");
+  const [pauseSubmitting, setPauseSubmitting] = useState(false);
+
+  // Active pauses map: service_request_id -> PauseRecord
+  const activePauses = useMemo(() => {
+    const map: Record<string, PauseRecord> = {};
+    for (const p of pauses) {
+      if (!p.resumed_at) {
+        map[p.service_request_id] = p;
+      }
+    }
+    return map;
+  }, [pauses]);
+
+  // Recently resumed pauses (last hour) for showing resume info
+  const recentResumed = useMemo(() => {
+    const map: Record<string, PauseRecord> = {};
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    for (const p of pauses) {
+      if (p.resumed_at && new Date(p.resumed_at).getTime() > oneHourAgo) {
+        // Keep most recent
+        if (!map[p.service_request_id] || new Date(p.resumed_at) > new Date(map[p.service_request_id].resumed_at!)) {
+          map[p.service_request_id] = p;
+        }
+      }
+    }
+    return map;
+  }, [pauses]);
+
+  // Load user name
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase.from("profiles").select("full_name").eq("user_id", user.id).maybeSingle()
+      .then(({ data }) => { if (data?.full_name) setUserFullName(data.full_name); });
+  }, [user?.id]);
 
   // Load tenant settings + active requests
   const loadData = useCallback(async () => {
@@ -94,6 +153,7 @@ export default function DispatchPanel() {
       .maybeSingle();
 
     if (ut?.tenant_id) {
+      setTenantId(ut.tenant_id);
       const { data: tenant } = await supabase
         .from("tenants_safe")
         .select("alert_dispatch_minutes, alert_late_minutes")
@@ -116,8 +176,7 @@ export default function DispatchPanel() {
     if (reqs && reqs.length > 0) {
       const reqIds = reqs.map((r) => r.id);
 
-      // Fetch dispatches and reopen events in parallel
-      const [dispResult, reopenResult] = await Promise.all([
+      const [dispResult, reopenResult, pauseResult] = await Promise.all([
         supabase
           .from("dispatches")
           .select("*, providers(name)")
@@ -131,11 +190,16 @@ export default function DispatchPanel() {
           .in("event_type", ["status_change", "reopen"])
           .eq("new_value", "open")
           .order("created_at", { ascending: false }),
+        supabase
+          .from("dispatch_pauses")
+          .select("*")
+          .in("service_request_id", reqIds)
+          .order("paused_at", { ascending: false }),
       ]);
 
       setDispatches(dispResult.data || []);
+      setPauses((pauseResult.data as PauseRecord[]) || []);
 
-      // Build map: request_id -> latest reopen timestamp
       const rMap: Record<string, string> = {};
       for (const ev of (reopenResult.data || [])) {
         if (!rMap[ev.service_request_id]) {
@@ -146,6 +210,7 @@ export default function DispatchPanel() {
     } else {
       setDispatches([]);
       setReopenMap({});
+      setPauses([]);
     }
     setLoading(false);
   }, [user?.id]);
@@ -156,11 +221,12 @@ export default function DispatchPanel() {
       .channel("dispatch-panel")
       .on("postgres_changes", { event: "*", schema: "public", table: "service_requests" }, () => loadData())
       .on("postgres_changes", { event: "*", schema: "public", table: "dispatches" }, () => loadData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "dispatch_pauses" }, () => loadData())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [loadData]);
 
-  // Tick every 30s to update elapsed times
+  // Tick every 30s
   useEffect(() => {
     const iv = setInterval(() => {
       tickRef.current += 1;
@@ -171,52 +237,39 @@ export default function DispatchPanel() {
 
   // Build panel items
   const items: PanelItem[] = useMemo(() => {
-    // Exclude collision requests without tow (no destination = no dispatch needed)
     const filtered = requests.filter((r) => !(r.service_type === "collision" && !r.destination_address));
     return filtered.map((r) => {
       const disp = dispatches.find((d) => d.service_request_id === r.id);
-      // Use reopen time if available, otherwise created_at
       const effectiveCreatedAt = reopenMap[r.id] || r.created_at;
       const elapsedSinceCreation = minutesElapsed(effectiveCreatedAt);
-      const elapsedSinceDispatch = disp?.accepted_at
-        ? minutesElapsed(disp.accepted_at)
-        : null;
+      const elapsedSinceDispatch = disp?.accepted_at ? minutesElapsed(disp.accepted_at) : null;
 
-      // Alert: no dispatch for too long
       const noDispatch = !disp || disp.status === "pending" || disp.status === "sent";
       const isScheduled = !!r.scheduled_date;
       let alertDispatch = false;
       if (noDispatch) {
         if (isScheduled) {
-          // Scheduled: only alert if scheduled date/time has passed and still no dispatch
           const schedStr = r.scheduled_date + "T" + (r.scheduled_time || "00:00") + ":00";
           const schedTime = new Date(schedStr).getTime();
           alertDispatch = Date.now() > schedTime;
         } else {
-          // Immediate: alert after configured minutes
           alertDispatch = elapsedSinceCreation >= alertDispatchMin;
         }
       }
 
-      // Alert: provider late (accepted but ETA exceeded)
-      // For scheduled dispatches, only alert after the scheduled arrival time + tolerance
       let alertLate = false;
       if (disp?.status === "accepted" && !disp.provider_arrived_at) {
         if (disp.scheduled_arrival_date) {
-          // Scheduled dispatch: alert only after scheduled time has passed + tolerance
           const scheduledStr = disp.scheduled_arrival_date + "T" + (disp.scheduled_arrival_time || "00:00") + ":00";
           const scheduledTime = new Date(scheduledStr).getTime();
-          const now = Date.now();
-          alertLate = now > scheduledTime + alertLateMin * 60000;
+          alertLate = Date.now() > scheduledTime + alertLateMin * 60000;
         } else if (disp.estimated_arrival_min) {
-          // Immediate dispatch: alert after ETA exceeded
           alertLate = (elapsedSinceDispatch ?? 0) >= (disp.estimated_arrival_min + alertLateMin);
         }
       }
 
       return { request: r, dispatch: disp, elapsedSinceCreation, elapsedSinceDispatch, alertDispatch, alertLate };
     }).sort((a, b) => {
-      // Alerts first
       const aAlert = a.alertDispatch || a.alertLate ? 1 : 0;
       const bAlert = b.alertDispatch || b.alertLate ? 1 : 0;
       if (aAlert !== bAlert) return bAlert - aAlert;
@@ -229,31 +282,64 @@ export default function DispatchPanel() {
   useEffect(() => {
     if (!soundEnabled) return;
     const alertIds = items
-      .filter((i) => (i.alertDispatch || i.alertLate) && !pausedIds.has(i.request.id))
+      .filter((i) => (i.alertDispatch || i.alertLate) && !activePauses[i.request.id])
       .map((i) => i.request.id);
-
     const newAlerts = alertIds.filter((id) => !lastAlertRef.current.has(id));
     if (newAlerts.length > 0) {
       playSiren();
       lastAlertRef.current = new Set(alertIds);
     }
-  }, [items, soundEnabled]);
+  }, [items, soundEnabled, activePauses]);
 
-  // Recurring siren every 15 minutes while there are active alerts
+  // Recurring siren every 15 minutes
   useEffect(() => {
     if (!soundEnabled) return;
-
     const interval = setInterval(() => {
       const hasActiveAlerts = items.some(
-        (i) => (i.alertDispatch || i.alertLate) && !pausedIds.has(i.request.id)
+        (i) => (i.alertDispatch || i.alertLate) && !activePauses[i.request.id]
       );
-      if (hasActiveAlerts) {
-        playSiren();
-      }
-    }, 15 * 60 * 1000); // 15 minutes
-
+      if (hasActiveAlerts) playSiren();
+    }, 15 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [items, soundEnabled, pausedIds]);
+  }, [items, soundEnabled, activePauses]);
+
+  // Handle pause
+  const handlePause = async () => {
+    if (!pauseTarget || !pauseJustification.trim() || !user?.id || !tenantId) return;
+    setPauseSubmitting(true);
+    const { error } = await supabase.from("dispatch_pauses").insert({
+      service_request_id: pauseTarget.id,
+      paused_by: user.id,
+      paused_by_name: userFullName || user.email || "Operador",
+      justification: pauseJustification.trim(),
+      tenant_id: tenantId,
+    });
+    setPauseSubmitting(false);
+    if (error) {
+      toast({ title: "Erro ao pausar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Acionamento pausado", description: pauseTarget.protocol });
+      setPauseDialogOpen(false);
+      setPauseJustification("");
+      setPauseTarget(null);
+    }
+  };
+
+  // Handle resume
+  const handleResume = async (requestId: string, protocol: string) => {
+    const pause = activePauses[requestId];
+    if (!pause || !user?.id) return;
+    const { error } = await supabase.from("dispatch_pauses").update({
+      resumed_at: new Date().toISOString(),
+      resumed_by: user.id,
+      resumed_by_name: userFullName || user.email || "Operador",
+    }).eq("id", pause.id);
+    if (error) {
+      toast({ title: "Erro ao retomar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Acionamento retomado", description: protocol });
+    }
+  };
 
   const alertCount = items.filter((i) => i.alertDispatch || i.alertLate).length;
 
@@ -310,12 +396,15 @@ export default function DispatchPanel() {
           const r = item.request;
           const d = item.dispatch;
           const hasAlert = item.alertDispatch || item.alertLate;
+          const isPaused = !!activePauses[r.id];
+          const activePause = activePauses[r.id];
+          const resumed = recentResumed[r.id];
 
           return (
             <Card
               key={r.id}
               className={
-                pausedIds.has(r.id)
+                isPaused
                   ? "border-muted opacity-60"
                   : hasAlert
                     ? "border-destructive/50 bg-destructive/5 animate-pulse"
@@ -331,20 +420,43 @@ export default function DispatchPanel() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-2">
-                {/* Alerts */}
-                {pausedIds.has(r.id) && (
-                  <div className="flex items-center gap-2 text-xs font-medium bg-muted rounded px-2 py-1">
-                    <PauseCircle className="h-3.5 w-3.5" />
-                    Acionamento pausado
+                {/* Active pause info */}
+                {isPaused && activePause && (
+                  <div className="bg-muted rounded px-2 py-1.5 space-y-0.5">
+                    <div className="flex items-center gap-2 text-xs font-medium">
+                      <PauseCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                      Pausado por {activePause.paused_by_name || "Operador"}
+                    </div>
+                    <p className="text-xs text-muted-foreground italic ml-5">
+                      "{activePause.justification}"
+                    </p>
+                    <p className="text-xs text-muted-foreground ml-5">
+                      Pausado às {formatTime(activePause.paused_at)}
+                    </p>
                   </div>
                 )}
-                {item.alertDispatch && !pausedIds.has(r.id) && (
+
+                {/* Recently resumed info */}
+                {!isPaused && resumed && (
+                  <div className="bg-muted/50 rounded px-2 py-1 space-y-0.5">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <PlayCircle className="h-3.5 w-3.5" />
+                      Retomado por {resumed.resumed_by_name || "Operador"} às {formatTime(resumed.resumed_at!)}
+                    </div>
+                    <p className="text-xs text-muted-foreground italic ml-5">
+                      Motivo da pausa: "{resumed.justification}" (pausado às {formatTime(resumed.paused_at)})
+                    </p>
+                  </div>
+                )}
+
+                {/* Alerts */}
+                {item.alertDispatch && !isPaused && (
                   <div className="flex items-center gap-2 text-xs text-destructive font-medium bg-destructive/10 rounded px-2 py-1">
                     <AlertTriangle className="h-3.5 w-3.5" />
                     Sem acionamento há {formatElapsed(item.elapsedSinceCreation)}
                   </div>
                 )}
-                {item.alertLate && !pausedIds.has(r.id) && (
+                {item.alertLate && !isPaused && (
                   <div className="flex items-center gap-2 text-xs text-destructive font-medium bg-destructive/10 rounded px-2 py-1">
                     <AlertTriangle className="h-3.5 w-3.5" />
                     {d?.scheduled_arrival_date
@@ -408,20 +520,16 @@ export default function DispatchPanel() {
                       size="sm"
                       className="h-6 text-xs gap-1"
                       onClick={() => {
-                        setPausedIds(prev => {
-                          const next = new Set(prev);
-                          if (next.has(r.id)) {
-                            next.delete(r.id);
-                            toast({ title: "Acionamento retomado", description: r.protocol });
-                          } else {
-                            next.add(r.id);
-                            toast({ title: "Acionamento pausado", description: r.protocol });
-                          }
-                          return next;
-                        });
+                        if (isPaused) {
+                          handleResume(r.id, r.protocol);
+                        } else {
+                          setPauseTarget(r);
+                          setPauseJustification("");
+                          setPauseDialogOpen(true);
+                        }
                       }}
                     >
-                      {pausedIds.has(r.id) ? (
+                      {isPaused ? (
                         <><PlayCircle className="h-3 w-3" /> Retomar</>
                       ) : (
                         <><PauseCircle className="h-3 w-3" /> Pausar</>
@@ -439,6 +547,35 @@ export default function DispatchPanel() {
           );
         })}
       </div>
+
+      {/* Pause justification dialog */}
+      <Dialog open={pauseDialogOpen} onOpenChange={setPauseDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pausar Acionamento</DialogTitle>
+            <DialogDescription>
+              {pauseTarget?.protocol} — Informe o motivo da pausa. Todos os operadores verão essa informação.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Justificativa da pausa..."
+            value={pauseJustification}
+            onChange={(e) => setPauseJustification(e.target.value)}
+            rows={3}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPauseDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handlePause}
+              disabled={!pauseJustification.trim() || pauseSubmitting}
+            >
+              {pauseSubmitting ? "Pausando..." : "Confirmar Pausa"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
