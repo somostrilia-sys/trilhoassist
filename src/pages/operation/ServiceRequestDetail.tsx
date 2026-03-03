@@ -188,6 +188,11 @@ export default function ServiceRequestDetail() {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<any[]>([]);
   const [clientsList, setClientsList] = useState<{ id: string; name: string }[]>([]);
+  const [usageLimitDialogOpen, setUsageLimitDialogOpen] = useState(false);
+  const [usageLimitInfo, setUsageLimitInfo] = useState<any>(null);
+  const [usageLimitJustification, setUsageLimitJustification] = useState("");
+  const [usageLimitLoading, setUsageLimitLoading] = useState(false);
+  const [pendingDispatchAction, setPendingDispatchAction] = useState<(() => void) | null>(null);
 
   // Action modals
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
@@ -956,7 +961,23 @@ ${dispatchEtaStr ? `*PREVISÃO DE CHEGADA*: ${dispatchEtaStr}` : ""}
             {canDispatch && (
               <Button
                 className="gap-2"
-                onClick={() => {
+                onClick={async () => {
+                  if (request.beneficiary_id && request.service_type) {
+                    const { data: usageCheck } = await supabase.rpc("check_beneficiary_usage", {
+                      _beneficiary_id: request.beneficiary_id,
+                      _service_type: request.service_type,
+                    });
+                    const check = usageCheck as any;
+                    if (check && !check.allowed && check.reason === "limit_reached") {
+                      setUsageLimitInfo(check);
+                      setPendingDispatchAction(() => () => {
+                        loadProviders();
+                        setDispatchDialogOpen(true);
+                      });
+                      setUsageLimitDialogOpen(true);
+                      return;
+                    }
+                  }
                   loadProviders();
                   setDispatchDialogOpen(true);
                 }}
@@ -2435,6 +2456,80 @@ ${etaStr ? `*PREVISÃO DE CHEGADA*: ${etaStr}` : ""}
             <Button variant="destructive" onClick={handleDeleteRequest} disabled={actionLoading} className="gap-2">
               {actionLoading && <Loader2 className="h-4 w-4 animate-spin" />}
               Excluir Permanentemente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Usage Limit Exceeded Dialog */}
+      <Dialog open={usageLimitDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setUsageLimitDialogOpen(false);
+          setUsageLimitJustification("");
+          setUsageLimitInfo(null);
+          setPendingDispatchAction(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Limite de Utilização Excedido
+            </DialogTitle>
+            <DialogDescription>
+              O beneficiário já utilizou <strong>{usageLimitInfo?.usage}/{usageLimitInfo?.limit}</strong> acionamento(s) permitidos no período
+              {usageLimitInfo?.period_type === "calendar_month" ? " (mês corrente)" : ` (últimos ${usageLimitInfo?.period_days} dias)`}.
+              Para prosseguir com o acionamento, informe uma justificativa obrigatória.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>Justificativa para liberação</Label>
+            <Textarea
+              placeholder="Informe o motivo da liberação excepcional..."
+              value={usageLimitJustification}
+              onChange={(e) => setUsageLimitJustification(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setUsageLimitDialogOpen(false);
+              setUsageLimitJustification("");
+              setPendingDispatchAction(null);
+            }}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={!usageLimitJustification.trim() || usageLimitLoading}
+              onClick={async () => {
+                if (!request.beneficiary_id || !user?.id) return;
+                setUsageLimitLoading(true);
+                const { error } = await supabase.from("plan_usage_exceptions").insert({
+                  beneficiary_id: request.beneficiary_id,
+                  service_type: request.service_type,
+                  justification: usageLimitJustification.trim(),
+                  granted_by: user.id,
+                  service_request_id: id || null,
+                });
+                setUsageLimitLoading(false);
+                if (error) {
+                  toast.error("Erro ao registrar exceção", { description: error.message });
+                  return;
+                }
+                await logEvent("usage_exception", `Liberação excepcional: ${usageLimitJustification.trim()} (${usageLimitInfo?.usage}/${usageLimitInfo?.limit} utilizações)`);
+                toast.success("Liberação registrada!");
+                setUsageLimitDialogOpen(false);
+                setUsageLimitJustification("");
+                // Proceed to dispatch
+                if (pendingDispatchAction) {
+                  pendingDispatchAction();
+                  setPendingDispatchAction(null);
+                }
+              }}
+              className="gap-2"
+            >
+              {usageLimitLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+              Liberar e Acionar
             </Button>
           </DialogFooter>
         </DialogContent>
