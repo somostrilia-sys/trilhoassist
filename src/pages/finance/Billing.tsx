@@ -64,18 +64,43 @@ export default function Billing() {
     enabled: !!tenantId && !!newInvoice.client_id && !!newInvoice.period_start && !!newInvoice.period_end,
   });
 
-  // Count active plates (beneficiaries) for selected client
+  // Count active plates (beneficiaries) for selected client - with pagination and dedup
   const { data: activePlates = [] } = useQuery({
     queryKey: ["client-active-plates", newInvoice.client_id, newInvoice.period_start, newInvoice.period_end],
     queryFn: async () => {
-      // Fetch all beneficiaries that are currently active OR were created before period end
-      const { data, error } = await supabase
-        .from("beneficiaries")
-        .select("id, name, vehicle_plate, plan_id")
-        .eq("client_id", newInvoice.client_id)
-        .lte("created_at", newInvoice.period_end + "T23:59:59");
-      if (error) throw error;
-      return data ?? [];
+      // Paginated fetch to bypass 1000-row limit
+      let allData: any[] = [];
+      let from = 0;
+      const pageSize = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from("beneficiaries")
+          .select("id, name, vehicle_plate, plan_id")
+          .eq("client_id", newInvoice.client_id)
+          .lte("created_at", newInvoice.period_end + "T23:59:59")
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      
+      // Deduplicate by normalized vehicle_plate
+      const seen = new Set<string>();
+      const unique: any[] = [];
+      for (const b of allData) {
+        const normalized = (b.vehicle_plate || "").replace(/[\s-]/g, "").toUpperCase();
+        if (!normalized) {
+          unique.push(b); // keep entries without plate
+          continue;
+        }
+        if (!seen.has(normalized)) {
+          seen.add(normalized);
+          unique.push(b);
+        }
+      }
+      return unique;
     },
     enabled: !!newInvoice.client_id && !!newInvoice.period_start && !!newInvoice.period_end,
   });
@@ -322,12 +347,30 @@ export default function Billing() {
                             beneficiaryMap = Object.fromEntries((benefs || []).map((b: any) => [b.id, b.cooperativa || "Sem Cooperativa"]));
                           }
 
-                          // Fetch all beneficiaries for plates count per cooperativa
-                          const { data: allBenefs } = await supabase
-                            .from("beneficiaries")
-                            .select("id, cooperativa, plan_id")
-                            .eq("client_id", inv.client_id)
-                            .lte("created_at", inv.period_end + "T23:59:59");
+                          // Fetch all beneficiaries for plates count per cooperativa (paginated)
+                          let allBenefs: any[] = [];
+                          let pFrom = 0;
+                          while (true) {
+                            const { data: page } = await supabase
+                              .from("beneficiaries")
+                              .select("id, vehicle_plate, cooperativa, plan_id")
+                              .eq("client_id", inv.client_id)
+                              .lte("created_at", inv.period_end + "T23:59:59")
+                              .range(pFrom, pFrom + 999);
+                            if (!page || page.length === 0) break;
+                            allBenefs = allBenefs.concat(page);
+                            if (page.length < 1000) break;
+                            pFrom += 1000;
+                          }
+                          // Deduplicate by normalized plate
+                          const seenPlates = new Set<string>();
+                          allBenefs = allBenefs.filter((b: any) => {
+                            const norm = (b.vehicle_plate || "").replace(/[\s-]/g, "").toUpperCase();
+                            if (!norm) return true;
+                            if (seenPlates.has(norm)) return false;
+                            seenPlates.add(norm);
+                            return true;
+                          });
 
                           // Fetch plans for plate fees
                           const { data: plans } = await supabase
