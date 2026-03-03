@@ -199,6 +199,56 @@ export type Database = {
           },
         ]
       }
+      dispatch_pauses: {
+        Row: {
+          created_at: string
+          id: string
+          justification: string
+          paused_at: string
+          paused_by: string
+          paused_by_name: string | null
+          resumed_at: string | null
+          resumed_by: string | null
+          resumed_by_name: string | null
+          service_request_id: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          justification: string
+          paused_at?: string
+          paused_by: string
+          paused_by_name?: string | null
+          resumed_at?: string | null
+          resumed_by?: string | null
+          resumed_by_name?: string | null
+          service_request_id: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          justification?: string
+          paused_at?: string
+          paused_by?: string
+          paused_by_name?: string | null
+          resumed_at?: string | null
+          resumed_by?: string | null
+          resumed_by_name?: string | null
+          service_request_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispatch_pauses_service_request_id_fkey"
+            columns: ["service_request_id"]
+            isOneToOne: false
+            referencedRelation: "service_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dispatches: {
         Row: {
           accepted_at: string | null
