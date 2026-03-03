@@ -142,8 +142,8 @@ export default function Dashboard() {
     const openRequests = requests.filter((r) => r.status === "open" || r.status === "awaiting_dispatch").length;
     const inProgressRequests = requests.filter((r) => r.status === "dispatched" || r.status === "in_progress").length;
 
-    // Tempo médio de atendimento (created_at → completed_at, only completed)
-    const completedReqs = requests.filter((r) => r.status === "completed" && r.completed_at);
+    // Tempo médio de atendimento (created_at → completed_at, only completed, excluindo agendamentos)
+    const completedReqs = requests.filter((r) => r.status === "completed" && r.completed_at && !r.scheduled_date);
     let avgServiceTimeMin = 0;
     if (completedReqs.length > 0) {
       const validTimes = completedReqs
@@ -152,10 +152,10 @@ export default function Dashboard() {
       avgServiceTimeMin = validTimes.length > 0 ? validTimes.reduce((s, d) => s + d, 0) / validTimes.length : 0;
     }
 
-    // Tempo médio de acionamento (service_request.created_at → primeiro dispatch aceito)
+    // Tempo médio de acionamento (service_request.created_at → primeiro dispatch aceito, excluindo agendamentos)
     let avgDispatchTimeMin = 0;
     const reqsWithAcceptedDispatch = requests.filter((r) => {
-      return dispatches.some((d) => d.service_request_id === r.id && d.accepted_at);
+      return !r.scheduled_date && dispatches.some((d) => d.service_request_id === r.id && d.accepted_at);
     });
     if (reqsWithAcceptedDispatch.length > 0) {
       const validTimes = reqsWithAcceptedDispatch.map((r) => {
