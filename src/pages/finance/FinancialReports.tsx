@@ -653,6 +653,21 @@ export default function FinancialReports() {
                         );
                       })}
                     </TableBody>
+                    <tfoot>
+                      <TableRow className="bg-muted/50 font-bold border-t-2">
+                        <TableCell colSpan={11} className="text-right text-sm">TOTAIS ({filteredRequests.length} atendimentos)</TableCell>
+                        <TableCell className="text-right font-mono text-xs text-destructive whitespace-nowrap">
+                          {formatCurrency(filteredRequests.reduce((s, r) => s + (Number(r.provider_cost) || 0), 0))}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs text-primary whitespace-nowrap">
+                          {formatCurrency(filteredRequests.reduce((s, r) => s + (Number(r.charged_amount) || 0), 0))}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs whitespace-nowrap" style={{ color: "hsl(142, 60%, 45%)" }}>
+                          {formatCurrency(filteredRequests.reduce((s, r) => s + ((Number(r.charged_amount) || 0) - (Number(r.provider_cost) || 0)), 0))}
+                        </TableCell>
+                        <TableCell colSpan={2} />
+                      </TableRow>
+                    </tfoot>
                   </Table>
                 </div>
               )}

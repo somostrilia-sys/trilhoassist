@@ -78,6 +78,7 @@ export default function Billing() {
           .select("id, name, vehicle_plate, plan_id")
           .eq("client_id", newInvoice.client_id)
           .lte("created_at", newInvoice.period_end + "T23:59:59")
+          .or(`active.eq.true,created_at.gte.${newInvoice.period_start}`)
           .range(from, from + pageSize - 1);
         if (error) throw error;
         if (!data || data.length === 0) break;

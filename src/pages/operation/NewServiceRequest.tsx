@@ -58,6 +58,14 @@ export default function NewServiceRequest() {
     }
   }, [user?.id]);
 
+  // Fetch clients for manual client selection
+  useEffect(() => {
+    if (tenantId) {
+      supabase.from("clients").select("id, name").eq("tenant_id", tenantId).eq("active", true).order("name")
+        .then(({ data }) => setAllClients(data || []));
+    }
+  }, [tenantId]);
+
   const originCoords = searchParams.get("origin_coords");
   const destinationCoords = searchParams.get("destination_coords");
 
@@ -152,7 +160,7 @@ export default function NewServiceRequest() {
   const [beneficiaryFound, setBeneficiaryFound] = useState<{
     id: string; name: string; phone: string | null; cpf: string | null;
     vehicle_model: string | null; vehicle_year: number | null;
-    client_name?: string; plan_name?: string;
+    client_id?: string; client_name?: string; plan_name?: string;
   } | null>(null);
   const [plateSearching, setPlateSearching] = useState(false);
   const [fipeSearching, setFipeSearching] = useState(false);
@@ -172,6 +180,10 @@ export default function NewServiceRequest() {
   // Driver (condutor) state
   const [driverIsBeneficiary, setDriverIsBeneficiary] = useState(true);
   const [driverName, setDriverName] = useState("");
+
+  // Client selection (manual for avulso)
+  const [allClients, setAllClients] = useState<{id: string, name: string}[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
 
   // Scheduling state (Imediato / Agendado)
   const [isScheduled, setIsScheduled] = useState(false);
@@ -199,8 +211,9 @@ export default function NewServiceRequest() {
       setBeneficiaryFound({
         id: data.id, name: data.name, phone: data.phone, cpf: data.cpf,
         vehicle_model: data.vehicle_model, vehicle_year: data.vehicle_year,
-        client_name: clientName, plan_name: planName,
+        client_id: data.client_id, client_name: clientName, plan_name: planName,
       });
+      setSelectedClientId(data.client_id || null);
       setForm((f) => ({
         ...f,
         requester_name: f.requester_name || data.name,
@@ -491,6 +504,7 @@ export default function NewServiceRequest() {
       charged_amount: 0,
       operator_id: user?.id,
       tenant_id: tenantId,
+      client_id: beneficiaryFound?.client_id || selectedClientId || null,
       beneficiary_id: beneficiaryFound?.id || null,
       protocol: "temp",
       vehicle_category: vehicleCategory,
@@ -831,6 +845,29 @@ export default function NewServiceRequest() {
                 <Label>Telefone Secundário</Label>
                 <Input value={form.requester_phone_secondary} onChange={(e) => update("requester_phone_secondary", maskPhone(e.target.value))} placeholder="(00) 00000-0000" />
               </div>
+              {/* Empresa / Associação */}
+              {!beneficiaryFound && (
+                <div className="space-y-2">
+                  <Label>Empresa / Associação *</Label>
+                  <Select value={selectedClientId || ""} onValueChange={(v) => { setSelectedClientId(v); setErrors(prev => ({ ...prev, client_id: "" })); }}>
+                    <SelectTrigger className={errors.client_id ? "border-destructive" : ""}>
+                      <SelectValue placeholder="Selecione a empresa" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allClients.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.client_id && <p className="text-xs text-destructive">{errors.client_id}</p>}
+                </div>
+              )}
+              {beneficiaryFound?.client_name && (
+                <div className="space-y-2">
+                  <Label>Empresa / Associação</Label>
+                  <Input value={beneficiaryFound.client_name} disabled className="bg-muted" />
+                </div>
+              )}
             </div>
 
             {/* Condutor */}
