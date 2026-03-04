@@ -852,8 +852,7 @@ export default function PublicServiceRequest() {
                   coords={originCoords}
                   disabled={!!originCoords && gpsLoading}
                   tenantId={tenantId}
-                  types="address"
-                  requireStreetNumber
+                   types="address"
                 />
                 {errors.origin_geo && <p className="text-xs text-destructive mt-1">{errors.origin_geo}</p>}
               </div>
@@ -898,8 +897,7 @@ export default function PublicServiceRequest() {
                       placeholder="Digite o endereço de destino"
                       error={errors.destination_address}
                       coords={destinationCoords}
-                      tenantId={tenantId}
-                      requireStreetNumber
+                       tenantId={tenantId}
                     />
                     {errors.destination_geo && <p className="text-xs text-destructive mt-1">{errors.destination_geo}</p>}
                   </div>

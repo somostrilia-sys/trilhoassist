@@ -1101,9 +1101,8 @@ export default function NewServiceRequest() {
                   placeholder={isCollision ? "Local do acidente" : "Digite o endereço de origem"}
                   error={errors.origin_address}
                   tenantId={tenantId}
-                  coords={geoCoords.origin}
-                  types="address"
-                  requireStreetNumber
+                   coords={geoCoords.origin}
+                   types="address"
                 />
                 {errors.origin_geo && <p className="text-xs text-destructive mt-1">{errors.origin_geo}</p>}
               </div>
@@ -1128,8 +1127,7 @@ export default function NewServiceRequest() {
                     placeholder="Digite o endereço de destino"
                     error={errors.destination_address}
                     tenantId={tenantId}
-                    coords={geoCoords.destination}
-                    requireStreetNumber
+                     coords={geoCoords.destination}
                   />
                   {errors.destination_geo && <p className="text-xs text-destructive mt-1">{errors.destination_geo}</p>}
                 </div>
