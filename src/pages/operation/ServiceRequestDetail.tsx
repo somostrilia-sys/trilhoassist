@@ -1389,8 +1389,7 @@ ${etaStr ? `*PREVISÃO DE CHEGADA*: ${etaStr}` : ""}
                     }}
                     placeholder="Buscar novo endereço de origem..."
                     tenantId={request.tenant_id}
-                    types="address"
-                    requireStreetNumber
+                     types="address"
                   />
                   <Button
                     variant="ghost"
@@ -1449,8 +1448,7 @@ ${etaStr ? `*PREVISÃO DE CHEGADA*: ${etaStr}` : ""}
                       setEditingDestination(false);
                     }}
                     placeholder="Buscar novo destino..."
-                    tenantId={request.tenant_id}
-                    requireStreetNumber
+                     tenantId={request.tenant_id}
                   />
                   <Button
                     variant="ghost"
