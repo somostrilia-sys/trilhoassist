@@ -4,7 +4,7 @@ import { ptBR } from "date-fns/locale";
 import {
   BarChart3, TrendingUp, DollarSign, FileText, Calendar, Car, Phone,
   User, Search, Download, Filter, Users, Building2, CheckCircle2, Clock,
-  Banknote, Receipt,
+  Banknote, Receipt, AlertTriangle,
 } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -248,6 +248,31 @@ export default function FinancialReports() {
     return { totalAtendimentos, totalCusto, totalFaturado, totalMarkup, totalPlacasAtivas };
   }, [requests, beneficiaries]);
 
+  // === Vehicle usage ranking (last 3 months, only valid statuses) ===
+  const vehicleUsageRanking = useMemo(() => {
+    const threeMonthsAgo = subMonths(new Date(), 3);
+    const map = new Map<string, { plate: string; model: string; beneficiary: string; client: string; clientId: string; count: number; lastDate: string }>();
+    requests.forEach((r) => {
+      if (!r.vehicle_plate) return;
+      if (new Date(r.created_at) < threeMonthsAgo) return;
+      if (["cancelled", "refunded"].includes(r.status)) return;
+      const plate = r.vehicle_plate.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const entry = map.get(plate) || {
+        plate: r.vehicle_plate,
+        model: r.vehicle_model || "—",
+        beneficiary: (r.beneficiaries as any)?.name || r.requester_name || "—",
+        client: (r.clients as any)?.name || "Sem cliente",
+        clientId: r.client_id || "",
+        count: 0,
+        lastDate: r.created_at,
+      };
+      entry.count += 1;
+      if (r.created_at > entry.lastDate) entry.lastDate = r.created_at;
+      map.set(plate, entry);
+    });
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [requests]);
+
   // === Filtered requests ===
   const filteredRequests = useMemo(() => {
     return requests.filter((r) => {
@@ -371,6 +396,7 @@ export default function FinancialReports() {
           <TabsTrigger value="requests">Atendimentos</TabsTrigger>
           <TabsTrigger value="beneficiaries">Beneficiários / Placas</TabsTrigger>
           <TabsTrigger value="clients">Por Cliente</TabsTrigger>
+          <TabsTrigger value="vehicle-usage">Veículos + Acionados</TabsTrigger>
         </TabsList>
 
         {/* ===== OVERVIEW TAB ===== */}
@@ -918,6 +944,83 @@ export default function FinancialReports() {
                   </TableBody>
                 </Table>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ===== VEHICLE USAGE TAB ===== */}
+        <TabsContent value="vehicle-usage" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                Veículos com Mais Acionamentos (Últimos 3 meses)
+              </CardTitle>
+              <CardDescription>
+                Ranking de placas que mais utilizaram serviços nos últimos 90 dias. Atendimentos cancelados e estornados são excluídos.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {vehicleUsageRanking.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Nenhum dado no período</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">#</TableHead>
+                        <TableHead>Placa</TableHead>
+                        <TableHead>Modelo</TableHead>
+                        <TableHead>Beneficiário</TableHead>
+                        <TableHead>Empresa</TableHead>
+                        <TableHead className="text-center">Acionamentos</TableHead>
+                        <TableHead>Último Uso</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {vehicleUsageRanking.slice(0, 50).map((v, idx) => (
+                        <TableRow key={v.plate} className={idx < 3 ? "bg-destructive/5" : ""}>
+                          <TableCell className="font-bold text-muted-foreground">{idx + 1}</TableCell>
+                          <TableCell className="font-mono font-bold">{v.plate}</TableCell>
+                          <TableCell>{v.model}</TableCell>
+                          <TableCell>{v.beneficiary}</TableCell>
+                          <TableCell>{v.client}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant={v.count >= 4 ? "destructive" : v.count >= 2 ? "secondary" : "outline"}>
+                              {v.count}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {format(parseISO(v.lastDate), "dd/MM/yyyy")}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+              {vehicleUsageRanking.length > 0 && (
+                <div className="mt-4 flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => {
+                      exportToCsv(
+                        "veiculos-mais-acionados",
+                        ["#", "Placa", "Modelo", "Beneficiário", "Empresa", "Acionamentos", "Último Uso"],
+                        vehicleUsageRanking.map((v, i) => [
+                          String(i + 1), v.plate, v.model, v.beneficiary, v.client,
+                          String(v.count), format(parseISO(v.lastDate), "dd/MM/yyyy"),
+                        ])
+                      );
+                    }}
+                  >
+                    <Download className="h-4 w-4" />
+                    Exportar CSV
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
