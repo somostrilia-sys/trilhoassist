@@ -63,6 +63,9 @@ export default function PublicServiceRequest() {
   const [vehicleCategory, setVehicleCategory] = useState<VehicleCategory>("car");
   const [attendanceType, setAttendanceType] = useState<AttendanceType>("pane");
   const [needsTow, setNeedsTow] = useState<boolean | null>(null);
+  const [hasThirdParty, setHasThirdParty] = useState<boolean | null>(null);
+  const [thirdPartyPlate, setThirdPartyPlate] = useState("");
+  const [thirdPartyDocument, setThirdPartyDocument] = useState("");
   const [plateLookupStatus, setPlateLookupStatus] = useState<"idle" | "loading" | "found" | "not_found">("idle");
   const [gpsLoading, setGpsLoading] = useState(false);
   const [originCoords, setOriginCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -398,7 +401,10 @@ export default function PublicServiceRequest() {
             destination_address: form.destination_address,
             destination_lat: destinationCoords?.lat || null,
             destination_lng: destinationCoords?.lng || null,
-            notes: form.notes || null,
+            notes: [
+              form.notes,
+              hasThirdParty ? `TERCEIRO ENVOLVIDO - Placa: ${thirdPartyPlate || "Não informada"} | Documento: ${thirdPartyDocument || "Não informado"}` : null,
+            ].filter(Boolean).join("\n") || null,
             verification_answers: getVerificationAnswers(),
           }),
         }
@@ -407,8 +413,8 @@ export default function PublicServiceRequest() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Erro ao enviar solicitação");
 
-      // If collision without tow, go to media upload step
-      if (attendanceType === "collision" && !needsTow) {
+      // For collision, always go to media upload step
+      if (attendanceType === "collision") {
         setCreatedRequestId(result.id);
         setTenantId(result.tenant_id || tenantId);
         setSubmitted({
@@ -416,7 +422,7 @@ export default function PublicServiceRequest() {
           trackingUrl: `${window.location.origin}/tracking/${result.beneficiary_token}`,
         });
         setLoading(false);
-        toast({ title: "Solicitação criada! Agora envie as mídias obrigatórias." });
+        toast({ title: "Solicitação criada! Agora envie as mídias da colisão." });
         return;
       }
 
@@ -433,7 +439,7 @@ export default function PublicServiceRequest() {
   };
 
   // ═══ Collision media upload step ═══
-  if (createdRequestId && submitted && attendanceType === "collision" && !needsTow) {
+  if (createdRequestId && submitted && attendanceType === "collision") {
     const hasPhotos = collisionMediaFiles.some((f) => f.file_type === "photo");
     const hasAudio = collisionMediaFiles.some((f) => f.file_type === "audio");
     const hasDocs = collisionMediaFiles.some((f) => f.file_type === "document");
@@ -552,7 +558,7 @@ export default function PublicServiceRequest() {
                 <Button
                   type="button"
                   variant={attendanceType === "pane" ? "default" : "outline"}
-                  onClick={() => { setAttendanceType("pane"); setNeedsTow(null); }}
+                  onClick={() => { setAttendanceType("pane"); setNeedsTow(null); setHasThirdParty(null); setThirdPartyPlate(""); setThirdPartyDocument(""); }}
                   className="h-14 text-sm font-semibold flex-col gap-0.5"
                 >
                   <span>🔧 Pane</span>
@@ -561,7 +567,7 @@ export default function PublicServiceRequest() {
                 <Button
                   type="button"
                   variant={attendanceType === "collision" ? "default" : "outline"}
-                  onClick={() => { setAttendanceType("collision"); setNeedsTow(null); }}
+                  onClick={() => { setAttendanceType("collision"); setNeedsTow(null); setHasThirdParty(null); }}
                   className="h-14 text-sm font-semibold"
                 >
                   💥 Colisão
@@ -757,6 +763,67 @@ export default function PublicServiceRequest() {
                   <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
                     <p className="font-semibold mb-1">ℹ️ Registro de Colisão</p>
                     <p className="text-xs">Após enviar a solicitação, você precisará enviar fotos, áudio e documentos obrigatórios.</p>
+                  </div>
+                )}
+
+                {needsTow === true && (
+                  <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
+                    <p className="font-semibold mb-1">ℹ️ Colisão com Reboque</p>
+                    <p className="text-xs">Após enviar a solicitação, você também precisará enviar fotos, áudio e documentos da colisão.</p>
+                  </div>
+                )}
+
+                {/* Terceiro envolvido */}
+                {needsTow !== null && (
+                  <div className="space-y-3 pt-2 border-t">
+                    <div className="space-y-2">
+                      <Label className="text-sm">Houve terceiro envolvido na colisão?</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          type="button"
+                          variant={hasThirdParty === true ? "default" : "outline"}
+                          onClick={() => setHasThirdParty(true)}
+                          className="h-10"
+                        >
+                          ✅ Sim
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={hasThirdParty === false ? "default" : "outline"}
+                          onClick={() => { setHasThirdParty(false); setThirdPartyPlate(""); setThirdPartyDocument(""); }}
+                          className="h-10"
+                        >
+                          ❌ Não
+                        </Button>
+                      </div>
+                    </div>
+
+                    {hasThirdParty === true && (
+                      <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+                        <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+                          <p className="font-semibold mb-0.5">⚠️ Importante</p>
+                          <p>Registrar a placa e o documento do terceiro envolvido é muito importante para o processo de sinistro. Caso não tenha agora, você pode informar depois.</p>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">Placa do Terceiro</Label>
+                          <Input
+                            value={thirdPartyPlate}
+                            onChange={(e) => setThirdPartyPlate(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7))}
+                            placeholder="ABC1D23"
+                            className="uppercase font-mono tracking-widest"
+                            maxLength={7}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">Documento do Terceiro (CNH / RG / CPF)</Label>
+                          <Input
+                            value={thirdPartyDocument}
+                            onChange={(e) => setThirdPartyDocument(e.target.value)}
+                            placeholder="Número do documento"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
