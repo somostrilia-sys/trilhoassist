@@ -1107,15 +1107,9 @@ export default function NewServiceRequest() {
                 {errors.origin_geo && <p className="text-xs text-destructive mt-1">{errors.origin_geo}</p>}
               </div>
               {/* Destination: show when pane (non-on-site) or collision with tow */}
-              {(attendanceType === "pane" || (isCollision && needsTow)) && (
+              {((attendanceType === "pane" && !["locksmith", "tire_change", "battery", "fuel"].includes(form.service_type)) || (isCollision && needsTow)) && (
                 <div className="space-y-2">
-                  <Label>
-                    Endereço de Destino {
-                      attendanceType === "pane" && ["locksmith", "tire_change", "battery", "fuel"].includes(form.service_type)
-                        ? ""
-                        : "*"
-                    }
-                  </Label>
+                  <Label>Endereço de Destino *</Label>
                   <AddressAutocomplete
                     value={form.destination_address}
                     onChange={(v) => { update("destination_address", v); setErrors(prev => ({ ...prev, destination_address: "" })); }}
@@ -1157,7 +1151,7 @@ export default function NewServiceRequest() {
             </div>
 
             {/* Destination details */}
-            {(attendanceType === "pane" || (isCollision && needsTow)) && (
+            {((attendanceType === "pane" && !["locksmith", "tire_change", "battery", "fuel"].includes(form.service_type)) || (isCollision && needsTow)) && (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label>Referência Destino</Label>
