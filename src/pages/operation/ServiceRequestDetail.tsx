@@ -193,6 +193,7 @@ export default function ServiceRequestDetail() {
   const [usageLimitJustification, setUsageLimitJustification] = useState("");
   const [usageLimitLoading, setUsageLimitLoading] = useState(false);
   const [pendingDispatchAction, setPendingDispatchAction] = useState<(() => void) | null>(null);
+  const [operatorName, setOperatorName] = useState<string>("");
 
   // Action modals
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
@@ -360,6 +361,13 @@ export default function ServiceRequestDetail() {
   }, [id]);
 
   useEffect(() => { loadData(); loadEvents(); loadCollisionMedia(); }, [loadData, loadEvents, loadCollisionMedia]);
+
+  // Fetch current operator name
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase.from("profiles").select("full_name").eq("user_id", user.id).maybeSingle()
+      .then(({ data }) => { if (data?.full_name) setOperatorName(data.full_name); });
+  }, [user?.id]);
 
   // Realtime: atualiza dados automaticamente quando service_requests, dispatches ou beneficiaries mudam
   useEffect(() => {
@@ -1064,6 +1072,7 @@ ${dispatchEtaStr ? `*PREVISÃO DE CHEGADA*: ${dispatchEtaStr}` : ""}
 
 *DADOS DE ACIONAMENTO*
 *TIPO DE EVENTO*: ${eventTypeMap[request.event_type] || request.event_type}
+*ATENDIMENTO REALIZADO POR*: ${(operatorName || "SISTEMA").toUpperCase()}
 *ASSISTÊNCIA*: ${clientName.toUpperCase() || "—"}
 *CENTRAL DE ASSISTÊNCIA*: TRILHO SOLUCOES
 ${routeSection}
