@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { maskPhone, maskCNPJ, maskCEP } from "@/lib/masks";
+import { maskPhone, maskCNPJ, maskCEP, maskCPF } from "@/lib/masks";
 import {
   Loader2, ArrowLeft, Truck, Wrench, Battery, Fuel, Key, HelpCircle, Save,
 } from "lucide-react";
@@ -117,14 +117,14 @@ export default function ProviderForm() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const cleanCnpj = form.cnpj ? form.cnpj.replace(/\D/g, "") : null;
+      const cleanDoc = form.cnpj ? form.cnpj.replace(/\D/g, "") : null;
 
-      // Check for duplicate CNPJ before saving
-      if (cleanCnpj) {
+      // Check for duplicate CPF/CNPJ before saving
+      if (cleanDoc) {
         const query = supabase
           .from("providers")
           .select("id, name")
-          .eq("cnpj", cleanCnpj);
+          .eq("cnpj", cleanDoc);
 
         // If editing, exclude current provider from check
         if (isEdit) {
@@ -133,13 +133,13 @@ export default function ProviderForm() {
 
         const { data: existing } = await query.maybeSingle();
         if (existing) {
-          throw new Error(`CNPJ já cadastrado para o prestador "${existing.name}"`);
+          throw new Error(`CPF/CNPJ já cadastrado para o prestador "${existing.name}"`);
         }
       }
 
       const payload = {
         name: form.name,
-        cnpj: cleanCnpj || null,
+        cnpj: cleanDoc || null,
         email: form.email || null,
         phone: form.phone,
         services: form.services,
@@ -241,8 +241,17 @@ export default function ProviderForm() {
                 <Input id="name" required value={form.name} onChange={(e) => updateField("name", e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="cnpj">CNPJ</Label>
-                <Input id="cnpj" value={form.cnpj} onChange={(e) => updateField("cnpj", maskCNPJ(e.target.value))} placeholder="00.000.000/0000-00" />
+                <Label htmlFor="cnpj">CPF / CNPJ</Label>
+                <Input
+                  id="cnpj"
+                  value={form.cnpj}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, "");
+                    const masked = raw.length <= 11 ? maskCPF(e.target.value) : maskCNPJ(e.target.value);
+                    updateField("cnpj", masked);
+                  }}
+                  placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">E-mail</Label>
