@@ -29,7 +29,7 @@ import { toast } from "sonner";
 import CollisionMediaUpload from "@/components/collision/CollisionMediaUpload";
 import { sendServiceLabel } from "@/lib/serviceLabel";
 import { sendAutoNotify } from "@/lib/autoNotify";
-import { maskPhone, maskCPF, maskCNPJ, maskCEP, unmask } from "@/lib/masks";
+import { maskPhone, maskCPF, maskCNPJ, maskCEP, unmask, maskCurrency, unmaskCurrency } from "@/lib/masks";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ProviderInvoiceReview } from "@/components/provider/ProviderInvoiceReview";
 import AddressAutocomplete from "@/components/service-request/AddressAutocomplete";
@@ -463,10 +463,10 @@ export default function ServiceRequestDetail() {
       notes: request.notes ? `${request.notes}\n\n[CANCELAMENTO] ${cancelReason}` : `[CANCELAMENTO] ${cancelReason}`,
     };
     if (cancelRequestProviderCost) {
-      updates.provider_cost = parseFloat(cancelRequestProviderCost);
+      updates.provider_cost = parseFloat(unmaskCurrency(cancelRequestProviderCost));
     }
     if (cancelRequestChargedAmount) {
-      updates.charged_amount = parseFloat(cancelRequestChargedAmount);
+      updates.charged_amount = parseFloat(unmaskCurrency(cancelRequestChargedAmount));
     }
     const { error } = await supabase
       .from("service_requests")
@@ -476,8 +476,8 @@ export default function ServiceRequestDetail() {
     if (error) {
       toast.error("Erro ao cancelar", { description: error.message });
     } else {
-      const costInfo = cancelRequestProviderCost ? ` | Custo prestador: R$ ${parseFloat(cancelRequestProviderCost).toFixed(2)}` : "";
-      const chargeInfo = cancelRequestChargedAmount ? ` | Valor cobrado cliente: R$ ${parseFloat(cancelRequestChargedAmount).toFixed(2)}` : "";
+      const costInfo = cancelRequestProviderCost ? ` | Custo prestador: R$ ${parseFloat(unmaskCurrency(cancelRequestProviderCost)).toFixed(2)}` : "";
+      const chargeInfo = cancelRequestChargedAmount ? ` | Valor cobrado cliente: R$ ${parseFloat(unmaskCurrency(cancelRequestChargedAmount)).toFixed(2)}` : "";
       await logEvent("cancel", `Atendimento cancelado. Motivo: ${cancelReason}${costInfo}${chargeInfo}`, request.status, "cancelled");
       sendServiceLabel(id, "cancellation", { cancel_reason: cancelReason });
       toast.success("Atendimento cancelado");
@@ -505,7 +505,7 @@ export default function ServiceRequestDetail() {
       toast.error("Preencha os valores obrigatórios", { description: "Valor cobrado do cliente e forma de pagamento são obrigatórios." });
       return;
     }
-    if (parseFloat(chargedAmount) < parseFloat(quotedAmount)) {
+    if (parseFloat(unmaskCurrency(chargedAmount)) < parseFloat(unmaskCurrency(quotedAmount))) {
       toast.error("Valor cobrado inválido", { description: "O valor cobrado da associação não pode ser menor que o valor pago ao prestador." });
       return;
     }
@@ -570,7 +570,7 @@ export default function ServiceRequestDetail() {
     const { data: newDispatch, error: dErr } = await supabase.from("dispatches").insert({
       service_request_id: id,
       provider_id: finalProviderId,
-      quoted_amount: quotedAmount ? parseFloat(quotedAmount) : null,
+      quoted_amount: quotedAmount ? parseFloat(unmaskCurrency(quotedAmount)) : null,
       estimated_arrival_min: estimatedArrival ? parseInt(estimatedArrival) : null,
       scheduled_arrival_date: arrivalDate ? format(arrivalDate, "yyyy-MM-dd") : null,
       scheduled_arrival_time: arrivalTime || null,
@@ -588,8 +588,8 @@ export default function ServiceRequestDetail() {
     // Update service request with financial values; only set beneficiary_token if not already present
     const updatePayload: any = {
       status: "dispatched",
-      provider_cost: parseFloat(quotedAmount),
-      charged_amount: parseFloat(chargedAmount),
+      provider_cost: parseFloat(unmaskCurrency(quotedAmount)),
+      charged_amount: parseFloat(unmaskCurrency(chargedAmount)),
       payment_method: paymentMethod,
     };
     if (!request.beneficiary_token) {
@@ -621,7 +621,7 @@ export default function ServiceRequestDetail() {
 
     await supabase.from("service_requests").update(updatePayload).eq("id", id);
 
-    await logEvent("dispatch", `Prestador acionado: ${finalProviderName} — Valor Prestador: R$ ${parseFloat(quotedAmount).toFixed(2)} — Valor Cobrado: R$ ${parseFloat(chargedAmount).toFixed(2)}${dispatchMode === "quick" ? " (cadastro rápido)" : ""}`, request.status, "dispatched");
+    await logEvent("dispatch", `Prestador acionado: ${finalProviderName} — Valor Prestador: R$ ${parseFloat(unmaskCurrency(quotedAmount)).toFixed(2)} — Valor Cobrado: R$ ${parseFloat(unmaskCurrency(chargedAmount)).toFixed(2)}${dispatchMode === "quick" ? " (cadastro rápido)" : ""}`, request.status, "dispatched");
 
     // Send WhatsApp tracking links via auto-notify (fire and forget)
     const baseUrl = window.location.origin;
@@ -635,7 +635,7 @@ export default function ServiceRequestDetail() {
         provider_phone: finalProviderPhone,
         provider_tracking_url: providerTrackingUrl,
         // Extra fields used by some templates (kept permissive)
-        charged_amount: parseFloat(chargedAmount),
+        charged_amount: parseFloat(unmaskCurrency(chargedAmount)),
         payment_method: paymentMethod,
         estimated_km: request.estimated_km,
       } as any);
@@ -651,7 +651,7 @@ export default function ServiceRequestDetail() {
     // Send dispatch preview label to client WhatsApp group
     sendServiceLabel(id!, "dispatch_preview", {
       provider_id: finalProviderId,
-      charged_amount: parseFloat(chargedAmount),
+      charged_amount: parseFloat(unmaskCurrency(chargedAmount)),
       payment_method: paymentMethod,
       estimated_km: request.estimated_km,
     } as any);
@@ -678,7 +678,7 @@ export default function ServiceRequestDetail() {
 *PROTOCOLO*: ${request.protocol}
 *PLACA*: ${(request.vehicle_plate || "").toUpperCase()}
 ${dispatchEtaStr ? `*PREVISÃO DE CHEGADA*: ${dispatchEtaStr}` : ""}
-*VALOR COBRADO*: R$ ${parseFloat(chargedAmount).toFixed(2).replace(".", ",")}`.trim();
+*VALOR COBRADO*: R$ ${parseFloat(unmaskCurrency(chargedAmount)).toFixed(2).replace(".", ",")}`.trim();
 
     setActionLoading(false);
     toast.success("Prestador acionado!", { description: dispatchMode === "quick" ? "Prestador cadastrado e acionado. Links enviados via WhatsApp." : "Links de rastreamento enviados via WhatsApp." });
@@ -730,7 +730,7 @@ ${dispatchEtaStr ? `*PREVISÃO DE CHEGADA*: ${dispatchEtaStr}` : ""}
     setActionLoading(true);
     const dispatchUpdate: any = { status: "cancelled", notes: cancelProviderReason };
     if (cancelProviderCost) {
-      dispatchUpdate.final_amount = parseFloat(cancelProviderCost);
+      dispatchUpdate.final_amount = parseFloat(unmaskCurrency(cancelProviderCost));
     }
     const { error: dErr } = await supabase
       .from("dispatches")
@@ -743,15 +743,15 @@ ${dispatchEtaStr ? `*PREVISÃO DE CHEGADA*: ${dispatchEtaStr}` : ""}
     }
     const srUpdate: any = { status: "awaiting_dispatch" };
     if (cancelProviderCost) {
-      srUpdate.provider_cost = parseFloat(cancelProviderCost);
+      srUpdate.provider_cost = parseFloat(unmaskCurrency(cancelProviderCost));
     }
     if (cancelProviderChargedAmount) {
-      srUpdate.charged_amount = parseFloat(cancelProviderChargedAmount);
+      srUpdate.charged_amount = parseFloat(unmaskCurrency(cancelProviderChargedAmount));
     }
     await supabase.from("service_requests").update(srUpdate).eq("id", id);
 
-    const costInfo = cancelProviderCost ? ` | Custo prestador: R$ ${parseFloat(cancelProviderCost).toFixed(2)}` : "";
-    const chargeInfo = cancelProviderChargedAmount ? ` | Valor mantido cliente: R$ ${parseFloat(cancelProviderChargedAmount).toFixed(2)}` : "";
+    const costInfo = cancelProviderCost ? ` | Custo prestador: R$ ${parseFloat(unmaskCurrency(cancelProviderCost)).toFixed(2)}` : "";
+    const chargeInfo = cancelProviderChargedAmount ? ` | Valor mantido cliente: R$ ${parseFloat(unmaskCurrency(cancelProviderChargedAmount)).toFixed(2)}` : "";
     await logEvent("provider_cancelled", `Prestador cancelado: ${provider?.name || "—"}. Motivo: ${cancelProviderReason}${costInfo}${chargeInfo}`, "dispatched", "awaiting_dispatch");
     setActionLoading(false);
     setCancelProviderDialogOpen(false);
@@ -1714,23 +1714,21 @@ ${etaStr ? `*PREVISÃO DE CHEGADA*: ${etaStr}` : ""}
               <div className="space-y-1.5">
                 <Label className="text-xs">Valor pago ao prestador (R$)</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0,00"
                   value={cancelRequestProviderCost}
-                  onChange={(e) => setCancelRequestProviderCost(e.target.value)}
+                  onChange={(e) => setCancelRequestProviderCost(maskCurrency(e.target.value))}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Valor cobrado do cliente (R$)</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0,00"
                   value={cancelRequestChargedAmount}
-                  onChange={(e) => setCancelRequestChargedAmount(e.target.value)}
+                  onChange={(e) => setCancelRequestChargedAmount(maskCurrency(e.target.value))}
                 />
               </div>
             </div>
@@ -2190,22 +2188,22 @@ ${etaStr ? `*PREVISÃO DE CHEGADA*: ${etaStr}` : ""}
             <div className="space-y-2">
               <Label>Valor do Prestador (R$) *</Label>
               <Input
-                type="number"
-                step="0.01"
-                placeholder="0.00"
+                type="text"
+                inputMode="decimal"
+                placeholder="0,00"
                 value={quotedAmount}
-                onChange={(e) => setQuotedAmount(e.target.value)}
+                onChange={(e) => setQuotedAmount(maskCurrency(e.target.value))}
               />
               <p className="text-xs text-muted-foreground">Valor cobrado pelo prestador</p>
             </div>
             <div className="space-y-2">
               <Label>Valor Cobrado (R$) *</Label>
               <Input
-                type="number"
-                step="0.01"
-                placeholder="0.00"
+                type="text"
+                inputMode="decimal"
+                placeholder="0,00"
                 value={chargedAmount}
-                onChange={(e) => setChargedAmount(e.target.value)}
+                onChange={(e) => setChargedAmount(maskCurrency(e.target.value))}
               />
               <p className="text-xs text-muted-foreground">Valor cobrado do cliente</p>
             </div>
@@ -2399,23 +2397,21 @@ ${etaStr ? `*PREVISÃO DE CHEGADA*: ${etaStr}` : ""}
               <div className="space-y-1.5">
                 <Label className="text-xs">Valor cobrado pelo prestador (R$)</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0,00"
                   value={cancelProviderCost}
-                  onChange={(e) => setCancelProviderCost(e.target.value)}
+                  onChange={(e) => setCancelProviderCost(maskCurrency(e.target.value))}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Valor mantido para o cliente (R$)</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0,00"
                   value={cancelProviderChargedAmount}
-                  onChange={(e) => setCancelProviderChargedAmount(e.target.value)}
+                  onChange={(e) => setCancelProviderChargedAmount(maskCurrency(e.target.value))}
                 />
               </div>
             </div>

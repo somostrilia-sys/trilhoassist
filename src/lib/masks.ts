@@ -37,6 +37,28 @@ export function maskCEP(value: string): string {
   return `${digits.slice(0, 5)}-${digits.slice(5)}`;
 }
 
+export function maskCurrency(value: string): string {
+  // Remove everything except digits and comma
+  let cleaned = value.replace(/[^\d,]/g, "");
+  // Allow only one comma
+  const parts = cleaned.split(",");
+  if (parts.length > 2) {
+    cleaned = parts[0] + "," + parts.slice(1).join("");
+  }
+  // Limit decimal places to 2
+  if (parts.length === 2 && parts[1].length > 2) {
+    cleaned = parts[0] + "," + parts[1].slice(0, 2);
+  }
+  // Add thousand separators
+  const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return parts.length === 2 ? intPart + "," + parts[1].slice(0, 2) : intPart;
+}
+
+export function unmaskCurrency(value: string): string {
+  // Convert "1.234,56" to "1234.56"
+  return value.replace(/\./g, "").replace(",", ".");
+}
+
 export function unmask(value: string): string {
   return value.replace(/\D/g, "");
 }
