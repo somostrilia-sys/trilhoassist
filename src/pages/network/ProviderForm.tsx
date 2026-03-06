@@ -183,7 +183,7 @@ export default function ProviderForm() {
       } else {
         const { error } = await supabase
           .from("providers")
-          .insert(payload);
+          .insert(payload as any);
         if (error) throw error;
       }
     },
