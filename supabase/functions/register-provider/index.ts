@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
     // ===== INPUT VALIDATION =====
     if (!tenant_slug || !email || !password || !name || !phone || !cnpj) {
       return new Response(
-        JSON.stringify({ error: "Campos obrigatórios: email, senha, nome, CNPJ, telefone" }),
+        JSON.stringify({ error: "Campos obrigatórios: email, senha, nome, CPF/CNPJ, telefone" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
