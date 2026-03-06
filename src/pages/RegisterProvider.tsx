@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle, Truck, Wrench, Battery, Fuel, Key, HelpCircle } from "lucide-react";
-import { maskPhone, maskCNPJ, maskCEP } from "@/lib/masks";
+import { maskPhone, maskCNPJ, maskCEP, maskCPF } from "@/lib/masks";
 
 const SERVICE_OPTIONS = [
   { value: "tow_light", label: "Guincho Leve", icon: Truck },
