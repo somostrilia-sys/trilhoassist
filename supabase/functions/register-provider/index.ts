@@ -24,9 +24,9 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 255;
 }
 
-function isValidCNPJ(cnpj: string): boolean {
-  const clean = cnpj.replace(/\D/g, "");
-  return clean.length === 14;
+function isValidDocument(doc: string): boolean {
+  const clean = doc.replace(/\D/g, "");
+  return clean.length === 11 || clean.length === 14;
 }
 
 function isValidPhone(phone: string): boolean {
