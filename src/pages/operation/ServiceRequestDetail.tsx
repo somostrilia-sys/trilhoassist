@@ -879,7 +879,8 @@ ${dispatchEtaStr ? `*PREVISÃO DE CHEGADA*: ${dispatchEtaStr}` : ""}
   const canChangeStatus = (statusTransitions[request.status] || []).length > 0;
   const canCancel = request.status !== "cancelled" && request.status !== "completed" && request.status !== "refunded";
   const isCollisionWithoutTow = request.service_type === "collision" && !request.destination_address;
-  const canDispatch = ["open", "awaiting_dispatch"].includes(request.status) && !isCollisionWithoutTow;
+  const isAccidentOrCollision = request.event_type === "accident" || request.service_type === "collision";
+  const canDispatch = ["open", "awaiting_dispatch"].includes(request.status) && (!isCollisionWithoutTow || isAccidentOrCollision);
   const canReopen = request.status === "cancelled";
 
   return (
