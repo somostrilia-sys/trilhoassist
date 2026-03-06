@@ -163,7 +163,7 @@ Deno.serve(async (req) => {
 
     if (existingProvider) {
       return new Response(
-        JSON.stringify({ error: "CNPJ já cadastrado para esta assistência" }),
+        JSON.stringify({ error: "CPF/CNPJ já cadastrado para esta assistência" }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
