@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle, Truck, Wrench, Battery, Fuel, Key, HelpCircle } from "lucide-react";
-import { maskPhone, maskCNPJ, maskCEP } from "@/lib/masks";
+import { maskPhone, maskCNPJ, maskCEP, maskCPF } from "@/lib/masks";
 
 const SERVICE_OPTIONS = [
   { value: "tow_light", label: "Guincho Leve", icon: Truck },
@@ -200,8 +200,12 @@ export default function RegisterProvider() {
                   <Input id="name" required value={form.name} onChange={(e) => updateField("name", e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="cnpj">CNPJ *</Label>
-                  <Input id="cnpj" required value={form.cnpj} onChange={(e) => updateField("cnpj", maskCNPJ(e.target.value))} placeholder="00.000.000/0000-00" />
+                  <Label htmlFor="cnpj">CPF / CNPJ *</Label>
+                  <Input id="cnpj" required value={form.cnpj} onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, "");
+                    const masked = raw.length <= 11 ? maskCPF(e.target.value) : maskCNPJ(e.target.value);
+                    updateField("cnpj", masked);
+                  }} placeholder="000.000.000-00 ou 00.000.000/0000-00" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">Telefone *</Label>

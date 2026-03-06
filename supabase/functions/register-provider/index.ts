@@ -24,9 +24,9 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 255;
 }
 
-function isValidCNPJ(cnpj: string): boolean {
-  const clean = cnpj.replace(/\D/g, "");
-  return clean.length === 14;
+function isValidDocument(doc: string): boolean {
+  const clean = doc.replace(/\D/g, "");
+  return clean.length === 11 || clean.length === 14;
 }
 
 function isValidPhone(phone: string): boolean {
@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
     // ===== INPUT VALIDATION =====
     if (!tenant_slug || !email || !password || !name || !phone || !cnpj) {
       return new Response(
-        JSON.stringify({ error: "Campos obrigatórios: email, senha, nome, CNPJ, telefone" }),
+        JSON.stringify({ error: "Campos obrigatórios: email, senha, nome, CPF/CNPJ, telefone" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -97,9 +97,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!isValidCNPJ(cnpj)) {
+    if (!isValidDocument(cnpj)) {
       return new Response(
-        JSON.stringify({ error: "CNPJ inválido (14 dígitos)" }),
+        JSON.stringify({ error: "CPF/CNPJ inválido (11 ou 14 dígitos)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -163,7 +163,7 @@ Deno.serve(async (req) => {
 
     if (existingProvider) {
       return new Response(
-        JSON.stringify({ error: "CNPJ já cadastrado para esta assistência" }),
+        JSON.stringify({ error: "CPF/CNPJ já cadastrado para esta assistência" }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

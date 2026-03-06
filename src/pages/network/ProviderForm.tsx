@@ -64,6 +64,17 @@ export default function ProviderForm() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<ProviderFormData>(emptyForm);
+  const [tenantId, setTenantId] = useState<string | null>(null);
+
+  // Fetch user's tenant_id
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from("user_tenants").select("tenant_id").eq("user_id", user.id).limit(1).maybeSingle();
+      if (data) setTenantId(data.tenant_id);
+    })();
+  }, []);
 
   const { data: provider, isLoading } = useQuery({
     queryKey: ["provider-detail", id],
@@ -137,7 +148,7 @@ export default function ProviderForm() {
         }
       }
 
-      const payload = {
+      const payload: Record<string, any> = {
         name: form.name,
         cnpj: cleanDoc || null,
         email: form.email || null,
@@ -156,6 +167,11 @@ export default function ProviderForm() {
         active: form.active,
       };
 
+      // Include tenant_id for new providers
+      if (!isEdit && tenantId) {
+        payload.tenant_id = tenantId;
+      }
+
       if (isEdit) {
         const { error } = await supabase
           .from("providers")
@@ -165,7 +181,7 @@ export default function ProviderForm() {
       } else {
         const { error } = await supabase
           .from("providers")
-          .insert(payload);
+          .insert(payload as any);
         if (error) throw error;
       }
     },
