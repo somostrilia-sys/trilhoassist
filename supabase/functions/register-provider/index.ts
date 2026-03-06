@@ -97,9 +97,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!isValidCNPJ(cnpj)) {
+    if (!isValidDocument(cnpj)) {
       return new Response(
-        JSON.stringify({ error: "CNPJ inválido (14 dígitos)" }),
+        JSON.stringify({ error: "CPF/CNPJ inválido (11 ou 14 dígitos)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
