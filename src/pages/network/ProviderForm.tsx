@@ -68,8 +68,6 @@ export default function ProviderForm() {
 
   // Fetch user's tenant_id
   useEffect(() => {
-    supabase.rpc("get_user_tenant_ids", { _user_id: "" }).then(() => {});
-    // simpler: get from user_tenants
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
