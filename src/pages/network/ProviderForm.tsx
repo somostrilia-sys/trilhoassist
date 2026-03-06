@@ -150,7 +150,7 @@ export default function ProviderForm() {
         }
       }
 
-      const payload = {
+      const payload: Record<string, any> = {
         name: form.name,
         cnpj: cleanDoc || null,
         email: form.email || null,
@@ -168,6 +168,11 @@ export default function ProviderForm() {
         pix_key: form.pix_key || null,
         active: form.active,
       };
+
+      // Include tenant_id for new providers
+      if (!isEdit && tenantId) {
+        payload.tenant_id = tenantId;
+      }
 
       if (isEdit) {
         const { error } = await supabase
