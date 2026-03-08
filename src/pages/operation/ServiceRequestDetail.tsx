@@ -546,30 +546,51 @@ export default function ServiceRequestDetail() {
       }
 
       const doc = unmask(quickProvider.document);
-      const { data: newProv, error: provErr } = await supabase.from("providers").insert({
-        name: quickProvider.name.trim(),
-        cnpj: doc || null,
-        phone: unmask(quickProvider.phone),
-        street: quickProvider.street || null,
-        address_number: quickProvider.address_number || null,
-        neighborhood: quickProvider.neighborhood || null,
-        city: quickProvider.city || null,
-        state: quickProvider.state || null,
-        zip_code: unmask(quickProvider.cep) || null,
-        latitude: lat,
-        longitude: lng,
-        tenant_id: request.tenant_id,
-        active: true,
-      }).select("id").single();
 
-      if (provErr) {
-        setActionLoading(false);
-        toast.error("Erro ao cadastrar prestador", { description: provErr.message });
-        return;
+      // Check if provider with same CNPJ already exists in this tenant
+      if (doc) {
+        const { data: existingProv } = await supabase
+          .from("providers")
+          .select("id, name, phone")
+          .eq("cnpj", doc)
+          .eq("tenant_id", request.tenant_id)
+          .maybeSingle();
+
+        if (existingProv) {
+          // Use existing provider instead of creating duplicate
+          finalProviderId = existingProv.id;
+          finalProviderName = existingProv.name;
+          finalProviderPhone = existingProv.phone;
+          toast.info("Prestador já cadastrado", { description: `Usando prestador existente: ${existingProv.name}` });
+        }
       }
-      finalProviderId = newProv.id;
-      finalProviderName = quickProvider.name.trim();
-      finalProviderPhone = unmask(quickProvider.phone);
+
+      if (!finalProviderId) {
+        const { data: newProv, error: provErr } = await supabase.from("providers").insert({
+          name: quickProvider.name.trim(),
+          cnpj: doc || null,
+          phone: unmask(quickProvider.phone),
+          street: quickProvider.street || null,
+          address_number: quickProvider.address_number || null,
+          neighborhood: quickProvider.neighborhood || null,
+          city: quickProvider.city || null,
+          state: quickProvider.state || null,
+          zip_code: unmask(quickProvider.cep) || null,
+          latitude: lat,
+          longitude: lng,
+          tenant_id: request.tenant_id,
+          active: true,
+        }).select("id").single();
+
+        if (provErr) {
+          setActionLoading(false);
+          toast.error("Erro ao cadastrar prestador", { description: provErr.message });
+          return;
+        }
+        finalProviderId = newProv.id;
+        finalProviderName = quickProvider.name.trim();
+        finalProviderPhone = unmask(quickProvider.phone);
+      }
     }
 
     // Generate tokens
