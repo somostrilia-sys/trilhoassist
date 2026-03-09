@@ -84,11 +84,12 @@ export default function BeneficiariesList() {
 
   // Counts query (lightweight, no pagination)
   const { data: counts } = useQuery({
-    queryKey: ["admin-beneficiaries-counts", clientIds],
+    queryKey: ["admin-beneficiaries-counts", clientIds, clientFilter],
     queryFn: async () => {
       if (clientIds.length === 0) return { total: 0, active: 0, inactive: 0 };
-      const { count: total } = await supabase.from("beneficiaries").select("id", { count: "exact", head: true }).in("client_id", clientIds);
-      const { count: active } = await supabase.from("beneficiaries").select("id", { count: "exact", head: true }).in("client_id", clientIds).eq("active", true);
+      const filterIds = clientFilter !== "all" ? [clientFilter] : clientIds;
+      const { count: total } = await supabase.from("beneficiaries").select("id", { count: "exact", head: true }).in("client_id", filterIds);
+      const { count: active } = await supabase.from("beneficiaries").select("id", { count: "exact", head: true }).in("client_id", filterIds).eq("active", true);
       return { total: total || 0, active: active || 0, inactive: (total || 0) - (active || 0) };
     },
     enabled: clientIds.length > 0,
