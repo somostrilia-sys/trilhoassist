@@ -15,7 +15,7 @@ import {
   Share2, Truck, XCircle, PlayCircle, CheckCircle2, Loader2, Clock, History,
   FilePlus2, RotateCcw, Send, Camera, Mic, Video, File, Link as LinkIcon,
   DollarSign, CalendarIcon, AlertCircle, Search, ChevronsUpDown, Check,
-  ClipboardCopy, Phone, Star, MapPinned, Trash2,
+  ClipboardCopy, Phone, Star, MapPinned, Trash2, Download,
 } from "lucide-react";
 import { Command, CommandInput, CommandList, CommandEmpty, CommandItem, CommandGroup } from "@/components/ui/command";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -1546,6 +1546,11 @@ ${etaStr ? `*PREVISÃO DE CHEGADA*: ${etaStr}` : ""}
                     {collisionMedia.filter(m => m.file_type === "audio").map((m: any) => (
                       <div key={m.id} className="flex items-center gap-2 mb-2">
                         <audio controls preload="metadata" className="flex-1" src={m.file_url} />
+                        <a href={m.file_url} download={m.file_name || "audio.webm"} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                          <Button type="button" variant="outline" size="icon" className="h-8 w-8" title="Baixar áudio">
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </a>
                         <span className="text-xs text-muted-foreground">{m.file_name}</span>
                       </div>
                     ))}
