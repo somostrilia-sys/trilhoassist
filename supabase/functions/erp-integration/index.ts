@@ -912,9 +912,9 @@ async function processSincronismoRecords(
 
     let planId: string | null = null;
     if (parsed.produtos && typeof parsed.produtos === "object") {
-      for (const [code, pName] of Object.entries(parsed.produtos)) {
-        if (typeof pName === "string" && planMap.has(pName)) { planId = planMap.get(pName)!; break; }
-        if (planByCode.has(code)) { planId = planByCode.get(code)!; break; }
+      for (const [code, pName] of Object.entries(parsed.produtos as Record<string, string>)) {
+        if (typeof pName === "string" && planMap.has(pName)) { planId = planMap.get(pName) as string; break; }
+        if (planByCode.has(code)) { planId = planByCode.get(code) as string; break; }
       }
     }
 
