@@ -200,6 +200,10 @@ export default function CollisionMediaUpload({ serviceRequestId, onMediaChange }
                 >
                   {file.file_type === "photo" ? (
                     <img src={file.file_url} alt={file.file_name} className="h-10 w-10 rounded object-cover shrink-0" />
+                  ) : file.file_type === "audio" ? (
+                    <div className="h-10 w-10 rounded bg-muted flex items-center justify-center shrink-0">
+                      {iconMap[file.file_type]}
+                    </div>
                   ) : (
                     <div className="h-10 w-10 rounded bg-muted flex items-center justify-center shrink-0">
                       {iconMap[file.file_type]}
@@ -207,9 +211,15 @@ export default function CollisionMediaUpload({ serviceRequestId, onMediaChange }
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium truncate">{file.file_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {(file.file_size / 1024).toFixed(0)} KB
-                    </p>
+                    {file.file_type === "audio" ? (
+                      <audio src={file.file_url} controls preload="metadata" className="w-full h-8 mt-1" style={{ maxWidth: "100%" }} />
+                    ) : file.file_type === "video" ? (
+                      <video src={file.file_url} controls preload="metadata" className="w-full h-20 mt-1 rounded" style={{ maxWidth: "100%" }} />
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {(file.file_size / 1024).toFixed(0)} KB
+                      </p>
+                    )}
                   </div>
                   <Button
                     type="button"

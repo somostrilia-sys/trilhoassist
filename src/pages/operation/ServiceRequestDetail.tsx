@@ -1545,7 +1545,7 @@ ${etaStr ? `*PREVISÃO DE CHEGADA*: ${etaStr}` : ""}
                     <p className="text-sm font-medium mb-2">Áudios</p>
                     {collisionMedia.filter(m => m.file_type === "audio").map((m: any) => (
                       <div key={m.id} className="flex items-center gap-2 mb-2">
-                        <audio controls className="flex-1"><source src={m.file_url} type={m.mime_type || "audio/mpeg"} /></audio>
+                        <audio controls preload="metadata" className="flex-1" src={m.file_url} />
                         <span className="text-xs text-muted-foreground">{m.file_name}</span>
                       </div>
                     ))}

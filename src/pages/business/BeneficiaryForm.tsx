@@ -152,8 +152,8 @@ export default function BeneficiaryForm() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.client_id) {
-      toast({ title: "Preencha os campos obrigatórios", variant: "destructive" });
+    if (!form.name || !form.client_id || !form.phone?.trim()) {
+      toast({ title: "Preencha os campos obrigatórios (Nome, Cliente e Contato)", variant: "destructive" });
       return;
     }
     saveMutation.mutate();
@@ -209,8 +209,8 @@ export default function BeneficiaryForm() {
                 <Input id="cpf" value={form.cpf} onChange={(e) => updateField("cpf", maskCPF(e.target.value))} placeholder="000.000.000-00" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">Telefone</Label>
-                <Input id="phone" value={form.phone} onChange={(e) => updateField("phone", maskPhone(e.target.value))} placeholder="(00) 00000-0000" />
+                <Label htmlFor="phone">Telefone <span className="text-destructive">*</span></Label>
+                <Input id="phone" required value={form.phone} onChange={(e) => updateField("phone", maskPhone(e.target.value))} placeholder="(00) 00000-0000" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="cooperativa">Cooperativa</Label>
