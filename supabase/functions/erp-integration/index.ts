@@ -880,35 +880,19 @@ async function processSincronismoRecords(
     .eq("client_id", clientId);
   const planByCode = new Map((allPlans || []).filter((p: any) => p.erp_code).map((p: any) => [p.erp_code, p.id]));
 
-  // Fetch existing beneficiaries
-  let existingBeneficiaries: any[] = [];
-  let from = 0;
-  const PAGE_SIZE = 1000;
-  while (true) {
-    const { data: pg } = await serviceSupabase
-      .from("beneficiaries")
-      .select("id, vehicle_plate")
-      .eq("client_id", clientId)
-      .range(from, from + PAGE_SIZE - 1);
-    if (!pg || pg.length === 0) break;
-    existingBeneficiaries = existingBeneficiaries.concat(pg);
-    if (pg.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
-
-  const existingByPlate = new Map(
-    existingBeneficiaries.filter((b: any) => b.vehicle_plate).map((b: any) => [b.vehicle_plate, b.id])
-  );
-
-  const toInsert: any[] = [];
-  const toUpdate: any[] = [];
+  // Parse all records first
+  const parsedRecords: any[] = [];
   const seenPlates = new Set<string>();
+  const pagePlates: string[] = [];
 
   for (const record of records) {
     const parsed = parseSincronismoRecord(record);
     if (!parsed.name && !parsed.plate) continue;
     if (parsed.plate && seenPlates.has(parsed.plate)) continue;
-    if (parsed.plate) seenPlates.add(parsed.plate);
+    if (parsed.plate) {
+      seenPlates.add(parsed.plate);
+      pagePlates.push(parsed.plate);
+    }
 
     let planId: string | null = null;
     if (parsed.produtos && typeof parsed.produtos === "object") {
@@ -921,36 +905,59 @@ async function processSincronismoRecords(
     const cooperativa = coopMap.get(parsed.cooperativa) || autoStandardizeCoop(parsed.cooperativa);
     const parsedYear = parsed.vehicleYear ? parseInt(parsed.vehicleYear) : null;
 
-    const beneficiaryData = {
-      name: parsed.name,
-      phone: parsed.phone || null,
-      cpf: parsed.cpf || null,
-      vehicle_model: parsed.vehicleModel || null,
-      vehicle_year: parsedYear,
-      vehicle_chassis: parsed.chassis || null,
-      vehicle_color: parsed.vehicleColor || null,
-      plan_id: planId,
-      cooperativa: cooperativa || null,
-      active: parsed.isActive,
-    };
+    parsedRecords.push({
+      plate: parsed.plate,
+      data: {
+        name: parsed.name,
+        phone: parsed.phone || null,
+        cpf: parsed.cpf || null,
+        vehicle_model: parsed.vehicleModel || null,
+        vehicle_year: parsedYear,
+        vehicle_chassis: parsed.chassis || null,
+        vehicle_color: parsed.vehicleColor || null,
+        plan_id: planId,
+        cooperativa: cooperativa || null,
+        active: parsed.isActive,
+      }
+    });
+  }
 
-    const existingId = existingByPlate.get(parsed.plate);
-    if (existingId) {
-      toUpdate.push({ id: existingId, client_id: clientId, ...beneficiaryData });
-    } else {
-      toInsert.push({ client_id: clientId, vehicle_plate: parsed.plate, ...beneficiaryData });
+  // Fetch ONLY existing beneficiaries for plates in this batch (much faster than fetching all)
+  const existingByPlate = new Map<string, string>();
+  const LOOKUP_BATCH = 200;
+  for (let i = 0; i < pagePlates.length; i += LOOKUP_BATCH) {
+    const batch = pagePlates.slice(i, i + LOOKUP_BATCH);
+    const { data: existing } = await serviceSupabase
+      .from("beneficiaries")
+      .select("id, vehicle_plate")
+      .eq("client_id", clientId)
+      .in("vehicle_plate", batch);
+    if (existing) {
+      for (const b of existing) {
+        if (b.vehicle_plate) existingByPlate.set(b.vehicle_plate, b.id);
+      }
     }
   }
 
-  const updateMap = new Map();
-  for (const row of toUpdate) { updateMap.set(row.id, row); }
-  const dedupedUpdate = Array.from(updateMap.values());
+  console.log(`Plates in page: ${pagePlates.length}, existing: ${existingByPlate.size}, new: ${pagePlates.length - existingByPlate.size}`);
 
-  console.log(`Sincronismo - To insert: ${toInsert.length}, to update: ${dedupedUpdate.length}`);
+  const toInsert: any[] = [];
+  const toUpdate: any[] = [];
+
+  for (const rec of parsedRecords) {
+    const existingId = existingByPlate.get(rec.plate);
+    if (existingId) {
+      toUpdate.push({ id: existingId, client_id: clientId, ...rec.data });
+    } else {
+      toInsert.push({ client_id: clientId, vehicle_plate: rec.plate, ...rec.data });
+    }
+  }
+
+  console.log(`Sincronismo - To insert: ${toInsert.length}, to update: ${toUpdate.length}`);
 
   let created = 0;
   let updated = 0;
-  const BATCH_SIZE = 500;
+  const BATCH_SIZE = 200;
 
   for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
     const chunk = toInsert.slice(i, i + BATCH_SIZE);
@@ -967,13 +974,13 @@ async function processSincronismoRecords(
           .from("beneficiaries")
           .insert(row);
         if (!singleErr) created++;
-        else console.error(`Sincronismo single insert error (plate ${row.vehicle_plate}):`, singleErr.message);
+        else console.error(`Single insert error (plate ${row.vehicle_plate}):`, singleErr.message);
       }
     }
   }
 
-  for (let i = 0; i < dedupedUpdate.length; i += BATCH_SIZE) {
-    const chunk = dedupedUpdate.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
+    const chunk = toUpdate.slice(i, i + BATCH_SIZE);
     const { error: upsertErr } = await serviceSupabase
       .from("beneficiaries")
       .upsert(chunk, { onConflict: "id" });
