@@ -467,6 +467,13 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
                         <p className="text-xs text-muted-foreground">Campos: {testResult.sample_data.keys?.join(", ")}</p>
                       </div>
                     )}
+                    {testResult.mode === "sincronismo" && testResult.success && (
+                      <div className="mt-3 space-y-1">
+                        <p className="text-xs text-muted-foreground">📄 {testResult.total_pages} páginas</p>
+                        <p className="text-xs text-muted-foreground">📊 {testResult.total_records} registros totais</p>
+                        <p className="text-xs text-muted-foreground">🔄 Modo: Sincronismo Fornecedor (GET)</p>
+                      </div>
+                    )}
                   </div>
                 )}
                 {diagResult && (
