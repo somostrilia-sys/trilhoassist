@@ -985,7 +985,7 @@ async function importSincronismoBeneficiariesCore(
     else console.error(`Sincronismo upsert error (chunk ${i}):`, upsertErr.message);
   }
 
-  return { records_found: records.length, records_created: created, records_updated: updated };
+  return { records_found: records.length, records_created: created, records_updated: updated, total_pages: totalPages };
 }
 
 // ─── SINCRONISMO: auto sync wrapper ───
