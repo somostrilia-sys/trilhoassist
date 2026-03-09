@@ -847,10 +847,25 @@ async function updateSyncLog(
 
 // ─── SINCRONISMO IMPORT CORE (shared by manual & auto) ───
 async function importSincronismoBeneficiariesCore(
-  serviceSupabase: any, userSupabase: any, client: any, clientId: string, tenantId: string
+  serviceSupabase: any, userSupabase: any, client: any, clientId: string, tenantId: string, singlePage?: number | null
 ) {
-  const records = await fetchSincronismoRecords(client.api_endpoint, client.api_key);
-  console.log("Sincronismo import - total records:", records.length);
+  let records: any[];
+  let totalPages = 0;
+
+  if (singlePage != null && singlePage > 0) {
+    // Single page mode - fetch only the requested page
+    const countInfo = await fetchSincronismoPageCount(client.api_endpoint, client.api_key);
+    totalPages = countInfo.totalPages;
+    if (singlePage > totalPages) {
+      throw new Error(`Página ${singlePage} não existe. Total: ${totalPages} páginas.`);
+    }
+    records = await fetchSincronismoSinglePage(client.api_endpoint, client.api_key, singlePage);
+    console.log(`Sincronismo import - single page ${singlePage}/${totalPages}: ${records.length} records`);
+  } else {
+    // Full import mode
+    records = await fetchSincronismoRecords(client.api_endpoint, client.api_key);
+    console.log("Sincronismo import - total records:", records.length);
+  }
 
   if (records.length === 0) {
     throw new Error("Nenhum registro encontrado na API Sincronismo");
