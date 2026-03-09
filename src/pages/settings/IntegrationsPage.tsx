@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Link2, TestTube, Download, RefreshCw, ArrowRight, CheckCircle2, XCircle, Clock, AlertCircle, MapPin, Database, Eye, EyeOff, Save, QrCode } from "lucide-react";
+import { Link2, TestTube, Download, RefreshCw, ArrowRight, CheckCircle2, XCircle, Clock, AlertCircle, MapPin, Database, Eye, EyeOff, Save, QrCode, Zap } from "lucide-react";
+import { ErpSetupWizard } from "@/components/erp/ErpSetupWizard";
 import { EvolutionApiIntegration } from "@/components/whatsapp/EvolutionApiIntegration";
 import { OperatorWhatsApp } from "@/components/whatsapp/OperatorWhatsApp";
 import { Badge } from "@/components/ui/badge";
