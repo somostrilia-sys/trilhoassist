@@ -7,9 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Link2, TestTube, Download, RefreshCw, ArrowRight, CheckCircle2, XCircle, Clock, AlertCircle, MapPin, Database, Eye, EyeOff, Save, QrCode } from "lucide-react";
+import { Link2, TestTube, Download, RefreshCw, ArrowRight, CheckCircle2, XCircle, Clock, AlertCircle, MapPin, Database, Eye, EyeOff, Save, QrCode, Zap } from "lucide-react";
 import { EvolutionApiIntegration } from "@/components/whatsapp/EvolutionApiIntegration";
 import { OperatorWhatsApp } from "@/components/whatsapp/OperatorWhatsApp";
+import { ErpSetupWizard } from "@/components/erp/ErpSetupWizard";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
@@ -35,32 +36,23 @@ function GoogleIntegration({ tenantId }: { tenantId: string }) {
   });
 
   useEffect(() => {
-    if (tenant) {
-      setGoogleKey((tenant as any).google_api_key || "");
-    }
+    if (tenant) setGoogleKey((tenant as any).google_api_key || "");
   }, [tenant]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const { error } = await supabase.from("tenants").update({
-        google_api_key: googleKey || null,
-      } as any).eq("id", tenantId);
+      const { error } = await supabase.from("tenants").update({ google_api_key: googleKey || null } as any).eq("id", tenantId);
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["tenant-google"] });
       toast({ title: "Chave Google salva com sucesso" });
     } catch (err: any) {
       toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   const handleTest = async () => {
-    if (!googleKey) {
-      toast({ title: "Preencha a API Key antes de testar", variant: "destructive" });
-      return;
-    }
+    if (!googleKey) { toast({ title: "Preencha a API Key antes de testar", variant: "destructive" }); return; }
     setTesting(true);
     try {
       const url = `https://maps.googleapis.com/maps/api/geocode/json?address=São+Paulo&key=${googleKey}`;
@@ -73,9 +65,7 @@ function GoogleIntegration({ tenantId }: { tenantId: string }) {
       }
     } catch (err: any) {
       toast({ title: "Erro de conexão", description: err.message, variant: "destructive" });
-    } finally {
-      setTesting(false);
-    }
+    } finally { setTesting(false); }
   };
 
   const isConfigured = !!googleKey;
@@ -87,12 +77,10 @@ function GoogleIntegration({ tenantId }: { tenantId: string }) {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
-                <MapPin className="h-5 w-5 text-red-500" />
+                <MapPin className="h-5 w-5 text-destructive" />
                 Google Maps / Places
               </CardTitle>
-              <CardDescription>
-                Configure sua chave do Google para geocodificação precisa e busca de prestadores externos
-              </CardDescription>
+              <CardDescription>Configure sua chave do Google para geocodificação precisa</CardDescription>
             </div>
             <Badge variant={isConfigured ? "default" : "secondary"}>
               {isConfigured ? "Configurado" : "Usando OpenStreetMap (gratuito)"}
@@ -102,68 +90,29 @@ function GoogleIntegration({ tenantId }: { tenantId: string }) {
         <CardContent className="space-y-4">
           <div className="rounded-lg border p-4 bg-muted/20 space-y-2">
             <div className="flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5" />
+              <AlertCircle className="h-4 w-4 text-primary mt-0.5" />
               <div>
                 <p className="text-sm font-medium">Como obter sua chave Google</p>
                 <ol className="text-xs text-muted-foreground list-decimal ml-4 mt-1 space-y-1">
-                  <li>Acesse o <span className="font-medium">Google Cloud Console</span> (<code className="bg-muted px-1 rounded">console.cloud.google.com</code>)</li>
-                  <li>Crie um projeto ou selecione um existente</li>
-                  <li>Ative as APIs: <span className="font-medium">Places API</span>, <span className="font-medium">Geocoding API</span> e <span className="font-medium">Directions API</span></li>
-                  <li>Em <span className="font-medium">Credenciais</span>, crie uma <span className="font-medium">Chave de API</span></li>
-                  <li>Cole a chave abaixo e teste</li>
+                  <li>Acesse o <span className="font-medium">Google Cloud Console</span></li>
+                  <li>Ative as APIs: Places, Geocoding e Directions</li>
+                  <li>Crie uma Chave de API e cole abaixo</li>
                 </ol>
               </div>
             </div>
           </div>
-
           <div className="space-y-2">
             <Label>Google API Key</Label>
             <div className="relative max-w-lg">
-              <Input
-                value={googleKey}
-                onChange={(e) => setGoogleKey(e.target.value)}
-                placeholder="AIzaSy..."
-                type={showKey ? "text" : "password"}
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
+              <Input value={googleKey} onChange={(e) => setGoogleKey(e.target.value)} placeholder="AIzaSy..." type={showKey ? "text" : "password"} />
+              <button type="button" onClick={() => setShowKey(!showKey)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                 {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
-            <p className="text-xs text-muted-foreground">Uma única chave serve para Places, Geocoding e Directions</p>
           </div>
-
           <div className="flex gap-3">
-            <Button onClick={handleSave} disabled={saving}>
-              <Save className="h-4 w-4 mr-2" />
-              {saving ? "Salvando..." : "Salvar"}
-            </Button>
-            <Button onClick={handleTest} disabled={testing} variant="outline">
-              <TestTube className="h-4 w-4 mr-2" />
-              {testing ? "Testando..." : "Testar Conexão"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">O que a integração Google faz</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="text-sm text-muted-foreground space-y-2">
-            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-600" /> Busca de prestadores externos (guinchos, chaveiros) próximos ao local</li>
-            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-600" /> Geocodificação de endereços com maior precisão</li>
-            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-600" /> Cálculo de rotas reais (distância por estrada)</li>
-            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-600" /> Roteirização otimizada para prestadores</li>
-          </ul>
-          <div className="mt-3 rounded-lg bg-muted/30 p-3">
-            <p className="text-xs text-muted-foreground">
-              <span className="font-medium">Sem Google configurado:</span> O sistema continua funcionando normalmente usando OpenStreetMap/Nominatim (gratuito) para geocodificação e OSRM para rotas. O Google é um upgrade de precisão.
-            </p>
+            <Button onClick={handleSave} disabled={saving}><Save className="h-4 w-4 mr-2" />{saving ? "Salvando..." : "Salvar"}</Button>
+            <Button onClick={handleTest} disabled={testing} variant="outline"><TestTube className="h-4 w-4 mr-2" />{testing ? "Testando..." : "Testar"}</Button>
           </div>
         </CardContent>
       </Card>
@@ -171,186 +120,75 @@ function GoogleIntegration({ tenantId }: { tenantId: string }) {
   );
 }
 
-// ====================== ERP Section (existing) ======================
+// ====================== ERP Section ======================
 function ErpIntegration({ tenantId }: { tenantId: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [selectedClientId, setSelectedClientId] = useState<string>("");
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<any>(null);
-  const [importing, setImporting] = useState(false);
-  const [erpFields, setErpFields] = useState<any>(null);
-  const [fetchingFields, setFetchingFields] = useState(false);
-  const [autoMapping, setAutoMapping] = useState(false);
-  const [diagnosing, setDiagnosing] = useState(false);
-  const [diagResult, setDiagResult] = useState<any>(null);
+  const [viewMode, setViewMode] = useState<"wizard" | "advanced">("wizard");
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ["clients-with-api", tenantId],
+  const { data: allClients = [] } = useQuery({
+    queryKey: ["all-clients-erp", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("id, name, api_endpoint, api_key, auto_sync_enabled, sync_interval_minutes")
+        .select("id, name, api_endpoint, api_key, api_type, auto_sync_enabled, sync_interval_minutes")
         .eq("tenant_id", tenantId!)
         .order("name");
       if (error) throw error;
-      return (data ?? []).filter((c: any) => c.api_endpoint && c.api_key);
+      return data ?? [];
     },
     enabled: !!tenantId,
   });
 
-  const selectedClient = clients.find((c: any) => c.id === selectedClientId);
-
-  const { data: plans = [] } = useQuery({
-    queryKey: ["plans-for-mapping", selectedClientId],
+  const clientIds = allClients.map((c: any) => c.id);
+  const { data: beneficiaryCounts = {} } = useQuery({
+    queryKey: ["beneficiary-counts-erp", clientIds],
     queryFn: async () => {
-      const { data } = await supabase.from("plans").select("id, name").eq("client_id", selectedClientId!);
-      return data ?? [];
-    },
-    enabled: !!selectedClientId,
-  });
-
-  const { data: mappings = [] } = useQuery({
-    queryKey: ["erp-mappings", selectedClientId],
-    queryFn: async () => {
-      const { data } = await supabase.from("erp_field_mappings" as any).select("*").eq("client_id", selectedClientId!);
-      return data ?? [];
-    },
-    enabled: !!selectedClientId,
-  });
-
-  const { data: syncLogs = [] } = useQuery({
-    queryKey: ["sync-logs", selectedClientId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("erp_sync_logs" as any)
-        .select("*")
-        .eq("client_id", selectedClientId!)
-        .order("created_at", { ascending: false })
-        .limit(10);
-      return data ?? [];
-    },
-    enabled: !!selectedClientId,
-  });
-
-  const callErpFunction = async (action: string, extra = {}) => {
-    const { data, error } = await supabase.functions.invoke("erp-integration", {
-      body: { action, client_id: selectedClientId, tenant_id: tenantId, ...extra },
-    });
-    if (error) throw error;
-    return data;
-  };
-
-  const handleTest = async () => {
-    setTesting(true);
-    setTestResult(null);
-    try {
-      const result = await callErpFunction("test");
-      setTestResult(result);
-      toast({ title: result.success ? "Conexão OK" : "Falha na conexão", variant: result.success ? "default" : "destructive" });
-    } catch (err: any) {
-      setTestResult({ success: false, message: err.message });
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  const handleDiagnostic = async () => {
-    if (!selectedClient) return;
-    setDiagnosing(true);
-    setDiagResult(null);
-    try {
-      const result = await callErpFunction("direct_test", {
-        endpoint: selectedClient.api_endpoint,
-        api_key: selectedClient.api_key,
-      });
-      setDiagResult(result);
-    } catch (err: any) {
-      setDiagResult({ error: err.message });
-    } finally {
-      setDiagnosing(false);
-    }
-  };
-
-  const handleFetchFields = async () => {
-    setFetchingFields(true);
-    try {
-      const result = await callErpFunction("fetch_fields");
-      setErpFields(result.fields);
-    } catch (err: any) {
-      toast({ title: "Erro ao buscar campos", description: err.message, variant: "destructive" });
-    } finally {
-      setFetchingFields(false);
-    }
-  };
-
-  const handleAutoMapProducts = async () => {
-    setAutoMapping(true);
-    try {
-      const result = await callErpFunction("auto_map_products");
-      queryClient.invalidateQueries({ queryKey: ["erp-mappings"] });
-      queryClient.invalidateQueries({ queryKey: ["plans-for-mapping"] });
-      toast({
-        title: "Mapeamento automático concluído",
-        description: `${result.products_found} produtos encontrados, ${result.plans_created} planos criados, ${result.mappings_created} mapeamentos conectados`,
-      });
-      // Refresh fields
-      handleFetchFields();
-    } catch (err: any) {
-      toast({ title: "Erro no mapeamento automático", description: err.message, variant: "destructive" });
-    } finally {
-      setAutoMapping(false);
-    }
-  };
-
-  const handleSaveMapping = async (fieldType: string, erpValue: string, trilhoValue: string, trilhoId?: string) => {
-    try {
-      const existing = (mappings as any[]).find((m: any) => m.field_type === fieldType && m.erp_value === erpValue);
-      if (existing) {
-        await supabase.from("erp_field_mappings" as any).update({ trilho_value: trilhoValue, trilho_id: trilhoId || null }).eq("id", existing.id);
-      } else {
-        await supabase.from("erp_field_mappings" as any).insert({
-          client_id: selectedClientId, tenant_id: tenantId, field_type: fieldType, erp_value: erpValue, trilho_value: trilhoValue, trilho_id: trilhoId || null,
-        });
+      if (clientIds.length === 0) return {};
+      const counts: Record<string, number> = {};
+      for (const cid of clientIds) {
+        const { count } = await supabase
+          .from("beneficiaries")
+          .select("id", { count: "exact", head: true })
+          .eq("client_id", cid);
+        counts[cid] = count || 0;
       }
-      queryClient.invalidateQueries({ queryKey: ["erp-mappings"] });
-      toast({ title: "Mapeamento salvo" });
-    } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
-    }
-  };
+      return counts;
+    },
+    enabled: clientIds.length > 0,
+  });
 
-  const handleImport = async () => {
-    setImporting(true);
-    try {
-      const result = await callErpFunction("import");
-      queryClient.invalidateQueries({ queryKey: ["sync-logs"] });
-      toast({
-        title: "Importação concluída",
-        description: `${result.records_found} encontrados, ${result.records_created} criados, ${result.records_updated} atualizados`,
-      });
-    } catch (err: any) {
-      toast({ title: "Erro na importação", description: err.message, variant: "destructive" });
-    } finally {
-      setImporting(false);
-    }
-  };
+  const { data: lastSyncs = {} } = useQuery({
+    queryKey: ["last-syncs-erp", clientIds],
+    queryFn: async () => {
+      if (clientIds.length === 0) return {};
+      const syncs: Record<string, any> = {};
+      for (const cid of clientIds) {
+        const { data } = await supabase
+          .from("erp_sync_logs")
+          .select("status, created_at, records_found, records_created, records_updated")
+          .eq("client_id", cid)
+          .eq("status", "success")
+          .order("created_at", { ascending: false })
+          .limit(1);
+        if (data && data.length > 0) syncs[cid] = data[0];
+      }
+      return syncs;
+    },
+    enabled: clientIds.length > 0,
+  });
 
-  const handleToggleAutoSync = async (enabled: boolean) => {
-    await supabase.from("clients").update({ auto_sync_enabled: enabled } as any).eq("id", selectedClientId);
-    queryClient.invalidateQueries({ queryKey: ["clients-with-api"] });
-    toast({ title: enabled ? "Sincronização automática ativada" : "Sincronização automática desativada" });
-  };
+  const selectedClient = allClients.find((c: any) => c.id === selectedClientId);
 
-  const handleChangeSyncInterval = async (minutes: string) => {
-    await supabase.from("clients").update({ sync_interval_minutes: parseInt(minutes) } as any).eq("id", selectedClientId);
-    queryClient.invalidateQueries({ queryKey: ["clients-with-api"] });
-  };
-
-  const getMappingValue = (fieldType: string, erpValue: string) => {
-    const m = (mappings as any[]).find((m: any) => m.field_type === fieldType && m.erp_value === erpValue);
-    return { trilhoValue: m?.trilho_value || "", trilhoId: m?.trilho_id || "" };
+  const formatRelativeDate = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const hours = Math.floor(diff / 3600000);
+    if (hours < 1) return "agora";
+    if (hours < 24) return `há ${hours}h`;
+    const days = Math.floor(hours / 24);
+    if (days === 1) return "ontem";
+    return `há ${days}d`;
   };
 
   return (
@@ -358,323 +196,320 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <Database className="h-5 w-5 text-blue-600" />
+            <Database className="h-5 w-5 text-primary" />
             Integração ERP — Associações
           </CardTitle>
-          <CardDescription>
-            Conecte as APIs dos seus clientes (associações) para importar beneficiários e veículos automaticamente.
-            Configure o endpoint e a chave de API no cadastro de cada cliente.
-          </CardDescription>
+          <CardDescription>Conecte APIs dos clientes para importar beneficiários e veículos automaticamente</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-4">
-            <div className="flex-1 space-y-1">
-              <Label>Selecione o cliente com API configurada</Label>
-              <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um cliente..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map((c: any) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Selecione um cliente</Label>
+            <div className="grid gap-2">
+              {allClients.map((client: any) => {
+                const hasApi = client.api_endpoint && client.api_key;
+                const count = (beneficiaryCounts as any)[client.id] || 0;
+                const lastSync = (lastSyncs as any)[client.id];
+                const isSelected = selectedClientId === client.id;
+                return (
+                  <button
+                    key={client.id}
+                    onClick={() => setSelectedClientId(client.id)}
+                    className={`flex items-center justify-between p-3 rounded-lg border text-left transition-colors ${
+                      isSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`h-2 w-2 rounded-full ${hasApi ? "bg-green-500" : "bg-amber-400"}`} />
+                      <span className="font-medium text-sm">{client.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      {hasApi ? (
+                        <>
+                          <Badge variant="outline" className="text-xs gap-1">
+                            <CheckCircle2 className="h-3 w-3 text-green-600" /> Conectado
+                          </Badge>
+                          {count > 0 && (
+                            <Badge variant="secondary" className="text-xs">{count.toLocaleString()} veículos</Badge>
+                          )}
+                          {lastSync && (
+                            <Badge variant="secondary" className="text-xs">Sync: {formatRelativeDate(lastSync.created_at)}</Badge>
+                          )}
+                        </>
+                      ) : (
+                        <Badge variant="outline" className="text-xs gap-1 text-amber-600 border-amber-300">
+                          <AlertCircle className="h-3 w-3" /> Pendente
+                        </Badge>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+              {allClients.length === 0 && (
+                <p className="text-sm text-muted-foreground py-4 text-center">Nenhum cliente cadastrado.</p>
+              )}
             </div>
-            {clients.length === 0 && (
-              <p className="text-sm text-muted-foreground mt-6">
-                Nenhum cliente com API configurada. Vá em Negócio → Clientes e configure o endpoint e chave do cliente.
-              </p>
-            )}
           </div>
         </CardContent>
       </Card>
 
-      {selectedClientId && (
-        <Tabs defaultValue="connection" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="connection" className="text-xs"><TestTube className="h-3.5 w-3.5 mr-1" /> Conexão</TabsTrigger>
-            <TabsTrigger value="mapping" className="text-xs"><ArrowRight className="h-3.5 w-3.5 mr-1" /> Mapeamento</TabsTrigger>
-            <TabsTrigger value="import" className="text-xs"><Download className="h-3.5 w-3.5 mr-1" /> Importação</TabsTrigger>
-            <TabsTrigger value="sync" className="text-xs"><RefreshCw className="h-3.5 w-3.5 mr-1" /> Sincronização</TabsTrigger>
-          </TabsList>
+      {selectedClientId && selectedClient && (
+        <>
+          <div className="flex gap-2">
+            <Button variant={viewMode === "wizard" ? "default" : "outline"} size="sm" onClick={() => setViewMode("wizard")}>
+              <Zap className="h-4 w-4 mr-1" /> Wizard Guiado
+            </Button>
+            <Button variant={viewMode === "advanced" ? "default" : "outline"} size="sm" onClick={() => setViewMode("advanced")}>
+              Modo Avançado
+            </Button>
+          </div>
 
-          <TabsContent value="connection">
+          {!selectedClient.api_endpoint || !selectedClient.api_key ? (
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Testar Conexão</CardTitle>
-                <CardDescription>Verifique se a API do ERP está acessível</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Endpoint</Label>
-                    <p className="text-sm font-mono bg-muted rounded px-2 py-1 truncate">{selectedClient?.api_endpoint}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">API Key</Label>
-                    <p className="text-sm font-mono bg-muted rounded px-2 py-1">••••••{selectedClient?.api_key?.slice(-6)}</p>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <Button onClick={handleTest} disabled={testing}>
-                    <TestTube className="h-4 w-4 mr-2" />
-                    {testing ? "Testando..." : "Testar Conexão"}
-                  </Button>
-                  <Button onClick={handleDiagnostic} disabled={diagnosing} variant="outline">
-                    <AlertCircle className="h-4 w-4 mr-2" />
-                    {diagnosing ? "Diagnosticando..." : "Diagnóstico Avançado"}
-                  </Button>
-                </div>
-                {testResult && (
-                  <div className={`rounded-lg border p-4 ${testResult.success ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
-                    <div className="flex items-center gap-2">
-                      {testResult.success ? <CheckCircle2 className="h-5 w-5 text-green-600" /> : <XCircle className="h-5 w-5 text-red-600" />}
-                      <p className={`font-medium ${testResult.success ? "text-green-800" : "text-red-800"}`}>{testResult.message}</p>
-                    </div>
-                    {testResult.sample_data && (
-                      <div className="mt-3 space-y-2">
-                        <p className="text-xs text-muted-foreground">{testResult.sample_data.total_records} registros encontrados</p>
-                        <p className="text-xs text-muted-foreground">Campos: {testResult.sample_data.keys?.join(", ")}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {diagResult && (
-                  <div className="rounded-lg border p-4 bg-muted/30 space-y-3">
-                    <p className="font-medium text-sm">Resultado do Diagnóstico</p>
-                    {diagResult.error && (
-                      <p className="text-sm text-destructive">{diagResult.error}</p>
-                    )}
-                    {diagResult.results?.map((r: any, i: number) => {
-                      const isOk = r.status >= 200 && r.status < 300;
-                      const labels: Record<string, string> = {
-                        token_header: 'Header "token: <key>"',
-                        auth_raw: 'Header "Authorization: <key>"',
-                        auth_bearer: 'Header "Authorization: Bearer <key>"',
-                        auth_token_prefix: 'Header "Authorization: token <key>"',
-                      };
-                      return (
-                        <div key={i} className={`rounded border p-3 text-sm ${isOk ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
-                          <div className="flex items-center gap-2 mb-1">
-                            {isOk ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <XCircle className="h-4 w-4 text-red-600" />}
-                            <span className="font-medium">{labels[r.test] || r.test}</span>
-                            <Badge variant={isOk ? "default" : "destructive"} className="text-xs ml-auto">
-                              {r.status || "erro"}
-                            </Badge>
-                          </div>
-                          <p className="text-xs font-mono text-muted-foreground break-all">{r.body || r.error}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+              <CardContent className="p-6 text-center space-y-3">
+                <AlertCircle className="h-8 w-8 text-amber-500 mx-auto" />
+                <p className="font-medium">API não configurada</p>
+                <p className="text-sm text-muted-foreground">Configure o endpoint e token na edição do cliente.</p>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="mapping">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Mapeamento de Campos</CardTitle>
-                <CardDescription>Associe os valores do ERP aos equivalentes no sistema</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-3">
-                  <Button onClick={handleFetchFields} disabled={fetchingFields} variant="outline">
-                    <RefreshCw className={`h-4 w-4 mr-2 ${fetchingFields ? "animate-spin" : ""}`} />
-                    {fetchingFields ? "Buscando..." : "Buscar campos do ERP"}
-                  </Button>
-                  <Button onClick={handleAutoMapProducts} disabled={autoMapping}>
-                    <Link2 className={`h-4 w-4 mr-2 ${autoMapping ? "animate-spin" : ""}`} />
-                    {autoMapping ? "Mapeando..." : "Auto-mapear por código"}
-                  </Button>
-                </div>
-                <div className="rounded-lg border p-3 bg-muted/20">
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-medium">Auto-mapear:</span> Busca os códigos dos produtos no ERP, cria os planos automaticamente no sistema e conecta todos por código. Ideal para primeira configuração.
-                  </p>
-                </div>
-                {erpFields && (
-                  <div className="space-y-6">
-                    {erpFields.plans?.length > 0 && (
-                      <div className="space-y-3">
-                        <h3 className="font-medium text-sm flex items-center gap-2">
-                          <Badge variant="outline">Planos</Badge>
-                          <span className="text-muted-foreground text-xs">{erpFields.plans.length} encontrados no ERP</span>
-                        </h3>
-                        <div className="space-y-2">
-                          {erpFields.plans.map((erpPlan: string) => {
-                            const mapping = getMappingValue("plan", erpPlan);
-                            return (
-                              <div key={erpPlan} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20">
-                                <div className="flex-1"><p className="text-sm font-medium">{erpPlan}</p><p className="text-xs text-muted-foreground">ERP</p></div>
-                                <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                                <div className="flex-1">
-                                  <Select value={mapping.trilhoId || ""} onValueChange={(v) => { const plan = plans.find((p: any) => p.id === v); handleSaveMapping("plan", erpPlan, plan?.name || v, v); }}>
-                                    <SelectTrigger className="h-9"><SelectValue placeholder="Selecione plano" /></SelectTrigger>
-                                    <SelectContent>{plans.map((p: any) => (<SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>))}</SelectContent>
-                                  </Select>
-                                </div>
-                                {mapping.trilhoId && <CheckCircle2 className="h-4 w-4 text-green-600" />}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    {erpFields.cooperativas?.length > 0 && (
-                      <div className="space-y-3">
-                        <h3 className="font-medium text-sm flex items-center gap-2">
-                          <Badge variant="outline">Cooperativas</Badge>
-                          <span className="text-muted-foreground text-xs">{erpFields.cooperativas.length} encontradas</span>
-                        </h3>
-                        <div className="space-y-2">
-                          {erpFields.cooperativas.map((erpCoop: string) => {
-                            const mapping = getMappingValue("cooperativa", erpCoop);
-                            return (
-                              <div key={erpCoop} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20">
-                                <div className="flex-1"><p className="text-sm font-medium">{erpCoop}</p><p className="text-xs text-muted-foreground">ERP</p></div>
-                                <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                                <div className="flex-1"><Input placeholder="Nome no sistema" defaultValue={mapping.trilhoValue} onBlur={(e) => handleSaveMapping("cooperativa", erpCoop, e.target.value)} className="h-9" /></div>
-                                {mapping.trilhoValue && <CheckCircle2 className="h-4 w-4 text-green-600" />}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    {erpFields.situacoes?.length > 0 && (
-                      <div className="space-y-3">
-                        <h3 className="font-medium text-sm flex items-center gap-2">
-                          <Badge variant="outline">Situações</Badge>
-                          <span className="text-muted-foreground text-xs">{erpFields.situacoes.length} encontradas — defina quais são ativas e quais são inativas (caso 99)</span>
-                        </h3>
-                        <div className="space-y-2">
-                          {erpFields.situacoes.map((sit: { code: string; description: string }) => {
-                            const mapping = getMappingValue("situacao", sit.code);
-                            const currentValue = mapping.trilhoValue || "";
-                            return (
-                              <div key={sit.code} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20">
-                                <div className="flex-1">
-                                  <p className="text-sm font-medium">{sit.description}</p>
-                                  <p className="text-xs text-muted-foreground">Código: {sit.code}</p>
-                                </div>
-                                <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                                <div className="flex-1">
-                                  <Select value={currentValue} onValueChange={(v) => handleSaveMapping("situacao", sit.code, v)}>
-                                    <SelectTrigger className="h-9"><SelectValue placeholder="Selecione status" /></SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="active">✅ Ativo</SelectItem>
-                                      <SelectItem value="inactive">❌ Inativo (caso 99)</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                {currentValue && (
-                                  <Badge variant={currentValue === "active" ? "default" : "destructive"} className="text-xs">
-                                    {currentValue === "active" ? "Ativo" : "Inativo"}
-                                  </Badge>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="import">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Importação de Beneficiários</CardTitle>
-                <CardDescription>Importe dados do ERP para o sistema</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-lg border p-4 bg-muted/20 space-y-2">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">Antes de importar</p>
-                      <ul className="text-xs text-muted-foreground list-disc ml-4 mt-1 space-y-1">
-                        <li>Teste a conexão na aba "Conexão"</li>
-                        <li>Configure os mapeamentos na aba "Mapeamento"</li>
-                        <li>Beneficiários existentes (mesma placa) serão atualizados</li>
-                        <li>Novos beneficiários serão criados automaticamente</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-                <Button onClick={handleImport} disabled={importing} size="lg">
-                  <Download className={`h-4 w-4 mr-2 ${importing ? "animate-bounce" : ""}`} />
-                  {importing ? "Importando..." : "Iniciar Importação"}
-                </Button>
-                {(syncLogs as any[]).length > 0 && (
-                  <div className="space-y-2 mt-4">
-                    <h3 className="text-sm font-medium">Histórico</h3>
-                    <div className="space-y-2">
-                      {(syncLogs as any[]).map((log: any) => (
-                        <div key={log.id} className="flex items-center justify-between p-3 rounded-lg border text-sm">
-                          <div className="flex items-center gap-2">
-                            {log.status === "success" && <CheckCircle2 className="h-4 w-4 text-green-600" />}
-                            {log.status === "error" && <XCircle className="h-4 w-4 text-red-600" />}
-                            {log.status === "running" && <Clock className="h-4 w-4 text-blue-600 animate-spin" />}
-                            <span className="capitalize">{log.sync_type}</span>
-                          </div>
-                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                            {log.status === "success" && <span>{log.records_found} encontrados • {log.records_created} criados • {log.records_updated} atualizados</span>}
-                            {log.status === "error" && <span className="text-red-600">{log.error_message?.substring(0, 60)}</span>}
-                            <span>{new Date(log.created_at).toLocaleString("pt-BR")}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="sync">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Sincronização Automática</CardTitle>
-                <CardDescription>Configure importações periódicas do ERP</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-4 rounded-lg border">
-                  <div>
-                    <p className="font-medium text-sm">Ativar sincronização automática</p>
-                    <p className="text-xs text-muted-foreground">Importa beneficiários do ERP periodicamente</p>
-                  </div>
-                  <Switch checked={(selectedClient as any)?.auto_sync_enabled || false} onCheckedChange={handleToggleAutoSync} />
-                </div>
-                {(selectedClient as any)?.auto_sync_enabled && (
-                  <div className="space-y-2">
-                    <Label>Intervalo (minutos)</Label>
-                    <Select value={String((selectedClient as any)?.sync_interval_minutes || 60)} onValueChange={handleChangeSyncInterval}>
-                      <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="15">A cada 15 minutos</SelectItem>
-                        <SelectItem value="30">A cada 30 minutos</SelectItem>
-                        <SelectItem value="60">A cada 1 hora</SelectItem>
-                        <SelectItem value="120">A cada 2 horas</SelectItem>
-                        <SelectItem value="360">A cada 6 horas</SelectItem>
-                        <SelectItem value="720">A cada 12 horas</SelectItem>
-                        <SelectItem value="1440">Diariamente</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+          ) : viewMode === "wizard" ? (
+            <ErpSetupWizard
+              clientId={selectedClientId}
+              clientName={selectedClient.name}
+              tenantId={tenantId}
+              onComplete={() => {
+                queryClient.invalidateQueries({ queryKey: ["all-clients-erp"] });
+                queryClient.invalidateQueries({ queryKey: ["beneficiary-counts-erp"] });
+                queryClient.invalidateQueries({ queryKey: ["last-syncs-erp"] });
+              }}
+            />
+          ) : (
+            <AdvancedErpView clientId={selectedClientId} client={selectedClient} tenantId={tenantId} />
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+// ─── Advanced ERP View ───
+function AdvancedErpView({ clientId, client, tenantId }: { clientId: string; client: any; tenantId: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<any>(null);
+  const [importing, setImporting] = useState(false);
+  const [erpFields, setErpFields] = useState<any>(null);
+  const [fetchingFields, setFetchingFields] = useState(false);
+  const [autoMapping, setAutoMapping] = useState(false);
+
+  const { data: plans = [] } = useQuery({
+    queryKey: ["plans-for-mapping", clientId],
+    queryFn: async () => { const { data } = await supabase.from("plans").select("id, name").eq("client_id", clientId); return data ?? []; },
+    enabled: !!clientId,
+  });
+
+  const { data: mappings = [] } = useQuery({
+    queryKey: ["erp-mappings", clientId],
+    queryFn: async () => { const { data } = await supabase.from("erp_field_mappings" as any).select("*").eq("client_id", clientId); return data ?? []; },
+    enabled: !!clientId,
+  });
+
+  const { data: syncLogs = [] } = useQuery({
+    queryKey: ["sync-logs", clientId],
+    queryFn: async () => { const { data } = await supabase.from("erp_sync_logs" as any).select("*").eq("client_id", clientId).order("created_at", { ascending: false }).limit(10); return data ?? []; },
+    enabled: !!clientId,
+  });
+
+  const callErp = async (action: string, extra = {}) => {
+    const { data, error } = await supabase.functions.invoke("erp-integration", { body: { action, client_id: clientId, tenant_id: tenantId, ...extra } });
+    if (error) throw error;
+    return data;
+  };
+
+  const handleTest = async () => {
+    setTesting(true); setTestResult(null);
+    try { const r = await callErp("test"); setTestResult(r); }
+    catch (e: any) { setTestResult({ success: false, message: e.message }); }
+    finally { setTesting(false); }
+  };
+
+  const handleFetchFields = async () => {
+    setFetchingFields(true);
+    try { const r = await callErp("fetch_fields"); setErpFields(r.fields); }
+    catch (e: any) { toast({ title: "Erro", description: e.message, variant: "destructive" }); }
+    finally { setFetchingFields(false); }
+  };
+
+  const handleAutoMap = async () => {
+    setAutoMapping(true);
+    try {
+      const r = await callErp("auto_map_products");
+      queryClient.invalidateQueries({ queryKey: ["erp-mappings"] });
+      queryClient.invalidateQueries({ queryKey: ["plans-for-mapping"] });
+      toast({ title: "Concluído", description: `${r.products_found} produtos, ${r.plans_created} planos criados` });
+      handleFetchFields();
+    } catch (e: any) { toast({ title: "Erro", description: e.message, variant: "destructive" }); }
+    finally { setAutoMapping(false); }
+  };
+
+  const handleSaveMapping = async (fieldType: string, erpValue: string, trilhoValue: string, trilhoId?: string) => {
+    const existing = (mappings as any[]).find((m: any) => m.field_type === fieldType && m.erp_value === erpValue);
+    if (existing) {
+      await supabase.from("erp_field_mappings" as any).update({ trilho_value: trilhoValue, trilho_id: trilhoId || null }).eq("id", existing.id);
+    } else {
+      await supabase.from("erp_field_mappings" as any).insert({ client_id: clientId, tenant_id: tenantId, field_type: fieldType, erp_value: erpValue, trilho_value: trilhoValue, trilho_id: trilhoId || null });
+    }
+    queryClient.invalidateQueries({ queryKey: ["erp-mappings"] });
+  };
+
+  const handleImport = async () => {
+    setImporting(true);
+    try {
+      const r = await callErp("import");
+      queryClient.invalidateQueries({ queryKey: ["sync-logs"] });
+      toast({ title: "Importação concluída", description: `${r.records_found} encontrados, ${r.records_created} criados, ${r.records_updated} atualizados` });
+    } catch (e: any) { toast({ title: "Erro", description: e.message, variant: "destructive" }); }
+    finally { setImporting(false); }
+  };
+
+  const handleToggleAutoSync = async (enabled: boolean) => {
+    await supabase.from("clients").update({ auto_sync_enabled: enabled } as any).eq("id", clientId);
+    queryClient.invalidateQueries({ queryKey: ["all-clients-erp"] });
+  };
+
+  const handleChangeSyncInterval = async (minutes: string) => {
+    await supabase.from("clients").update({ sync_interval_minutes: parseInt(minutes) } as any).eq("id", clientId);
+    queryClient.invalidateQueries({ queryKey: ["all-clients-erp"] });
+  };
+
+  const getMappingValue = (ft: string, ev: string) => {
+    const m = (mappings as any[]).find((x: any) => x.field_type === ft && x.erp_value === ev);
+    return { trilhoValue: m?.trilho_value || "", trilhoId: m?.trilho_id || "" };
+  };
+
+  return (
+    <Tabs defaultValue="connection" className="space-y-4">
+      <TabsList className="grid w-full grid-cols-4">
+        <TabsTrigger value="connection" className="text-xs"><TestTube className="h-3.5 w-3.5 mr-1" /> Conexão</TabsTrigger>
+        <TabsTrigger value="mapping" className="text-xs"><ArrowRight className="h-3.5 w-3.5 mr-1" /> Mapeamento</TabsTrigger>
+        <TabsTrigger value="import" className="text-xs"><Download className="h-3.5 w-3.5 mr-1" /> Importação</TabsTrigger>
+        <TabsTrigger value="sync" className="text-xs"><RefreshCw className="h-3.5 w-3.5 mr-1" /> Sync</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="connection">
+        <Card>
+          <CardHeader><CardTitle className="text-lg">Testar Conexão</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1"><Label className="text-xs text-muted-foreground">Endpoint</Label><p className="text-sm font-mono bg-muted rounded px-2 py-1 truncate">{client.api_endpoint}</p></div>
+              <div className="space-y-1"><Label className="text-xs text-muted-foreground">API Key</Label><p className="text-sm font-mono bg-muted rounded px-2 py-1">••••••{client.api_key?.slice(-6)}</p></div>
+            </div>
+            <Button onClick={handleTest} disabled={testing}><TestTube className="h-4 w-4 mr-2" />{testing ? "Testando..." : "Testar"}</Button>
+            {testResult && (
+              <div className={`rounded-lg border p-4 ${testResult.success ? "bg-green-50 border-green-200 dark:bg-green-950/20" : "bg-destructive/5 border-destructive/30"}`}>
+                <div className="flex items-center gap-2">
+                  {testResult.success ? <CheckCircle2 className="h-5 w-5 text-green-600" /> : <XCircle className="h-5 w-5 text-destructive" />}
+                  <p className="font-medium">{testResult.message}</p>
+                </div>
+                {testResult.total_pages && <p className="text-sm text-muted-foreground mt-2">{testResult.total_pages} páginas, {testResult.total_records} registros ({testResult.mode})</p>}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="mapping">
+        <Card>
+          <CardHeader><CardTitle className="text-lg">Mapeamento</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-3">
+              <Button onClick={handleFetchFields} disabled={fetchingFields} variant="outline">
+                <RefreshCw className={`h-4 w-4 mr-2 ${fetchingFields ? "animate-spin" : ""}`} />{fetchingFields ? "Buscando..." : "Buscar campos"}
+              </Button>
+              <Button onClick={handleAutoMap} disabled={autoMapping}>
+                <Link2 className={`h-4 w-4 mr-2 ${autoMapping ? "animate-spin" : ""}`} />{autoMapping ? "Mapeando..." : "Auto-mapear"}
+              </Button>
+            </div>
+            {erpFields?.plans?.length > 0 && (
+              <div className="space-y-2">
+                {erpFields.plans.map((ep: string) => {
+                  const mp = getMappingValue("plan", ep);
+                  return (
+                    <div key={ep} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20">
+                      <div className="flex-1"><p className="text-sm font-medium">{ep}</p></div>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                      <div className="flex-1">
+                        <Select value={mp.trilhoId || ""} onValueChange={(v) => { const p = plans.find((x: any) => x.id === v); handleSaveMapping("plan", ep, p?.name || v, v); }}>
+                          <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                          <SelectContent>{plans.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      {mp.trilhoId && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="import">
+        <Card>
+          <CardHeader><CardTitle className="text-lg">Importação</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <Button onClick={handleImport} disabled={importing} size="lg">
+              <Download className={`h-4 w-4 mr-2 ${importing ? "animate-bounce" : ""}`} />{importing ? "Importando..." : "Importar"}
+            </Button>
+            {(syncLogs as any[]).length > 0 && (
+              <div className="space-y-2 mt-4">
+                <h3 className="text-sm font-medium">Histórico</h3>
+                {(syncLogs as any[]).map((log: any) => (
+                  <div key={log.id} className="flex items-center justify-between p-3 rounded-lg border text-sm">
+                    <div className="flex items-center gap-2">
+                      {log.status === "success" && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+                      {log.status === "error" && <XCircle className="h-4 w-4 text-destructive" />}
+                      {log.status === "running" && <Clock className="h-4 w-4 text-primary animate-spin" />}
+                      <span className="capitalize">{log.sync_type}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {log.status === "success" && <span>{log.records_found}→{log.records_created}+{log.records_updated} </span>}
+                      {new Date(log.created_at).toLocaleString("pt-BR")}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="sync">
+        <Card>
+          <CardHeader><CardTitle className="text-lg">Sync Automático</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between p-4 rounded-lg border">
+              <div>
+                <p className="font-medium text-sm">Sync automático</p>
+                <p className="text-xs text-muted-foreground">Importa periodicamente</p>
+              </div>
+              <Switch checked={client.auto_sync_enabled || false} onCheckedChange={handleToggleAutoSync} />
+            </div>
+            {client.auto_sync_enabled && (
+              <Select value={String(client.sync_interval_minutes || 60)} onValueChange={handleChangeSyncInterval}>
+                <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="30">30 min</SelectItem>
+                  <SelectItem value="60">1 hora</SelectItem>
+                  <SelectItem value="360">6 horas</SelectItem>
+                  <SelectItem value="1440">Diário</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+    </Tabs>
   );
 }
 
@@ -687,7 +522,6 @@ export default function IntegrationsPage() {
 
   if (!tenantId) return <p className="text-muted-foreground p-4">Carregando...</p>;
 
-  // Operators only see UazapiGO (WhatsApp QR Code)
   if (!isAdmin) {
     return (
       <div className="space-y-6">
@@ -696,9 +530,7 @@ export default function IntegrationsPage() {
             <QrCode className="h-6 w-6 text-green-600" />
             Meu WhatsApp
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Conecte seu WhatsApp escaneando o QR Code abaixo.
-          </p>
+          <p className="text-sm text-muted-foreground">Conecte seu WhatsApp escaneando o QR Code abaixo.</p>
         </div>
         <OperatorWhatsApp tenantId={tenantId} />
       </div>
@@ -712,22 +544,14 @@ export default function IntegrationsPage() {
           <Link2 className="h-6 w-6 text-primary" />
           Integrações
         </h1>
-        <p className="text-sm text-muted-foreground">
-          Configure as integrações externas do seu sistema. Cada empresa configura suas próprias chaves de acesso.
-        </p>
+        <p className="text-sm text-muted-foreground">Configure as integrações externas do seu sistema.</p>
       </div>
 
       <Tabs defaultValue="uazapi" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="uazapi" className="flex items-center gap-2">
-            <QrCode className="h-4 w-4" /> UazapiGO
-          </TabsTrigger>
-          <TabsTrigger value="google" className="flex items-center gap-2">
-            <MapPin className="h-4 w-4" /> Google Maps
-          </TabsTrigger>
-          <TabsTrigger value="erp" className="flex items-center gap-2">
-            <Database className="h-4 w-4" /> ERP / Associações
-          </TabsTrigger>
+          <TabsTrigger value="uazapi" className="flex items-center gap-2"><QrCode className="h-4 w-4" /> UazapiGO</TabsTrigger>
+          <TabsTrigger value="google" className="flex items-center gap-2"><MapPin className="h-4 w-4" /> Google Maps</TabsTrigger>
+          <TabsTrigger value="erp" className="flex items-center gap-2"><Database className="h-4 w-4" /> ERP / Associações</TabsTrigger>
         </TabsList>
 
         <TabsContent value="uazapi">
