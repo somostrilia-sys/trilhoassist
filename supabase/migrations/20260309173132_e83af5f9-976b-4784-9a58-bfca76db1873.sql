@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS beneficiaries_client_plate_unique ON public.beneficiaries (client_id, vehicle_plate) WHERE vehicle_plate IS NOT NULL AND vehicle_plate <> '';
