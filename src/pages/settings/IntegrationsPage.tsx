@@ -325,17 +325,44 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
 
   const handleImport = async () => {
     setImporting(true);
+    setImportProgress(null);
     try {
-      const result = await callErpFunction("import");
-      queryClient.invalidateQueries({ queryKey: ["sync-logs"] });
-      toast({
-        title: "Importação concluída",
-        description: `${result.records_found} encontrados, ${result.records_created} criados, ${result.records_updated} atualizados`,
-      });
+      // First test to get page count for sincronismo clients
+      const testRes = await callErpFunction("test");
+      const isSincronismoClient = testRes.mode === "sincronismo" && testRes.total_pages > 3;
+      
+      if (isSincronismoClient) {
+        // Per-page import to avoid timeout
+        const totalPages = parseInt(testRes.total_pages);
+        let totalFound = 0, totalCreated = 0, totalUpdated = 0;
+        
+        for (let page = 1; page <= totalPages; page++) {
+          setImportProgress({ current: page, total: totalPages });
+          const result = await callErpFunction("import", { page });
+          totalFound += result.records_found || 0;
+          totalCreated += result.records_created || 0;
+          totalUpdated += result.records_updated || 0;
+        }
+        
+        queryClient.invalidateQueries({ queryKey: ["sync-logs"] });
+        toast({
+          title: "Importação concluída",
+          description: `${totalFound} encontrados, ${totalCreated} criados, ${totalUpdated} atualizados (${totalPages} páginas)`,
+        });
+      } else {
+        // Standard single-call import
+        const result = await callErpFunction("import");
+        queryClient.invalidateQueries({ queryKey: ["sync-logs"] });
+        toast({
+          title: "Importação concluída",
+          description: `${result.records_found} encontrados, ${result.records_created} criados, ${result.records_updated} atualizados`,
+        });
+      }
     } catch (err: any) {
       toast({ title: "Erro na importação", description: err.message, variant: "destructive" });
     } finally {
       setImporting(false);
+      setImportProgress(null);
     }
   };
 
