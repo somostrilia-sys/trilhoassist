@@ -25,6 +25,7 @@ interface ClientFormData {
   active: boolean;
   whatsapp_group_id: string;
   km_margin: string;
+  api_type: string;
 }
 
 const emptyForm: ClientFormData = {
