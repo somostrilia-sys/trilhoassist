@@ -111,7 +111,10 @@ function parseSincronismoRecord(record: any) {
   const name = record.nome_associado || "";
   const cpf = record.cpf || "";
   const chassis = record.chassi || "";
-  const vehicleModel = record.descricao_modelo || record.descricao_marca || "";
+  // Combine marca + modelo
+  const marca = record.descricao_marca || "";
+  const modelo = record.descricao_modelo || "";
+  const vehicleModel = (marca && modelo) ? `${marca} ${modelo}` : (marca || modelo || "");
   const vehicleColor = record.descricao_cor || "";
   const vehicleYear = record.ano_modelo || null;
   const cooperativa = record.nome_cooperativa || record.nome_voluntario || record.nome_regional || "";
@@ -126,9 +129,9 @@ function parseSincronismoRecord(record: any) {
     phone = tel;
   }
 
-  // Status: descricao_situacao contains "ATIVO" → active
-  const situacaoDesc = record.descricao_situacao || "";
-  const isActive = /^ATIVO$/i.test(situacaoDesc.trim());
+  // Status: descricao_situacao contains "ATIVO" (not "INATIVO")
+  const situacaoDesc = (record.descricao_situacao || "").toUpperCase();
+  const isActive = situacaoDesc.includes("ATIVO") && !situacaoDesc.includes("INATIVO");
 
   // Products: record.produtos is an object {"codigo": "nome"}
   const produtos = record.produtos || {};
