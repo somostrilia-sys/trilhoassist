@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
 
         await new Promise((r) => setTimeout(r, 150));
       } catch (e) {
-        errors.push(`${provider.name}: ${e.message}`);
+        errors.push(`${provider.name}: ${(e as Error).message}`);
         failed++;
       }
     }
