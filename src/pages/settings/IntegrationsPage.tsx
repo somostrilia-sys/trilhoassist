@@ -639,8 +639,25 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
                 </div>
                 <Button onClick={handleImport} disabled={importing} size="lg">
                   <Download className={`h-4 w-4 mr-2 ${importing ? "animate-bounce" : ""}`} />
-                  {importing ? "Importando..." : "Iniciar Importação"}
+                  {importing && importProgress
+                    ? `Importando página ${importProgress.current}/${importProgress.total}...`
+                    : importing
+                    ? "Importando..."
+                    : "Iniciar Importação"}
                 </Button>
+                {importing && importProgress && (
+                  <div className="mt-2">
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div
+                        className="bg-primary h-2 rounded-full transition-all"
+                        style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Página {importProgress.current} de {importProgress.total}
+                    </p>
+                  </div>
+                )}
                 {(syncLogs as any[]).length > 0 && (
                   <div className="space-y-2 mt-4">
                     <h3 className="text-sm font-medium">Histórico</h3>
