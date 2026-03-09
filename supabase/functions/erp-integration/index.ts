@@ -949,7 +949,7 @@ async function importSincronismoBeneficiariesCore(
     const chunk = toInsert.slice(i, i + BATCH_SIZE);
     const { data: inserted, error: insertErr } = await serviceSupabase
       .from("beneficiaries")
-      .upsert(chunk, { onConflict: "client_id,vehicle_plate", ignoreDuplicates: true })
+      .insert(chunk)
       .select("id");
     if (!insertErr) created += (inserted?.length || chunk.length);
     else console.error(`Sincronismo insert error (chunk ${i}):`, insertErr.message);
