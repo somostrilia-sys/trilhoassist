@@ -89,6 +89,7 @@ export type Database = {
           api_auth_header: string | null
           api_endpoint: string | null
           api_key: string | null
+          api_type: string
           auto_sync_enabled: boolean | null
           billing_model: string
           cnpj: string | null
@@ -108,6 +109,7 @@ export type Database = {
           api_auth_header?: string | null
           api_endpoint?: string | null
           api_key?: string | null
+          api_type?: string
           auto_sync_enabled?: boolean | null
           billing_model?: string
           cnpj?: string | null
@@ -127,6 +129,7 @@ export type Database = {
           api_auth_header?: string | null
           api_endpoint?: string | null
           api_key?: string | null
+          api_type?: string
           auto_sync_enabled?: boolean | null
           billing_model?: string
           cnpj?: string | null

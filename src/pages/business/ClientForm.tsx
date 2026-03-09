@@ -25,12 +25,13 @@ interface ClientFormData {
   active: boolean;
   whatsapp_group_id: string;
   km_margin: string;
+  api_type: string;
 }
 
 const emptyForm: ClientFormData = {
   name: "", cnpj: "", contact_email: "", contact_phone: "",
   api_endpoint: "", api_key: "", billing_model: "plate_plus_service", active: true,
-  whatsapp_group_id: "", km_margin: "10",
+  whatsapp_group_id: "", km_margin: "10", api_type: "standard",
 };
 
 export default function ClientForm() {
@@ -83,6 +84,7 @@ export default function ClientForm() {
         active: client.active,
         whatsapp_group_id: (client as any).whatsapp_group_id || "",
         km_margin: String((client as any).km_margin ?? 10),
+        api_type: (client as any).api_type || "standard",
       });
     }
   }, [client]);
@@ -105,6 +107,7 @@ export default function ClientForm() {
         tenant_id: tenantId,
         whatsapp_group_id: form.whatsapp_group_id || null,
         km_margin: form.km_margin ? parseInt(form.km_margin) : 10,
+        api_type: form.api_type,
       };
 
       if (isEdit) {
@@ -275,13 +278,35 @@ export default function ClientForm() {
             <CardDescription>Dados para integração com o sistema do cliente</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-3 mb-4">
+              <Label>Tipo de API</Label>
+              <RadioGroup
+                value={form.api_type}
+                onValueChange={(v) => updateField("api_type", v)}
+                className="flex gap-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="standard" id="api_standard" />
+                  <Label htmlFor="api_standard" className="cursor-pointer">Standard (POST)</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="sincronismo" id="api_sincronismo" />
+                  <Label htmlFor="api_sincronismo" className="cursor-pointer">Sincronismo Fornecedor (GET)</Label>
+                </div>
+              </RadioGroup>
+              {form.api_type === "sincronismo" && (
+                <p className="text-xs text-muted-foreground">
+                  Usa endpoints GET com paginação por URL path. Endpoint base ex: https://api.hinova.com.br/api/sga/v2
+                </p>
+              )}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="api_endpoint">Endpoint da API</Label>
-                <Input id="api_endpoint" value={form.api_endpoint} onChange={(e) => updateField("api_endpoint", e.target.value)} placeholder="https://api.cliente.com/v1" />
+                <Label htmlFor="api_endpoint">{form.api_type === "sincronismo" ? "URL Base da API" : "Endpoint da API"}</Label>
+                <Input id="api_endpoint" value={form.api_endpoint} onChange={(e) => updateField("api_endpoint", e.target.value)} placeholder={form.api_type === "sincronismo" ? "https://api.hinova.com.br/api/sga/v2" : "https://api.cliente.com/v1"} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="api_key">Chave da API</Label>
+                <Label htmlFor="api_key">{form.api_type === "sincronismo" ? "Token Bearer" : "Chave da API"}</Label>
                 <Input id="api_key" type="password" value={form.api_key} onChange={(e) => updateField("api_key", e.target.value)} placeholder="••••••••" />
               </div>
             </div>
