@@ -179,9 +179,11 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [erpFields, setErpFields] = useState<any>(null);
   const [fetchingFields, setFetchingFields] = useState(false);
   const [autoMapping, setAutoMapping] = useState(false);
+  const [autoMapResult, setAutoMapResult] = useState<any>(null);
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagResult, setDiagResult] = useState<any>(null);
 
