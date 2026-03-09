@@ -40,12 +40,10 @@ function buildSincronismoHeaders(apiKey: string): Record<string, string> {
   };
 }
 
-// ─── Sincronismo: fetch all pages via GET ───
-async function fetchSincronismoRecords(baseUrl: string, apiKey: string): Promise<any[]> {
+// ─── Sincronismo: get page count ───
+async function fetchSincronismoPageCount(baseUrl: string, apiKey: string): Promise<{ totalPages: number; totalRecords: number }> {
   const headers = buildSincronismoHeaders(apiKey);
   const base = baseUrl.replace(/\/+$/, "");
-
-  // Step 1: get total pages
   const countUrl = `${base}/sincronismo-produto/listar/pagina/quantidade-paginas`;
   console.log("Sincronismo: fetching page count from", countUrl);
   const countRes = await fetch(countUrl, { method: "GET", headers });
@@ -57,26 +55,36 @@ async function fetchSincronismoRecords(baseUrl: string, apiKey: string): Promise
   const totalPages = parseInt(countData.quantidade_paginas || countData.total_paginas || "0");
   const totalRecords = parseInt(countData.total_registros || "0");
   console.log(`Sincronismo: ${totalPages} pages, ${totalRecords} total records`);
+  return { totalPages, totalRecords };
+}
 
+// ─── Sincronismo: fetch a single page ───
+async function fetchSincronismoSinglePage(baseUrl: string, apiKey: string, pageNum: number): Promise<any[]> {
+  const headers = buildSincronismoHeaders(apiKey);
+  const base = baseUrl.replace(/\/+$/, "");
+  const pageUrl = `${base}/sincronismo-produto/listar/pagina/${pageNum}`;
+  console.log(`Sincronismo: fetching page ${pageNum}`);
+  const pageRes = await fetch(pageUrl, { method: "GET", headers });
+  if (!pageRes.ok) {
+    const text = await pageRes.text();
+    throw new Error(`Sincronismo page ${pageNum} failed (${pageRes.status}): ${text.substring(0, 200)}`);
+  }
+  const pageData = await pageRes.json();
+  const records = Array.isArray(pageData) ? pageData : extractRecords(pageData);
+  console.log(`Sincronismo page ${pageNum}: ${records.length} records`);
+  return records;
+}
+
+// ─── Sincronismo: fetch all pages via GET ───
+async function fetchSincronismoRecords(baseUrl: string, apiKey: string): Promise<any[]> {
+  const { totalPages } = await fetchSincronismoPageCount(baseUrl, apiKey);
   if (totalPages === 0) return [];
 
-  // Step 2: fetch each page
   const allRecords: any[] = [];
   for (let page = 1; page <= totalPages; page++) {
-    const pageUrl = `${base}/sincronismo-produto/listar/pagina/${page}`;
-    console.log(`Sincronismo: fetching page ${page}/${totalPages}`);
-    const pageRes = await fetch(pageUrl, { method: "GET", headers });
-    if (!pageRes.ok) {
-      console.error(`Sincronismo page ${page} failed: ${pageRes.status}`);
-      break;
-    }
-    const pageData = await pageRes.json();
-    // Response is an array of records
-    const records = Array.isArray(pageData) ? pageData : extractRecords(pageData);
-    console.log(`Sincronismo page ${page}: ${records.length} records`);
+    const records = await fetchSincronismoSinglePage(baseUrl, apiKey, page);
     allRecords.push(...records);
   }
-
   return allRecords;
 }
 
