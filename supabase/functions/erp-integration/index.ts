@@ -946,10 +946,21 @@ async function importSincronismoBeneficiariesCore(
     const chunk = toInsert.slice(i, i + BATCH_SIZE);
     const { data: inserted, error: insertErr } = await serviceSupabase
       .from("beneficiaries")
-      .upsert(chunk, { onConflict: "client_id,vehicle_plate", ignoreDuplicates: true })
+      .insert(chunk)
       .select("id");
-    if (!insertErr) created += (inserted?.length || chunk.length);
-    else console.error(`Sincronismo insert error (chunk ${i}):`, insertErr.message);
+    if (!insertErr) {
+      created += (inserted?.length || chunk.length);
+    } else {
+      console.error(`Sincronismo insert error (chunk ${i}):`, insertErr.message);
+      // Fallback: try one-by-one to salvage what we can
+      for (const row of chunk) {
+        const { error: singleErr } = await serviceSupabase
+          .from("beneficiaries")
+          .insert(row);
+        if (!singleErr) created++;
+        else console.error(`Sincronismo single insert error (plate ${row.vehicle_plate}):`, singleErr.message);
+      }
+    }
   }
 
   for (let i = 0; i < dedupedUpdate.length; i += BATCH_SIZE) {
