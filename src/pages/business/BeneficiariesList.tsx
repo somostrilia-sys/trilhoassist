@@ -197,7 +197,7 @@ export default function BeneficiariesList() {
         </Card>
       </div>
 
-      <div className="flex gap-3 items-center">
+      <div className="flex gap-3 items-center flex-wrap">
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -218,6 +218,19 @@ export default function BeneficiariesList() {
             ))}
           </SelectContent>
         </Select>
+        {clientFilter !== "all" && counts && (
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="text-sm px-3 py-1">
+              {counts.total.toLocaleString("pt-BR")} beneficiários
+            </Badge>
+            <Badge variant="outline" className="text-sm px-2 py-1 text-green-600 border-green-300">
+              {counts.active.toLocaleString("pt-BR")} ativos
+            </Badge>
+            <Badge variant="outline" className="text-sm px-2 py-1 text-destructive border-destructive/30">
+              {counts.inactive.toLocaleString("pt-BR")} inativos
+            </Badge>
+          </div>
+        )}
       </div>
 
       <Card>
