@@ -742,10 +742,12 @@ export type Database = {
           active: boolean
           created_at: string
           id: string
+          lodging_max_total: number | null
           lodging_max_value: number | null
           lodging_per: string | null
           max_km: number | null
           max_uses: number
+          notes: string | null
           period_days: number | null
           period_type: string
           plan_id: string
@@ -756,10 +758,12 @@ export type Database = {
           active?: boolean
           created_at?: string
           id?: string
+          lodging_max_total?: number | null
           lodging_max_value?: number | null
           lodging_per?: string | null
           max_km?: number | null
           max_uses?: number
+          notes?: string | null
           period_days?: number | null
           period_type?: string
           plan_id: string
@@ -770,10 +774,12 @@ export type Database = {
           active?: boolean
           created_at?: string
           id?: string
+          lodging_max_total?: number | null
           lodging_max_value?: number | null
           lodging_per?: string | null
           max_km?: number | null
           max_uses?: number
+          notes?: string | null
           period_days?: number | null
           period_type?: string
           plan_id?: string
@@ -2243,6 +2249,8 @@ export type Database = {
         | "other"
         | "collision"
         | "tow_utility"
+        | "return_home"
+        | "driver_friend"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2411,6 +2419,8 @@ export const Constants = {
         "other",
         "collision",
         "tow_utility",
+        "return_home",
+        "driver_friend",
       ],
     },
   },
