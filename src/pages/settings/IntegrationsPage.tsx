@@ -524,6 +524,20 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
                     <span className="font-medium">Auto-mapear:</span> Busca os códigos dos produtos no ERP, cria os planos automaticamente no sistema e conecta todos por código. Ideal para primeira configuração.
                   </p>
                 </div>
+                {autoMapResult && (
+                  <div className="rounded-lg border p-3 bg-green-50 border-green-200">
+                    <div className="flex items-center gap-2 mb-1">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <span className="text-sm font-medium text-green-800">Mapeamento concluído</span>
+                    </div>
+                    <div className="text-xs text-green-700 space-y-0.5">
+                      <p>🔍 {autoMapResult.products_found} produtos encontrados no ERP</p>
+                      <p>➕ {autoMapResult.plans_created} planos criados</p>
+                      <p>🔗 {autoMapResult.mappings_created} mapeamentos conectados</p>
+                      {autoMapResult.skipped > 0 && <p>⏭️ {autoMapResult.skipped} já existiam</p>}
+                    </div>
+                  </div>
+                )}
                 {erpFields && (
                   <div className="space-y-6">
                     {erpFields.plans?.length > 0 && (
