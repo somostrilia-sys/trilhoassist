@@ -610,9 +610,10 @@ Deno.serve(async (req) => {
       try {
         if (useSincronismo) {
           // ─── SINCRONISMO IMPORT ───
-          const result = await importSincronismoBeneficiariesCore(serviceSupabase, supabase, client, client_id, tenant_id);
+          const singlePage = body.page != null ? parseInt(body.page) : null;
+          const result = await importSincronismoBeneficiariesCore(serviceSupabase, supabase, client, client_id, tenant_id, singlePage);
           await updateSyncLog(serviceSupabase, syncLog.id, "success", result.records_found, result.records_created, result.records_updated, null);
-          return jsonResponse({ success: true, ...result });
+          return jsonResponse({ success: true, ...result, page: singlePage, total_pages: result.total_pages });
         }
 
         // ─── STANDARD IMPORT (existing logic) ───
