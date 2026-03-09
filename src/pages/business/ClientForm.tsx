@@ -107,6 +107,7 @@ export default function ClientForm() {
         tenant_id: tenantId,
         whatsapp_group_id: form.whatsapp_group_id || null,
         km_margin: form.km_margin ? parseInt(form.km_margin) : 10,
+        api_type: form.api_type,
       };
 
       if (isEdit) {
