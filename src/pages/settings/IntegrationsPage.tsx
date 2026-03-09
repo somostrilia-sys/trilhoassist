@@ -179,11 +179,9 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
   const [importing, setImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [erpFields, setErpFields] = useState<any>(null);
   const [fetchingFields, setFetchingFields] = useState(false);
   const [autoMapping, setAutoMapping] = useState(false);
-  const [autoMapResult, setAutoMapResult] = useState<any>(null);
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagResult, setDiagResult] = useState<any>(null);
 
@@ -289,16 +287,16 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
 
   const handleAutoMapProducts = async () => {
     setAutoMapping(true);
-    setAutoMapResult(null);
     try {
       const result = await callErpFunction("auto_map_products");
-      setAutoMapResult(result);
       queryClient.invalidateQueries({ queryKey: ["erp-mappings"] });
       queryClient.invalidateQueries({ queryKey: ["plans-for-mapping"] });
       toast({
         title: "Mapeamento automático concluído",
         description: `${result.products_found} produtos encontrados, ${result.plans_created} planos criados, ${result.mappings_created} mapeamentos conectados`,
       });
+      // Refresh fields
+      handleFetchFields();
     } catch (err: any) {
       toast({ title: "Erro no mapeamento automático", description: err.message, variant: "destructive" });
     } finally {
@@ -325,44 +323,17 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
 
   const handleImport = async () => {
     setImporting(true);
-    setImportProgress(null);
     try {
-      // First test to get page count for sincronismo clients
-      const testRes = await callErpFunction("test");
-      const isSincronismoClient = testRes.mode === "sincronismo" && testRes.total_pages > 3;
-      
-      if (isSincronismoClient) {
-        // Per-page import to avoid timeout
-        const totalPages = parseInt(testRes.total_pages);
-        let totalFound = 0, totalCreated = 0, totalUpdated = 0;
-        
-        for (let page = 1; page <= totalPages; page++) {
-          setImportProgress({ current: page, total: totalPages });
-          const result = await callErpFunction("import", { page });
-          totalFound += result.records_found || 0;
-          totalCreated += result.records_created || 0;
-          totalUpdated += result.records_updated || 0;
-        }
-        
-        queryClient.invalidateQueries({ queryKey: ["sync-logs"] });
-        toast({
-          title: "Importação concluída",
-          description: `${totalFound} encontrados, ${totalCreated} criados, ${totalUpdated} atualizados (${totalPages} páginas)`,
-        });
-      } else {
-        // Standard single-call import
-        const result = await callErpFunction("import");
-        queryClient.invalidateQueries({ queryKey: ["sync-logs"] });
-        toast({
-          title: "Importação concluída",
-          description: `${result.records_found} encontrados, ${result.records_created} criados, ${result.records_updated} atualizados`,
-        });
-      }
+      const result = await callErpFunction("import");
+      queryClient.invalidateQueries({ queryKey: ["sync-logs"] });
+      toast({
+        title: "Importação concluída",
+        description: `${result.records_found} encontrados, ${result.records_created} criados, ${result.records_updated} atualizados`,
+      });
     } catch (err: any) {
       toast({ title: "Erro na importação", description: err.message, variant: "destructive" });
     } finally {
       setImporting(false);
-      setImportProgress(null);
     }
   };
 
@@ -467,13 +438,6 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
                         <p className="text-xs text-muted-foreground">Campos: {testResult.sample_data.keys?.join(", ")}</p>
                       </div>
                     )}
-                    {testResult.mode === "sincronismo" && testResult.success && (
-                      <div className="mt-3 space-y-1">
-                        <p className="text-xs text-muted-foreground">📄 {testResult.total_pages} páginas</p>
-                        <p className="text-xs text-muted-foreground">📊 {testResult.total_records} registros totais</p>
-                        <p className="text-xs text-muted-foreground">🔄 Modo: Sincronismo Fornecedor (GET)</p>
-                      </div>
-                    )}
                   </div>
                 )}
                 {diagResult && (
@@ -531,20 +495,6 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
                     <span className="font-medium">Auto-mapear:</span> Busca os códigos dos produtos no ERP, cria os planos automaticamente no sistema e conecta todos por código. Ideal para primeira configuração.
                   </p>
                 </div>
-                {autoMapResult && (
-                  <div className="rounded-lg border p-3 bg-green-50 border-green-200">
-                    <div className="flex items-center gap-2 mb-1">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      <span className="text-sm font-medium text-green-800">Mapeamento concluído</span>
-                    </div>
-                    <div className="text-xs text-green-700 space-y-0.5">
-                      <p>🔍 {autoMapResult.products_found} produtos encontrados no ERP</p>
-                      <p>➕ {autoMapResult.plans_created} planos criados</p>
-                      <p>🔗 {autoMapResult.mappings_created} mapeamentos conectados</p>
-                      {autoMapResult.skipped > 0 && <p>⏭️ {autoMapResult.skipped} já existiam</p>}
-                    </div>
-                  </div>
-                )}
                 {erpFields && (
                   <div className="space-y-6">
                     {erpFields.plans?.length > 0 && (
@@ -660,25 +610,8 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
                 </div>
                 <Button onClick={handleImport} disabled={importing} size="lg">
                   <Download className={`h-4 w-4 mr-2 ${importing ? "animate-bounce" : ""}`} />
-                  {importing && importProgress
-                    ? `Importando página ${importProgress.current}/${importProgress.total}...`
-                    : importing
-                    ? "Importando..."
-                    : "Iniciar Importação"}
+                  {importing ? "Importando..." : "Iniciar Importação"}
                 </Button>
-                {importing && importProgress && (
-                  <div className="mt-2">
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div
-                        className="bg-primary h-2 rounded-full transition-all"
-                        style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Página {importProgress.current} de {importProgress.total}
-                    </p>
-                  </div>
-                )}
                 {(syncLogs as any[]).length > 0 && (
                   <div className="space-y-2 mt-4">
                     <h3 className="text-sm font-medium">Histórico</h3>
