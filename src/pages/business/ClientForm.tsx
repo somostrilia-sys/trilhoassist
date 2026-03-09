@@ -31,7 +31,7 @@ interface ClientFormData {
 const emptyForm: ClientFormData = {
   name: "", cnpj: "", contact_email: "", contact_phone: "",
   api_endpoint: "", api_key: "", billing_model: "plate_plus_service", active: true,
-  whatsapp_group_id: "", km_margin: "10",
+  whatsapp_group_id: "", km_margin: "10", api_type: "standard",
 };
 
 export default function ClientForm() {
