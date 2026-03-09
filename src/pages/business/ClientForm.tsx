@@ -84,6 +84,7 @@ export default function ClientForm() {
         active: client.active,
         whatsapp_group_id: (client as any).whatsapp_group_id || "",
         km_margin: String((client as any).km_margin ?? 10),
+        api_type: (client as any).api_type || "standard",
       });
     }
   }, [client]);
