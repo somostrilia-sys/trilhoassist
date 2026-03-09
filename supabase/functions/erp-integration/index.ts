@@ -40,12 +40,10 @@ function buildSincronismoHeaders(apiKey: string): Record<string, string> {
   };
 }
 
-// ─── Sincronismo: fetch all pages via GET ───
-async function fetchSincronismoRecords(baseUrl: string, apiKey: string): Promise<any[]> {
+// ─── Sincronismo: get page count + total ───
+async function fetchSincronismoPageCount(baseUrl: string, apiKey: string): Promise<{ totalPages: number; totalRecords: number }> {
   const headers = buildSincronismoHeaders(apiKey);
   const base = baseUrl.replace(/\/+$/, "");
-
-  // Step 1: get total pages
   const countUrl = `${base}/sincronismo-produto/listar/pagina/quantidade-paginas`;
   console.log("Sincronismo: fetching page count from", countUrl);
   const countRes = await fetch(countUrl, { method: "GET", headers });
@@ -56,27 +54,36 @@ async function fetchSincronismoRecords(baseUrl: string, apiKey: string): Promise
   const countData = await countRes.json();
   const totalPages = parseInt(countData.quantidade_paginas || countData.total_paginas || "0");
   const totalRecords = parseInt(countData.total_registros || "0");
-  console.log(`Sincronismo: ${totalPages} pages, ${totalRecords} total records`);
+  return { totalPages, totalRecords };
+}
 
+// ─── Sincronismo: fetch a single page via GET ───
+async function fetchSincronismoSinglePage(baseUrl: string, apiKey: string, page: number): Promise<any[]> {
+  const headers = buildSincronismoHeaders(apiKey);
+  const base = baseUrl.replace(/\/+$/, "");
+  const pageUrl = `${base}/sincronismo-produto/listar/pagina/${page}`;
+  console.log(`Sincronismo: fetching page ${page}`);
+  const pageRes = await fetch(pageUrl, { method: "GET", headers });
+  if (!pageRes.ok) {
+    const text = await pageRes.text();
+    throw new Error(`Sincronismo page ${page} failed (${pageRes.status}): ${text.substring(0, 200)}`);
+  }
+  const pageData = await pageRes.json();
+  return Array.isArray(pageData) ? pageData : extractRecords(pageData);
+}
+
+// ─── Sincronismo: fetch all pages via GET ───
+async function fetchSincronismoRecords(baseUrl: string, apiKey: string): Promise<any[]> {
+  const { totalPages } = await fetchSincronismoPageCount(baseUrl, apiKey);
+  console.log(`Sincronismo: ${totalPages} pages total`);
   if (totalPages === 0) return [];
 
-  // Step 2: fetch each page
   const allRecords: any[] = [];
   for (let page = 1; page <= totalPages; page++) {
-    const pageUrl = `${base}/sincronismo-produto/listar/pagina/${page}`;
-    console.log(`Sincronismo: fetching page ${page}/${totalPages}`);
-    const pageRes = await fetch(pageUrl, { method: "GET", headers });
-    if (!pageRes.ok) {
-      console.error(`Sincronismo page ${page} failed: ${pageRes.status}`);
-      break;
-    }
-    const pageData = await pageRes.json();
-    // Response is an array of records
-    const records = Array.isArray(pageData) ? pageData : extractRecords(pageData);
-    console.log(`Sincronismo page ${page}: ${records.length} records`);
+    const records = await fetchSincronismoSinglePage(baseUrl, apiKey, page);
+    console.log(`Sincronismo page ${page}/${totalPages}: ${records.length} records`);
     allRecords.push(...records);
   }
-
   return allRecords;
 }
 
@@ -602,6 +609,20 @@ Deno.serve(async (req) => {
       try {
         if (useSincronismo) {
           // ─── SINCRONISMO IMPORT ───
+          const requestedPage = body.page ? parseInt(body.page) : null;
+
+          if (requestedPage) {
+            // Single-page import (avoids timeout for large clients)
+            const { totalPages } = await fetchSincronismoPageCount(client.api_endpoint, client.api_key);
+            const records = await fetchSincronismoSinglePage(client.api_endpoint, client.api_key, requestedPage);
+            console.log(`Single-page import: page ${requestedPage}/${totalPages}, ${records.length} records`);
+
+            const result = await processSincronismoRecords(serviceSupabase, supabase, records, client_id, tenant_id);
+            await updateSyncLog(serviceSupabase, syncLog.id, "success", result.records_found, result.records_created, result.records_updated, null);
+            return jsonResponse({ success: true, ...result, total_pages: totalPages, page: requestedPage });
+          }
+
+          // Full import (all pages — may timeout for large clients)
           const result = await importSincronismoBeneficiariesCore(serviceSupabase, supabase, client, client_id, tenant_id);
           await updateSyncLog(serviceSupabase, syncLog.id, "success", result.records_found, result.records_created, result.records_updated, null);
           return jsonResponse({ success: true, ...result });
@@ -836,15 +857,12 @@ async function updateSyncLog(
     .eq("id", id);
 }
 
-// ─── SINCRONISMO IMPORT CORE (shared by manual & auto) ───
-async function importSincronismoBeneficiariesCore(
-  serviceSupabase: any, userSupabase: any, client: any, clientId: string, tenantId: string
+// ─── SINCRONISMO: process records (shared by single-page & full import) ───
+async function processSincronismoRecords(
+  serviceSupabase: any, userSupabase: any, records: any[], clientId: string, tenantId: string
 ) {
-  const records = await fetchSincronismoRecords(client.api_endpoint, client.api_key);
-  console.log("Sincronismo import - total records:", records.length);
-
   if (records.length === 0) {
-    throw new Error("Nenhum registro encontrado na API Sincronismo");
+    return { records_found: 0, records_created: 0, records_updated: 0 };
   }
 
   // Get mappings & plans
@@ -892,19 +910,11 @@ async function importSincronismoBeneficiariesCore(
     if (parsed.plate && seenPlates.has(parsed.plate)) continue;
     if (parsed.plate) seenPlates.add(parsed.plate);
 
-    // Resolve plan_id from produtos object
     let planId: string | null = null;
     if (parsed.produtos && typeof parsed.produtos === "object") {
       for (const [code, pName] of Object.entries(parsed.produtos)) {
-        // Try by mapping name first, then by erp_code
-        if (typeof pName === "string" && planMap.has(pName)) {
-          planId = planMap.get(pName)!;
-          break;
-        }
-        if (planByCode.has(code)) {
-          planId = planByCode.get(code)!;
-          break;
-        }
+        if (typeof pName === "string" && planMap.has(pName)) { planId = planMap.get(pName)!; break; }
+        if (planByCode.has(code)) { planId = planByCode.get(code)!; break; }
       }
     }
 
@@ -952,7 +962,6 @@ async function importSincronismoBeneficiariesCore(
       created += (inserted?.length || chunk.length);
     } else {
       console.error(`Sincronismo insert error (chunk ${i}):`, insertErr.message);
-      // Fallback: try one-by-one to salvage what we can
       for (const row of chunk) {
         const { error: singleErr } = await serviceSupabase
           .from("beneficiaries")
@@ -973,6 +982,20 @@ async function importSincronismoBeneficiariesCore(
   }
 
   return { records_found: records.length, records_created: created, records_updated: updated };
+}
+
+// ─── SINCRONISMO IMPORT CORE (shared by manual & auto) ───
+async function importSincronismoBeneficiariesCore(
+  serviceSupabase: any, userSupabase: any, client: any, clientId: string, tenantId: string
+) {
+  const records = await fetchSincronismoRecords(client.api_endpoint, client.api_key);
+  console.log("Sincronismo import - total records:", records.length);
+
+  if (records.length === 0) {
+    throw new Error("Nenhum registro encontrado na API Sincronismo");
+  }
+
+  return await processSincronismoRecords(serviceSupabase, userSupabase, records, clientId, tenantId);
 }
 
 // ─── SINCRONISMO: auto sync wrapper ───
