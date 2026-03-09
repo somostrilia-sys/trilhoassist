@@ -111,10 +111,7 @@ function parseSincronismoRecord(record: any) {
   const name = record.nome_associado || "";
   const cpf = record.cpf || "";
   const chassis = record.chassi || "";
-  // Combine marca + modelo
-  const marca = record.descricao_marca || "";
-  const modelo = record.descricao_modelo || "";
-  const vehicleModel = (marca && modelo) ? `${marca} ${modelo}` : (marca || modelo || "");
+  const vehicleModel = record.descricao_modelo || record.descricao_marca || "";
   const vehicleColor = record.descricao_cor || "";
   const vehicleYear = record.ano_modelo || null;
   const cooperativa = record.nome_cooperativa || record.nome_voluntario || record.nome_regional || "";
@@ -129,9 +126,9 @@ function parseSincronismoRecord(record: any) {
     phone = tel;
   }
 
-  // Status: descricao_situacao contains "ATIVO" (not "INATIVO")
-  const situacaoDesc = (record.descricao_situacao || "").toUpperCase();
-  const isActive = situacaoDesc.includes("ATIVO") && !situacaoDesc.includes("INATIVO");
+  // Status: descricao_situacao contains "ATIVO" → active
+  const situacaoDesc = record.descricao_situacao || "";
+  const isActive = /^ATIVO$/i.test(situacaoDesc.trim());
 
   // Products: record.produtos is an object {"codigo": "nome"}
   const produtos = record.produtos || {};
@@ -949,7 +946,7 @@ async function importSincronismoBeneficiariesCore(
     const chunk = toInsert.slice(i, i + BATCH_SIZE);
     const { data: inserted, error: insertErr } = await serviceSupabase
       .from("beneficiaries")
-      .insert(chunk)
+      .upsert(chunk, { onConflict: "client_id,vehicle_plate", ignoreDuplicates: true })
       .select("id");
     if (!insertErr) created += (inserted?.length || chunk.length);
     else console.error(`Sincronismo insert error (chunk ${i}):`, insertErr.message);
