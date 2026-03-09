@@ -289,16 +289,16 @@ function ErpIntegration({ tenantId }: { tenantId: string }) {
 
   const handleAutoMapProducts = async () => {
     setAutoMapping(true);
+    setAutoMapResult(null);
     try {
       const result = await callErpFunction("auto_map_products");
+      setAutoMapResult(result);
       queryClient.invalidateQueries({ queryKey: ["erp-mappings"] });
       queryClient.invalidateQueries({ queryKey: ["plans-for-mapping"] });
       toast({
         title: "Mapeamento automático concluído",
         description: `${result.products_found} produtos encontrados, ${result.plans_created} planos criados, ${result.mappings_created} mapeamentos conectados`,
       });
-      // Refresh fields
-      handleFetchFields();
     } catch (err: any) {
       toast({ title: "Erro no mapeamento automático", description: err.message, variant: "destructive" });
     } finally {
