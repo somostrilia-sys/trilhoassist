@@ -398,7 +398,14 @@ Deno.serve(async (req) => {
     if (action === "fetch_fields") {
       if (useSincronismo) {
         try {
-          const records = await fetchSincronismoRecords(client.api_endpoint, client.api_key);
+          // Only fetch first 2 pages as sample to avoid timeout
+          const { totalPages } = await fetchSincronismoPageCount(client.api_endpoint, client.api_key);
+          let records: any[] = [];
+          const pagesToFetch = Math.min(totalPages, 2);
+          for (let p = 1; p <= pagesToFetch; p++) {
+            const pageRecords = await fetchSincronismoSinglePage(client.api_endpoint, client.api_key, p);
+            records = records.concat(pageRecords);
+          }
           if (records.length === 0) {
             return jsonResponse({ success: true, fields: { plans: [], cooperativas: [], situacoes: [], sample_keys: [] } });
           }
