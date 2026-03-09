@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -16,20 +17,27 @@ import { Loader2, ArrowLeft, Save, Plus, Trash2 } from "lucide-react";
 import { PLAN_VEHICLE_CATEGORIES } from "@/lib/vehicleClassification";
 
 const SERVICE_OPTIONS = [
-  { value: "tow_light", label: "Guincho Leve" },
-  { value: "tow_heavy", label: "Guincho Pesado" },
-  { value: "tow_motorcycle", label: "Guincho Moto" },
-  { value: "locksmith", label: "Chaveiro" },
+  { value: "tow_light", label: "Reboque Leve" },
+  { value: "tow_heavy", label: "Reboque Pesado" },
+  { value: "tow_motorcycle", label: "Reboque Moto" },
+  { value: "tow_utility", label: "Reboque Utilitário" },
+  { value: "locksmith", label: "Chaveiro Automotivo" },
   { value: "tire_change", label: "Troca de Pneu" },
-  { value: "battery", label: "Bateria/Carga" },
-  { value: "fuel", label: "Pane Seca" },
+  { value: "battery", label: "Recarga de Bateria" },
+  { value: "fuel", label: "Envio de Combustível" },
   { value: "lodging", label: "Hospedagem" },
+  { value: "return_home", label: "Retorno ao Domicílio" },
+  { value: "driver_friend", label: "Motorista Amigo" },
+  { value: "collision", label: "Colisão" },
   { value: "other", label: "Outros" },
 ];
 
 const SERVICE_LABELS: Record<string, string> = Object.fromEntries(
   SERVICE_OPTIONS.map((s) => [s.value, s.label])
 );
+
+// Service types that support value limits (per person / total)
+const VALUE_SERVICE_TYPES = ["lodging", "return_home"];
 
 interface CoverageRow {
   id?: string;
@@ -40,6 +48,8 @@ interface CoverageRow {
   max_km: number | null;
   lodging_max_value: number | null;
   lodging_per: "person" | "vehicle" | null;
+  lodging_max_total: number | null;
+  notes: string | null;
   active: boolean;
 }
 
@@ -51,6 +61,8 @@ const emptyCoverage: CoverageRow = {
   max_km: null,
   lodging_max_value: null,
   lodging_per: null,
+  lodging_max_total: null,
+  notes: null,
   active: true,
 };
 
@@ -124,6 +136,8 @@ export default function PlanForm() {
         max_km: c.max_km,
         lodging_max_value: c.lodging_max_value,
         lodging_per: c.lodging_per,
+        lodging_max_total: c.lodging_max_total ?? null,
+        notes: c.notes ?? null,
         active: c.active,
       })));
     }
@@ -183,6 +197,8 @@ export default function PlanForm() {
             max_km: c.max_km,
             lodging_max_value: c.lodging_max_value,
             lodging_per: c.lodging_per,
+            lodging_max_total: c.lodging_max_total,
+            notes: c.notes,
             active: c.active,
           }));
 
@@ -306,7 +322,7 @@ export default function PlanForm() {
             )}
             {coverages.map((cov, index) => {
               const isTow = cov.service_type?.startsWith("tow_");
-              const isLodging = cov.service_type === "lodging";
+              const hasValueLimits = VALUE_SERVICE_TYPES.includes(cov.service_type);
               return (
                 <Card key={index} className="border-dashed">
                   <CardContent className="p-4 space-y-4">
@@ -379,16 +395,26 @@ export default function PlanForm() {
                           />
                         </div>
                       )}
-                      {isLodging && (
+                      {hasValueLimits && (
                         <>
                           <div className="space-y-2">
-                            <Label>Valor Máximo (R$)</Label>
+                            <Label>Valor Máx. por Pessoa (R$)</Label>
                             <Input
                               type="number"
                               step="0.01"
                               value={cov.lodging_max_value ?? ""}
                               onChange={(e) => updateCoverage(index, "lodging_max_value", e.target.value === "" ? null : Number(e.target.value))}
-                              placeholder="Ex: 150.00"
+                              placeholder="Ex: 100.00"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Valor Máx. Total (R$)</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={cov.lodging_max_total ?? ""}
+                              onChange={(e) => updateCoverage(index, "lodging_max_total", e.target.value === "" ? null : Number(e.target.value))}
+                              placeholder="Ex: 500.00"
                             />
                           </div>
                           <div className="space-y-2">
@@ -406,6 +432,18 @@ export default function PlanForm() {
                         </>
                       )}
                     </div>
+                    {/* Notes for exceptions/observations */}
+                    {hasValueLimits && (
+                      <div className="space-y-2">
+                        <Label>Observações / Exceções</Label>
+                        <Textarea
+                          value={cov.notes ?? ""}
+                          onChange={(e) => updateCoverage(index, "notes", e.target.value || null)}
+                          placeholder="Ex: Em caso de colisão ou roubo, limite de R$ 500,00"
+                          className="h-16"
+                        />
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               );
