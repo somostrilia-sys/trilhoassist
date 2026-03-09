@@ -710,26 +710,29 @@ Deno.serve(async (req) => {
           .eq("client_id", client_id);
         const planByCode = new Map((allPlans || []).filter((p: any) => p.erp_code).map((p: any) => [p.erp_code, p.id]));
 
-        let existingBeneficiaries: any[] = [];
-        let from = 0;
-        const PAGE_SIZE = 1000;
-        while (true) {
-          const { data: pg } = await serviceSupabase
+        // Extract all plates from ERP records first
+        const allPlates: string[] = [];
+        for (const record of records) {
+          const plate = record.placa || record.vehicle_plate || record.plate || "";
+          if (plate) allPlates.push(plate);
+        }
+
+        // Fetch ONLY existing beneficiaries matching these plates (in batches of 200)
+        const existingByPlate = new Map<string, string>();
+        const LOOKUP_BATCH = 200;
+        for (let i = 0; i < allPlates.length; i += LOOKUP_BATCH) {
+          const batch = allPlates.slice(i, i + LOOKUP_BATCH);
+          const { data: existing } = await serviceSupabase
             .from("beneficiaries")
             .select("id, vehicle_plate")
             .eq("client_id", client_id)
-            .range(from, from + PAGE_SIZE - 1);
-          if (!pg || pg.length === 0) break;
-          existingBeneficiaries = existingBeneficiaries.concat(pg);
-          if (pg.length < PAGE_SIZE) break;
-          from += PAGE_SIZE;
+            .in("vehicle_plate", batch);
+          if (existing) {
+            for (const b of existing) {
+              if (b.vehicle_plate) existingByPlate.set(b.vehicle_plate, b.id);
+            }
+          }
         }
-
-        const existingByPlate = new Map(
-          (existingBeneficiaries || [])
-            .filter((b: any) => b.vehicle_plate)
-            .map((b: any) => [b.vehicle_plate, b.id])
-        );
 
         const toInsert: any[] = [];
         const toUpdate: any[] = [];
