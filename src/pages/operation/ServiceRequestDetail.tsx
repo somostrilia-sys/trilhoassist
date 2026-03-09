@@ -1533,9 +1533,7 @@ ${etaStr ? `*PREVISÃO DE CHEGADA*: ${etaStr}` : ""}
                   <div>
                     <p className="text-sm font-medium mb-2">Vídeos</p>
                     {collisionMedia.filter(m => m.file_type === "video").map((m: any) => (
-                      <video key={m.id} controls className="w-full rounded-lg border mb-2" preload="metadata">
-                        <source src={m.file_url} type={m.mime_type || "video/mp4"} />
-                      </video>
+                      <video key={m.id} controls className="w-full rounded-lg border mb-2" preload="metadata" src={m.file_url} />
                     ))}
                   </div>
                 )}

@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { MapPin, Car, User, FileText, Camera, Mic, Video, File, Loader2, AlertTriangle } from "lucide-react";
+import { MapPin, Car, User, FileText, Camera, Mic, Video, File, Loader2, AlertTriangle, Download } from "lucide-react";
 
 const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   open: { label: "Aberto", variant: "default" },
@@ -270,10 +270,7 @@ export default function CollisionPublicView() {
             <CardContent className="space-y-3">
               {videos.map((v) => (
                 <div key={v.id}>
-                  <video controls className="w-full rounded-lg border" preload="metadata">
-                    <source src={v.file_url} type={v.mime_type || "video/mp4"} />
-                    Seu navegador não suporta vídeo.
-                  </video>
+                  <video controls className="w-full rounded-lg border" preload="metadata" src={v.file_url} />
                   <p className="text-xs text-muted-foreground mt-1">{v.file_name}</p>
                 </div>
               ))}
@@ -292,9 +289,10 @@ export default function CollisionPublicView() {
             <CardContent className="space-y-3">
               {audios.map((a) => (
                 <div key={a.id} className="flex items-center gap-3">
-                  <audio controls className="flex-1">
-                    <source src={a.file_url} type={a.mime_type || "audio/mpeg"} />
-                  </audio>
+                  <audio controls preload="metadata" className="flex-1" src={a.file_url} />
+                  <a href={a.file_url} download={a.file_name || "audio.webm"} target="_blank" rel="noopener noreferrer" className="shrink-0 text-primary hover:text-primary/80">
+                    <Download className="h-4 w-4" />
+                  </a>
                   <span className="text-xs text-muted-foreground shrink-0">{a.file_name}</span>
                 </div>
               ))}
