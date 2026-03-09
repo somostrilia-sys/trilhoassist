@@ -1,25 +1,20 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Auto-standardize cooperativa names from ERP
-// "FILIAL SANTO ANDRÉ" → "Santo André", "OBJETIVO CAPÃO REDONDO" → "Capão Redondo"
 function autoStandardizeCoop(raw: string): string {
   if (!raw) return raw;
   let name = raw.trim();
-  // Remove common prefixes (case-insensitive)
   name = name.replace(/^(FILIAL|OBJETIVO AUTO E TRUCK|OBJETIVO)\s+/i, "").trim();
-  // If still all uppercase, convert to title case
   if (name === name.toUpperCase() && name.length > 2) {
     name = name
       .toLowerCase()
       .split(/\s+/)
       .map(w => {
-        // Keep prepositions lowercase
         if (["de", "do", "da", "dos", "das", "e", "em"].includes(w)) return w;
         return w.charAt(0).toUpperCase() + w.slice(1);
       })
       .join(" ");
   }
-  // Handle "SãO" → "São" (common OCR/encoding issue)
   name = name.replace(/ã([A-Z])/g, (_, c) => `ã${c.toLowerCase()}`);
   return name;
 }
@@ -29,6 +24,117 @@ const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+// ─── Detect if client uses sincronismo API ───
+function isSincronismo(client: any): boolean {
+  if (client.api_type === "sincronismo") return true;
+  if (client.api_endpoint && client.api_endpoint.includes("sincronismo")) return true;
+  return false;
+}
+
+// ─── Sincronismo: build Bearer headers ───
+function buildSincronismoHeaders(apiKey: string): Record<string, string> {
+  return {
+    "Accept": "application/json",
+    "Authorization": `Bearer ${apiKey}`,
+  };
+}
+
+// ─── Sincronismo: fetch all pages via GET ───
+async function fetchSincronismoRecords(baseUrl: string, apiKey: string): Promise<any[]> {
+  const headers = buildSincronismoHeaders(apiKey);
+  const base = baseUrl.replace(/\/+$/, "");
+
+  // Step 1: get total pages
+  const countUrl = `${base}/sincronismo-produto/listar/pagina/quantidade-paginas`;
+  console.log("Sincronismo: fetching page count from", countUrl);
+  const countRes = await fetch(countUrl, { method: "GET", headers });
+  if (!countRes.ok) {
+    const text = await countRes.text();
+    throw new Error(`Sincronismo page count failed (${countRes.status}): ${text.substring(0, 200)}`);
+  }
+  const countData = await countRes.json();
+  const totalPages = parseInt(countData.quantidade_paginas || countData.total_paginas || "0");
+  const totalRecords = parseInt(countData.total_registros || "0");
+  console.log(`Sincronismo: ${totalPages} pages, ${totalRecords} total records`);
+
+  if (totalPages === 0) return [];
+
+  // Step 2: fetch each page
+  const allRecords: any[] = [];
+  for (let page = 1; page <= totalPages; page++) {
+    const pageUrl = `${base}/sincronismo-produto/listar/pagina/${page}`;
+    console.log(`Sincronismo: fetching page ${page}/${totalPages}`);
+    const pageRes = await fetch(pageUrl, { method: "GET", headers });
+    if (!pageRes.ok) {
+      console.error(`Sincronismo page ${page} failed: ${pageRes.status}`);
+      break;
+    }
+    const pageData = await pageRes.json();
+    // Response is an array of records
+    const records = Array.isArray(pageData) ? pageData : extractRecords(pageData);
+    console.log(`Sincronismo page ${page}: ${records.length} records`);
+    allRecords.push(...records);
+  }
+
+  return allRecords;
+}
+
+// ─── Sincronismo: fetch products map ───
+async function fetchSincronismoProducts(baseUrl: string, apiKey: string): Promise<Map<string, string>> {
+  const headers = buildSincronismoHeaders(apiKey);
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}/buscar/produtos-fornecedor-sincronismo`;
+  console.log("Sincronismo: fetching products from", url);
+  const res = await fetch(url, { method: "GET", headers });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Sincronismo products failed (${res.status}): ${text.substring(0, 200)}`);
+  }
+  const data = await res.json();
+  // data is {"codigo": "NOME_PRODUTO", ...}
+  const productMap = new Map<string, string>();
+  if (typeof data === "object" && data !== null) {
+    for (const [code, name] of Object.entries(data)) {
+      if (typeof name === "string") {
+        productMap.set(code, name);
+      }
+    }
+  }
+  console.log(`Sincronismo: found ${productMap.size} products`);
+  return productMap;
+}
+
+// ─── Sincronismo: extract beneficiary from record ───
+function parseSincronismoRecord(record: any) {
+  const plate = record.placa || "";
+  const name = record.nome_associado || "";
+  const cpf = record.cpf || "";
+  const chassis = record.chassi || "";
+  const vehicleModel = record.descricao_modelo || record.descricao_marca || "";
+  const vehicleColor = record.descricao_cor || "";
+  const vehicleYear = record.ano_modelo || null;
+  const cooperativa = record.nome_cooperativa || record.nome_voluntario || record.nome_regional || "";
+
+  // Phone: concat ddd_celular + telefone_celular
+  let phone = "";
+  const ddd = record.ddd_celular || "";
+  const tel = record.telefone_celular || "";
+  if (ddd && tel) {
+    phone = `(${ddd})${tel}`;
+  } else if (tel) {
+    phone = tel;
+  }
+
+  // Status: descricao_situacao contains "ATIVO" → active
+  const situacaoDesc = record.descricao_situacao || "";
+  const isActive = /^ATIVO$/i.test(situacaoDesc.trim());
+
+  // Products: record.produtos is an object {"codigo": "nome"}
+  const produtos = record.produtos || {};
+
+  return { plate, name, cpf, chassis, vehicleModel, vehicleColor, vehicleYear, cooperativa, phone, isActive, produtos };
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -104,7 +210,7 @@ Deno.serve(async (req) => {
 
       const { data: clients } = await serviceSupabase
         .from("clients")
-        .select("id, name, api_endpoint, api_key, api_auth_header, tenant_id, auto_sync_enabled")
+        .select("id, name, api_endpoint, api_key, api_auth_header, api_type, tenant_id, auto_sync_enabled")
         .eq("auto_sync_enabled", true);
 
       if (!clients || clients.length === 0) {
@@ -115,8 +221,13 @@ Deno.serve(async (req) => {
       for (const client of clients) {
         if (!client.api_endpoint || !client.api_key) continue;
         try {
-          const importResult = await importBeneficiaries(serviceSupabase, client, client.tenant_id, "automatic");
-          results.push({ client: client.name, ...importResult });
+          if (isSincronismo(client)) {
+            const importResult = await importSincronismoBeneficiaries(serviceSupabase, client, client.tenant_id, "automatic");
+            results.push({ client: client.name, mode: "sincronismo", ...importResult });
+          } else {
+            const importResult = await importBeneficiaries(serviceSupabase, client, client.tenant_id, "automatic");
+            results.push({ client: client.name, mode: "standard", ...importResult });
+          }
         } catch (err: any) {
           results.push({ client: client.name, error: err.message });
         }
@@ -151,10 +262,10 @@ Deno.serve(async (req) => {
 
     const { client_id, tenant_id } = body;
 
-    // Get client's API config
+    // Get client's API config (include api_type)
     const { data: client, error: clientError } = await supabase
       .from("clients")
-      .select("id, name, api_endpoint, api_key, api_auth_header")
+      .select("id, name, api_endpoint, api_key, api_auth_header, api_type")
       .eq("id", client_id)
       .single();
 
@@ -166,7 +277,9 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "API endpoint ou chave não configurados para este cliente" }, 400);
     }
 
-    // Build auth headers based on client config
+    const useSincronismo = isSincronismo(client);
+
+    // Build auth headers based on client config (standard mode)
     const buildApiHeaders = (apiKey: string, authHeaderType?: string) => {
       const h: Record<string, string> = { "Content-Type": "application/json", "Accept": "application/json" };
       const headerType = authHeaderType || "bearer";
@@ -183,19 +296,48 @@ Deno.serve(async (req) => {
     };
 
     const apiHeaders = buildApiHeaders(client.api_key, client.api_auth_header);
-    console.log("API headers keys:", Object.keys(apiHeaders), "authHeader config:", client.api_auth_header);
+    console.log("API mode:", useSincronismo ? "sincronismo" : "standard", "authHeader config:", client.api_auth_header);
 
     // ─── ACTION: TEST CONNECTION ───
     if (action === "test") {
+      if (useSincronismo) {
+        // Sincronismo test: GET page count
+        try {
+          const headers = buildSincronismoHeaders(client.api_key);
+          const base = client.api_endpoint.replace(/\/+$/, "");
+          const countUrl = `${base}/sincronismo-produto/listar/pagina/quantidade-paginas`;
+          const response = await fetch(countUrl, { method: "GET", headers });
+          if (!response.ok) {
+            const text = await response.text();
+            return jsonResponse({
+              success: false,
+              status: response.status,
+              message: `ERP retornou erro ${response.status}: ${text.substring(0, 200)}`,
+              mode: "sincronismo",
+            });
+          }
+          const data = await response.json();
+          return jsonResponse({
+            success: true,
+            status: response.status,
+            message: "Conexão bem-sucedida (Sincronismo Fornecedor)",
+            mode: "sincronismo",
+            total_pages: data.quantidade_paginas || data.total_paginas || 0,
+            total_records: data.total_registros || 0,
+          });
+        } catch (fetchErr: any) {
+          return jsonResponse({ success: false, message: `Erro ao conectar: ${fetchErr.message}`, mode: "sincronismo" });
+        }
+      }
+
+      // Standard test (existing logic)
       try {
-        // Use pagination params like import does - Hinova rejects empty body with 406
         let response = await fetch(client.api_endpoint, {
           method: "POST",
           headers: apiHeaders,
           body: JSON.stringify({ pagina: 1, quantidade: 5 }),
         });
 
-        // Fallback: POST with empty body
         if (!response.ok) {
           await response.text();
           response = await fetch(client.api_endpoint, {
@@ -227,7 +369,6 @@ Deno.serve(async (req) => {
 
         const data = await response.json();
         const rawKeys = typeof data === "object" && data !== null ? Object.keys(data) : [];
-        console.log("ERP raw response keys:", rawKeys);
 
         const records = extractRecords(data);
         const sampleFields = extractSampleFields(data);
@@ -241,15 +382,49 @@ Deno.serve(async (req) => {
           raw_keys: rawKeys,
         });
       } catch (fetchErr: any) {
-        return jsonResponse({
-          success: false,
-          message: `Erro ao conectar: ${fetchErr.message}`,
-        });
+        return jsonResponse({ success: false, message: `Erro ao conectar: ${fetchErr.message}` });
       }
     }
 
     // ─── ACTION: FETCH ERP DATA (for mapping preview) ───
     if (action === "fetch_fields") {
+      if (useSincronismo) {
+        try {
+          const records = await fetchSincronismoRecords(client.api_endpoint, client.api_key);
+          if (records.length === 0) {
+            return jsonResponse({ success: true, fields: { plans: [], cooperativas: [], situacoes: [], sample_keys: [] } });
+          }
+          // Extract unique fields from sincronismo records
+          const plans = new Set<string>();
+          const cooperativas = new Set<string>();
+          const situacoes = new Map<string, string>();
+          for (const r of records) {
+            const parsed = parseSincronismoRecord(r);
+            if (parsed.cooperativa) cooperativas.add(parsed.cooperativa);
+            const sitDesc = r.descricao_situacao || "";
+            if (sitDesc) situacoes.set(sitDesc, sitDesc);
+            // Extract product names from produtos object
+            if (r.produtos && typeof r.produtos === "object") {
+              for (const [, pName] of Object.entries(r.produtos)) {
+                if (typeof pName === "string") plans.add(pName);
+              }
+            }
+          }
+          return jsonResponse({
+            success: true,
+            fields: {
+              plans: [...plans].sort(),
+              cooperativas: [...cooperativas].sort(),
+              situacoes: [...situacoes.entries()].map(([code, desc]) => ({ code, description: desc })),
+              sample_keys: Object.keys(records[0]),
+            },
+          });
+        } catch (err: any) {
+          return jsonResponse({ error: `Erro ao buscar campos: ${err.message}` }, 500);
+        }
+      }
+
+      // Standard fetch_fields
       try {
         let response = await fetch(client.api_endpoint, {
           method: "POST",
@@ -286,35 +461,40 @@ Deno.serve(async (req) => {
       );
 
       try {
-        // Fetch ERP data
-        let response = await fetch(client.api_endpoint, {
-          method: "POST",
-          headers: apiHeaders,
-          body: JSON.stringify({}),
-        });
-        if (response.status === 405 || response.status === 404) {
-          response = await fetch(client.api_endpoint, { method: "GET", headers: apiHeaders });
-        }
-        if (!response.ok) {
-          const text = await response.text();
-          return jsonResponse({ error: `ERP erro ${response.status}: ${text.substring(0, 200)}` }, 500);
-        }
+        let productMap = new Map<string, string>(); // code -> description
 
-        const erpData = await response.json();
-        const records = extractRecords(erpData);
+        if (useSincronismo) {
+          // Sincronismo: use dedicated products endpoint
+          productMap = await fetchSincronismoProducts(client.api_endpoint, client.api_key);
+        } else {
+          // Standard: extract from records
+          let response = await fetch(client.api_endpoint, {
+            method: "POST",
+            headers: apiHeaders,
+            body: JSON.stringify({}),
+          });
+          if (response.status === 405 || response.status === 404) {
+            response = await fetch(client.api_endpoint, { method: "GET", headers: apiHeaders });
+          }
+          if (!response.ok) {
+            const text = await response.text();
+            return jsonResponse({ error: `ERP erro ${response.status}: ${text.substring(0, 200)}` }, 500);
+          }
 
-        // Extract unique products with code + description
-        const productMap = new Map<string, string>(); // code -> description
-        for (const r of records) {
-          const code = r.codigo_produto || r.cod_produto || r.product_code || r.codigo || "";
-          const desc = r.descricao_produto || r.produto || r.plano || r.plan || r.plan_name || r.nome_produto || "";
-          if (code && desc) {
-            productMap.set(String(code), desc);
+          const erpData = await response.json();
+          const records = extractRecords(erpData);
+
+          for (const r of records) {
+            const code = r.codigo_produto || r.cod_produto || r.product_code || r.codigo || "";
+            const desc = r.descricao_produto || r.produto || r.plano || r.plan || r.plan_name || r.nome_produto || "";
+            if (code && desc) {
+              productMap.set(String(code), desc);
+            }
           }
         }
 
         if (productMap.size === 0) {
-          return jsonResponse({ error: "Nenhum código de produto encontrado nos dados do ERP. Campos esperados: codigo_produto, cod_produto, product_code" }, 400);
+          return jsonResponse({ error: "Nenhum código de produto encontrado nos dados do ERP." }, 400);
         }
 
         // Get existing plans for this client
@@ -341,7 +521,6 @@ Deno.serve(async (req) => {
         for (const [code, description] of productMap) {
           let plan = existingByCode.get(code);
 
-          // Create plan if it doesn't exist with this code
           if (!plan) {
             const { data: newPlan, error: planErr } = await serviceSupabase
               .from("plans")
@@ -362,7 +541,6 @@ Deno.serve(async (req) => {
             plansCreated++;
           }
 
-          // Create/update mapping description -> plan_id
           if (!existingMappingByErp.has(description)) {
             await serviceSupabase.from("erp_field_mappings").insert({
               client_id,
@@ -374,7 +552,6 @@ Deno.serve(async (req) => {
             });
             mappingsCreated++;
           } else {
-            // Update existing mapping to point to correct plan
             const existing = existingMappingByErp.get(description);
             if (existing.trilho_id !== plan.id) {
               await serviceSupabase.from("erp_field_mappings")
@@ -401,7 +578,6 @@ Deno.serve(async (req) => {
 
     // ─── ACTION: IMPORT BENEFICIARIES ───
     if (action === "import") {
-      // Use service role client for sync log operations (bypasses RLS)
       const serviceSupabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -424,7 +600,14 @@ Deno.serve(async (req) => {
       }
 
       try {
-        // Fetch data from ERP with pagination (Hinova SGA v2 style)
+        if (useSincronismo) {
+          // ─── SINCRONISMO IMPORT ───
+          const result = await importSincronismoBeneficiariesCore(serviceSupabase, supabase, client, client_id, tenant_id);
+          await updateSyncLog(serviceSupabase, syncLog.id, "success", result.records_found, result.records_created, result.records_updated, null);
+          return jsonResponse({ success: true, ...result });
+        }
+
+        // ─── STANDARD IMPORT (existing logic) ───
         let allRecords: any[] = [];
         let page = 1;
         const pageSize = 1000;
@@ -438,11 +621,9 @@ Deno.serve(async (req) => {
             body: postBody,
           });
 
-          // Fallback: try without pagination on first page
           if (!response.ok && page === 1) {
             const firstStatus = response.status;
             await response.text();
-            // Try POST with empty body
             response = await fetch(client.api_endpoint, {
               method: "POST",
               headers: apiHeaders,
@@ -450,7 +631,6 @@ Deno.serve(async (req) => {
             });
             if (!response.ok) {
               await response.text();
-              // Try GET without Content-Type
               const getHeaders = { ...apiHeaders };
               delete getHeaders["Content-Type"];
               response = await fetch(client.api_endpoint, {
@@ -467,7 +647,7 @@ Deno.serve(async (req) => {
               await updateSyncLog(serviceSupabase, syncLog.id, "error", 0, 0, 0, `ERP erro ${response.status}: ${text.substring(0, 200)}`);
               return jsonResponse({ error: `ERP retornou erro ${response.status}` }, 500);
             }
-            break; // No more pages
+            break;
           }
 
           const erpData = await response.json();
@@ -479,7 +659,7 @@ Deno.serve(async (req) => {
           } else {
             allRecords = allRecords.concat(pageRecords);
             if (pageRecords.length < pageSize) {
-              hasMore = false; // Last page
+              hasMore = false;
             } else {
               page++;
             }
@@ -494,7 +674,6 @@ Deno.serve(async (req) => {
           return jsonResponse({ error: "Nenhum registro encontrado na resposta do ERP" }, 400);
         }
 
-        // Get field mappings for this client
         const { data: mappings } = await supabase
           .from("erp_field_mappings")
           .select("*")
@@ -502,32 +681,28 @@ Deno.serve(async (req) => {
 
         const planMap = new Map((mappings || []).filter((m: any) => m.field_type === "plan").map((m: any) => [m.erp_value, m.trilho_id]));
         const coopMap = new Map((mappings || []).filter((m: any) => m.field_type === "cooperativa").map((m: any) => [m.erp_value, m.trilho_value]));
-        // situacao mapping: erp_value = codigo_situacao, trilho_value = "active" or "inactive"
         const situacaoMap = new Map((mappings || []).filter((m: any) => m.field_type === "situacao").map((m: any) => [m.erp_value, m.trilho_value]));
 
-        // Also build a plan lookup by erp_code for direct code matching
         const { data: allPlans } = await serviceSupabase
           .from("plans")
           .select("id, erp_code")
           .eq("client_id", client_id);
         const planByCode = new Map((allPlans || []).filter((p: any) => p.erp_code).map((p: any) => [p.erp_code, p.id]));
 
-        // Fetch ALL existing beneficiaries (paginate to bypass 1000 row limit)
         let existingBeneficiaries: any[] = [];
         let from = 0;
         const PAGE_SIZE = 1000;
         while (true) {
-          const { data: page } = await serviceSupabase
+          const { data: pg } = await serviceSupabase
             .from("beneficiaries")
             .select("id, vehicle_plate")
             .eq("client_id", client_id)
             .range(from, from + PAGE_SIZE - 1);
-          if (!page || page.length === 0) break;
-          existingBeneficiaries = existingBeneficiaries.concat(page);
-          if (page.length < PAGE_SIZE) break;
+          if (!pg || pg.length === 0) break;
+          existingBeneficiaries = existingBeneficiaries.concat(pg);
+          if (pg.length < PAGE_SIZE) break;
           from += PAGE_SIZE;
         }
-        console.log("Existing beneficiaries loaded:", existingBeneficiaries.length);
 
         const existingByPlate = new Map(
           (existingBeneficiaries || [])
@@ -537,7 +712,7 @@ Deno.serve(async (req) => {
 
         const toInsert: any[] = [];
         const toUpdate: any[] = [];
-        const seenPlates = new Set<string>(); // Deduplicate plates from ERP
+        const seenPlates = new Set<string>();
 
         for (const record of records) {
           const plate = record.placa || record.vehicle_plate || record.plate || "";
@@ -552,7 +727,6 @@ Deno.serve(async (req) => {
           const erpCoop = record.nome_cooperativa || record.cooperativa || record.coop || record.cooperative || record.descricao_cooperativa || "";
 
           if (!name && !plate) continue;
-          // Skip duplicate plates in the same ERP response
           if (plate && seenPlates.has(plate)) continue;
           if (plate) seenPlates.add(plate);
 
@@ -561,63 +735,43 @@ Deno.serve(async (req) => {
           const cooperativa = coopMap.get(erpCoop) || autoStandardizeCoop(erpCoop);
           const parsedYear = vehicleYear ? parseInt(vehicleYear) : null;
 
-          // Resolve active status: check manual mapping first, then auto-detect from description
           const erpSituacao = record.codigo_situacao || record.codigo_situacao_associado || "";
           const erpSituacaoDesc = record.descricao_situacao || record.descricao_situacao_associado || "";
-          let isActive = true; // default active
+          let isActive = true;
           if (erpSituacao && situacaoMap.has(String(erpSituacao))) {
             isActive = situacaoMap.get(String(erpSituacao)) === "active";
           } else if (erpSituacaoDesc) {
-            // Auto-detect: only descriptions containing "ativo" (case insensitive) are active
             isActive = /ativo/i.test(erpSituacaoDesc);
           }
 
           const existingId = existingByPlate.get(plate);
           if (existingId) {
             toUpdate.push({
-              id: existingId,
-              client_id,
-              name,
-              phone: phone || null,
-              cpf: cpf || null,
-              vehicle_model: vehicleModel || null,
-              vehicle_year: parsedYear,
-              vehicle_chassis: vehicleChassis || null,
-              vehicle_color: vehicleColor || null,
-              plan_id: planId,
-              cooperativa: cooperativa || null,
-              active: isActive,
+              id: existingId, client_id, name, phone: phone || null, cpf: cpf || null,
+              vehicle_model: vehicleModel || null, vehicle_year: parsedYear,
+              vehicle_chassis: vehicleChassis || null, vehicle_color: vehicleColor || null,
+              plan_id: planId, cooperativa: cooperativa || null, active: isActive,
             });
           } else {
             toInsert.push({
-              client_id,
-              name,
-              vehicle_plate: plate,
-              phone: phone || null,
-              cpf: cpf || null,
-              vehicle_model: vehicleModel || null,
-              vehicle_year: parsedYear,
-              vehicle_chassis: vehicleChassis || null,
-              vehicle_color: vehicleColor || null,
-              plan_id: planId,
-              cooperativa: cooperativa || null,
-              active: isActive,
+              client_id, name, vehicle_plate: plate, phone: phone || null, cpf: cpf || null,
+              vehicle_model: vehicleModel || null, vehicle_year: parsedYear,
+              vehicle_chassis: vehicleChassis || null, vehicle_color: vehicleColor || null,
+              plan_id: planId, cooperativa: cooperativa || null, active: isActive,
             });
           }
         }
 
-        // Deduplicate toUpdate by id (keep last)
         const updateMap = new Map();
         for (const row of toUpdate) { updateMap.set(row.id, row); }
         const dedupedUpdate = Array.from(updateMap.values());
 
-        console.log(`To insert: ${toInsert.length}, to update: ${dedupedUpdate.length} (deduped from ${toUpdate.length})`);
+        console.log(`To insert: ${toInsert.length}, to update: ${dedupedUpdate.length}`);
 
         let created = 0;
         let updated = 0;
-
-        // Batch insert in chunks of 500 (ignore duplicates via onConflict)
         const BATCH_SIZE = 500;
+
         for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
           const chunk = toInsert.slice(i, i + BATCH_SIZE);
           const { data: inserted, error: insertErr } = await serviceSupabase
@@ -628,7 +782,6 @@ Deno.serve(async (req) => {
           else console.error(`Batch insert error (chunk ${i}):`, insertErr.message);
         }
 
-        // Batch update in chunks of 500
         for (let i = 0; i < dedupedUpdate.length; i += BATCH_SIZE) {
           const chunk = dedupedUpdate.slice(i, i + BATCH_SIZE);
           const { error: upsertErr } = await serviceSupabase
@@ -637,8 +790,6 @@ Deno.serve(async (req) => {
           if (!upsertErr) updated += chunk.length;
           else console.error(`Batch upsert error (chunk ${i}):`, upsertErr.message);
         }
-
-        console.log(`Import complete: ${created} created, ${updated} updated`);
 
         await updateSyncLog(serviceSupabase, syncLog.id, "success", records.length, created, updated, null);
 
@@ -672,27 +823,166 @@ function jsonResponse(data: any, status = 200) {
 }
 
 async function updateSyncLog(
-  supabase: any,
-  id: string,
-  status: string,
-  found: number,
-  created: number,
-  updated: number,
-  error: string | null
+  supabase: any, id: string, status: string,
+  found: number, created: number, updated: number, error: string | null
 ) {
   await supabase
     .from("erp_sync_logs")
     .update({
-      status,
-      records_found: found,
-      records_created: created,
-      records_updated: updated,
-      error_message: error,
+      status, records_found: found, records_created: created,
+      records_updated: updated, error_message: error,
       completed_at: new Date().toISOString(),
     })
     .eq("id", id);
 }
 
+// ─── SINCRONISMO IMPORT CORE (shared by manual & auto) ───
+async function importSincronismoBeneficiariesCore(
+  serviceSupabase: any, userSupabase: any, client: any, clientId: string, tenantId: string
+) {
+  const records = await fetchSincronismoRecords(client.api_endpoint, client.api_key);
+  console.log("Sincronismo import - total records:", records.length);
+
+  if (records.length === 0) {
+    throw new Error("Nenhum registro encontrado na API Sincronismo");
+  }
+
+  // Get mappings & plans
+  const { data: mappings } = await userSupabase
+    .from("erp_field_mappings")
+    .select("*")
+    .eq("client_id", clientId);
+
+  const planMap = new Map((mappings || []).filter((m: any) => m.field_type === "plan").map((m: any) => [m.erp_value, m.trilho_id]));
+  const coopMap = new Map((mappings || []).filter((m: any) => m.field_type === "cooperativa").map((m: any) => [m.erp_value, m.trilho_value]));
+
+  const { data: allPlans } = await serviceSupabase
+    .from("plans")
+    .select("id, erp_code")
+    .eq("client_id", clientId);
+  const planByCode = new Map((allPlans || []).filter((p: any) => p.erp_code).map((p: any) => [p.erp_code, p.id]));
+
+  // Fetch existing beneficiaries
+  let existingBeneficiaries: any[] = [];
+  let from = 0;
+  const PAGE_SIZE = 1000;
+  while (true) {
+    const { data: pg } = await serviceSupabase
+      .from("beneficiaries")
+      .select("id, vehicle_plate")
+      .eq("client_id", clientId)
+      .range(from, from + PAGE_SIZE - 1);
+    if (!pg || pg.length === 0) break;
+    existingBeneficiaries = existingBeneficiaries.concat(pg);
+    if (pg.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  const existingByPlate = new Map(
+    existingBeneficiaries.filter((b: any) => b.vehicle_plate).map((b: any) => [b.vehicle_plate, b.id])
+  );
+
+  const toInsert: any[] = [];
+  const toUpdate: any[] = [];
+  const seenPlates = new Set<string>();
+
+  for (const record of records) {
+    const parsed = parseSincronismoRecord(record);
+    if (!parsed.name && !parsed.plate) continue;
+    if (parsed.plate && seenPlates.has(parsed.plate)) continue;
+    if (parsed.plate) seenPlates.add(parsed.plate);
+
+    // Resolve plan_id from produtos object
+    let planId: string | null = null;
+    if (parsed.produtos && typeof parsed.produtos === "object") {
+      for (const [code, pName] of Object.entries(parsed.produtos)) {
+        // Try by mapping name first, then by erp_code
+        if (typeof pName === "string" && planMap.has(pName)) {
+          planId = planMap.get(pName)!;
+          break;
+        }
+        if (planByCode.has(code)) {
+          planId = planByCode.get(code)!;
+          break;
+        }
+      }
+    }
+
+    const cooperativa = coopMap.get(parsed.cooperativa) || autoStandardizeCoop(parsed.cooperativa);
+    const parsedYear = parsed.vehicleYear ? parseInt(parsed.vehicleYear) : null;
+
+    const beneficiaryData = {
+      name: parsed.name,
+      phone: parsed.phone || null,
+      cpf: parsed.cpf || null,
+      vehicle_model: parsed.vehicleModel || null,
+      vehicle_year: parsedYear,
+      vehicle_chassis: parsed.chassis || null,
+      vehicle_color: parsed.vehicleColor || null,
+      plan_id: planId,
+      cooperativa: cooperativa || null,
+      active: parsed.isActive,
+    };
+
+    const existingId = existingByPlate.get(parsed.plate);
+    if (existingId) {
+      toUpdate.push({ id: existingId, client_id: clientId, ...beneficiaryData });
+    } else {
+      toInsert.push({ client_id: clientId, vehicle_plate: parsed.plate, ...beneficiaryData });
+    }
+  }
+
+  const updateMap = new Map();
+  for (const row of toUpdate) { updateMap.set(row.id, row); }
+  const dedupedUpdate = Array.from(updateMap.values());
+
+  console.log(`Sincronismo - To insert: ${toInsert.length}, to update: ${dedupedUpdate.length}`);
+
+  let created = 0;
+  let updated = 0;
+  const BATCH_SIZE = 500;
+
+  for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+    const chunk = toInsert.slice(i, i + BATCH_SIZE);
+    const { data: inserted, error: insertErr } = await serviceSupabase
+      .from("beneficiaries")
+      .upsert(chunk, { onConflict: "client_id,vehicle_plate", ignoreDuplicates: true })
+      .select("id");
+    if (!insertErr) created += (inserted?.length || chunk.length);
+    else console.error(`Sincronismo insert error (chunk ${i}):`, insertErr.message);
+  }
+
+  for (let i = 0; i < dedupedUpdate.length; i += BATCH_SIZE) {
+    const chunk = dedupedUpdate.slice(i, i + BATCH_SIZE);
+    const { error: upsertErr } = await serviceSupabase
+      .from("beneficiaries")
+      .upsert(chunk, { onConflict: "id" });
+    if (!upsertErr) updated += chunk.length;
+    else console.error(`Sincronismo upsert error (chunk ${i}):`, upsertErr.message);
+  }
+
+  return { records_found: records.length, records_created: created, records_updated: updated };
+}
+
+// ─── SINCRONISMO: auto sync wrapper ───
+async function importSincronismoBeneficiaries(supabase: any, client: any, tenantId: string, syncType: string) {
+  const { data: syncLog } = await supabase
+    .from("erp_sync_logs")
+    .insert({ client_id: client.id, tenant_id: tenantId, sync_type: syncType, status: "running" })
+    .select()
+    .single();
+
+  try {
+    const result = await importSincronismoBeneficiariesCore(supabase, supabase, client, client.id, tenantId);
+    if (syncLog) await updateSyncLog(supabase, syncLog.id, "success", result.records_found, result.records_created, result.records_updated, null);
+    return result;
+  } catch (err: any) {
+    if (syncLog) await updateSyncLog(supabase, syncLog.id, "error", 0, 0, 0, err.message);
+    return { error: err.message };
+  }
+}
+
+// ─── STANDARD: auto sync import (existing) ───
 async function importBeneficiaries(supabase: any, client: any, tenantId: string, syncType: string) {
   const { data: syncLog } = await supabase
     .from("erp_sync_logs")
@@ -741,17 +1031,14 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
       return { error: "Nenhum registro encontrado" };
     }
 
-    // Get all mappings (plan, cooperativa, situacao)
     const { data: mappings } = await supabase.from("erp_field_mappings").select("*").eq("client_id", client.id);
     const planMap = new Map((mappings || []).filter((m: any) => m.field_type === "plan").map((m: any) => [m.erp_value, m.trilho_id]));
     const coopMap = new Map((mappings || []).filter((m: any) => m.field_type === "cooperativa").map((m: any) => [m.erp_value, m.trilho_value]));
     const situacaoMap = new Map((mappings || []).filter((m: any) => m.field_type === "situacao").map((m: any) => [m.erp_value, m.trilho_value]));
 
-    // Plan lookup by erp_code
     const { data: allPlans } = await supabase.from("plans").select("id, erp_code").eq("client_id", client.id);
     const planByCode = new Map((allPlans || []).filter((p: any) => p.erp_code).map((p: any) => [p.erp_code, p.id]));
 
-    // Fetch ALL existing beneficiaries (paginate)
     let existingBeneficiaries: any[] = [];
     let from = 0;
     const PAGE_SIZE = 1000;
@@ -818,12 +1105,9 @@ async function importBeneficiaries(supabase: any, client: any, tenantId: string,
       }
     }
 
-    // Deduplicate toUpdate by id (keep last)
     const updateMap = new Map();
     for (const row of toUpdate) { updateMap.set(row.id, row); }
     const dedupedUpdate = Array.from(updateMap.values());
-
-    console.log(`Auto sync - To insert: ${toInsert.length}, to update: ${dedupedUpdate.length} (deduped from ${toUpdate.length})`);
 
     let created = 0, updated = 0;
     const BATCH_SIZE = 500;
@@ -858,13 +1142,11 @@ function extractRecords(data: any): any[] {
   if (Array.isArray(data)) return data;
   if (typeof data !== "object" || data === null) return [];
   
-  // Try common keys
   const commonKeys = ["data", "results", "beneficiarios", "registros", "items", "lista", "produtos", "content", "records"];
   for (const key of commonKeys) {
     if (Array.isArray(data[key])) return data[key];
   }
   
-  // Try any key that contains an array
   for (const key of Object.keys(data)) {
     if (Array.isArray(data[key]) && data[key].length > 0 && typeof data[key][0] === "object") {
       console.log(`extractRecords: found array in key "${key}" with ${data[key].length} items`);
@@ -873,7 +1155,6 @@ function extractRecords(data: any): any[] {
   }
   
   // Handle Hinova-style response: {"0": {record}, "1": {record}, "quantidade_veiculos": 1}
-  // Filter numeric keys whose values are objects
   const keys = Object.keys(data);
   const numericObjectKeys = keys.filter(k => /^\d+$/.test(k) && typeof data[k] === "object" && data[k] !== null && !Array.isArray(data[k]));
   if (numericObjectKeys.length > 0) {
@@ -881,7 +1162,6 @@ function extractRecords(data: any): any[] {
     return numericObjectKeys.map(k => data[k]);
   }
   
-  // If response is a single object with typical record fields, wrap it
   if (data.placa || data.nome || data.name || data.plate || data.nome_associado) {
     return [data];
   }
@@ -901,12 +1181,9 @@ function extractUniqueFields(data: any): any {
   if (records.length === 0) return { plans: [], cooperativas: [], situacoes: [], sample_keys: [] };
   
   const sampleKeys = Object.keys(records[0]);
-  console.log("extractUniqueFields sample keys:", sampleKeys);
-  console.log("extractUniqueFields sample values:", JSON.stringify(records[0]).substring(0, 1000));
-  
   const plans = new Set<string>();
   const cooperativas = new Set<string>();
-  const situacoes = new Map<string, string>(); // code -> description
+  const situacoes = new Map<string, string>();
   for (const r of records) {
     const plan = r.descricao_produto || r.produto || r.plano || r.plan || r.plan_name || r.nome_produto || "";
     const coop = r.nome_cooperativa || r.descricao_cooperativa || r.cooperativa || r.coop || r.cooperative || r.unidade || "";
