@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
     }
 
     // Helper: configure webhook separately via POST /webhook (UazapiGO ignores webhook in /instance/create)
-    async function configureWebhook(instanceToken: string, tenantId: string): Promise<void> {
+    async function configureWebhook2(instanceToken: string, tenantId: string): Promise<void> {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?tenant=${tenantId}&source=uazapi`;
       const webhookBody = {

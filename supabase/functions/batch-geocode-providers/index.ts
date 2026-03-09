@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
 
         await new Promise((r) => setTimeout(r, 150));
       } catch (e) {
-        errors.push(`${provider.name}: ${e.message}`);
+        errors.push(`${provider.name}: ${(e as Error).message}`);
         failed++;
       }
     }
@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("Batch geocode error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
