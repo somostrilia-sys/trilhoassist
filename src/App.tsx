@@ -109,6 +109,7 @@ const App = () => (
               <Route path="/client/dashboard" element={<ClientDashboard />} />
               <Route path="/client/requests" element={<ClientRequests />} />
               <Route path="/client/reports" element={<ClientReports />} />
+              <Route path="/client/beneficiaries" element={<ClientBeneficiaries />} />
               <Route path="/client/plates" element={<ClientPlates />} />
             </Route>
 
