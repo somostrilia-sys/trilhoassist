@@ -83,6 +83,50 @@ export type Database = {
           },
         ]
       }
+      client_representatives: {
+        Row: {
+          active: boolean
+          client_id: string
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          phone: string | null
+          role: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          client_id: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          role?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          client_id?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          role?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_representatives_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           active: boolean
@@ -1272,6 +1316,7 @@ export type Database = {
           plan_id: string | null
           protocol: string
           provider_cost: number | null
+          requested_by_representative_id: string | null
           requester_email: string | null
           requester_name: string
           requester_phone: string
@@ -1317,6 +1362,7 @@ export type Database = {
           plan_id?: string | null
           protocol: string
           provider_cost?: number | null
+          requested_by_representative_id?: string | null
           requester_email?: string | null
           requester_name: string
           requester_phone: string
@@ -1362,6 +1408,7 @@ export type Database = {
           plan_id?: string | null
           protocol?: string
           provider_cost?: number | null
+          requested_by_representative_id?: string | null
           requester_email?: string | null
           requester_name?: string
           requester_phone?: string
@@ -1400,6 +1447,13 @@ export type Database = {
             columns: ["plan_id"]
             isOneToOne: false
             referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_requests_requested_by_representative_id_fkey"
+            columns: ["requested_by_representative_id"]
+            isOneToOne: false
+            referencedRelation: "client_representatives"
             referencedColumns: ["id"]
           },
           {

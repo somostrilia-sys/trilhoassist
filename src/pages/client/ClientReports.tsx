@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useClientData } from "@/hooks/useClientData";
 import {
   Search, Download, MapPin, Route, DollarSign, FileText, Car,
-  ArrowRight, Calendar, Filter,
+  ArrowRight, Calendar, Filter, Clock, Truck, Users,
 } from "lucide-react";
 
 const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -25,6 +25,7 @@ const SERVICE_LABELS: Record<string, string> = {
   tow_light: "Guincho Leve",
   tow_heavy: "Guincho Pesado",
   tow_motorcycle: "Guincho Moto",
+  tow_utility: "Reboque Utilitário",
   locksmith: "Chaveiro",
   tire_change: "Troca de Pneu",
   battery: "Bateria",
@@ -37,14 +38,19 @@ const SERVICE_LABELS: Record<string, string> = {
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
+const fmtDate = (d: string) => new Date(d).toLocaleDateString("pt-BR");
+const fmtDateTime = (d: string) => new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
 export default function ClientReports() {
-  const { serviceRequests, isLoading } = useClientData();
+  const { serviceRequests, dispatchMap, cooperativas, providerNames, representatives, isLoading } = useClientData();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [serviceFilter, setServiceFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [cooperativaFilter, setCooperativaFilter] = useState("all");
+  const [providerFilter, setProviderFilter] = useState("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -62,6 +68,13 @@ export default function ClientReports() {
         if (new Date(sr.created_at) > to) return false;
       }
 
+      // Provider filter
+      if (providerFilter !== "all") {
+        const dispatch = dispatchMap[sr.id];
+        const pName = (dispatch?.providers as any)?.name || "";
+        if (pName !== providerFilter) return false;
+      }
+
       if (search) {
         const q = search.toLowerCase();
         return (
@@ -75,9 +88,8 @@ export default function ClientReports() {
       }
       return true;
     });
-  }, [serviceRequests, search, statusFilter, serviceFilter, dateFrom, dateTo]);
+  }, [serviceRequests, search, statusFilter, serviceFilter, dateFrom, dateTo, cooperativaFilter, providerFilter, dispatchMap]);
 
-  // Summary KPIs
   const summary = useMemo(() => {
     const total = filtered.length;
     const totalCharged = filtered.reduce((s, r) => s + Number(r.charged_amount || 0), 0);
@@ -86,27 +98,33 @@ export default function ClientReports() {
     return { total, totalCharged, totalKm, completed };
   }, [filtered]);
 
-  // Export CSV
   const handleExportCSV = () => {
     const headers = [
-      "Protocolo", "Data", "Status", "Serviço", "Placa", "Veículo",
+      "Protocolo", "Data Acionamento", "Status", "Serviço", "Placa", "Veículo",
       "Solicitante", "Telefone", "Origem", "Destino", "KM Estimado",
-      "Valor Cobrado",
+      "Valor Cobrado", "Prestador", "Início Atendimento", "Finalização",
     ];
-    const rows = filtered.map((sr) => [
-      sr.protocol,
-      new Date(sr.created_at).toLocaleDateString("pt-BR"),
-      STATUS_LABELS[sr.status]?.label || sr.status,
-      SERVICE_LABELS[sr.service_type] || sr.service_type,
-      sr.vehicle_plate || "",
-      sr.vehicle_model || "",
-      sr.requester_name,
-      sr.requester_phone,
-      sr.origin_address || "",
-      sr.destination_address || "",
-      sr.estimated_km || "",
-      Number(sr.charged_amount || 0).toFixed(2).replace(".", ","),
-    ]);
+    const rows = filtered.map((sr) => {
+      const dispatch = dispatchMap[sr.id];
+      const providerName = (dispatch?.providers as any)?.name || "";
+      return [
+        sr.protocol,
+        fmtDateTime(sr.created_at),
+        STATUS_LABELS[sr.status]?.label || sr.status,
+        SERVICE_LABELS[sr.service_type] || sr.service_type,
+        sr.vehicle_plate || "",
+        sr.vehicle_model || "",
+        sr.requester_name,
+        sr.requester_phone,
+        sr.origin_address || "",
+        sr.destination_address || "",
+        sr.estimated_km || "",
+        Number(sr.charged_amount || 0).toFixed(2).replace(".", ","),
+        providerName,
+        dispatch?.accepted_at ? fmtDateTime(dispatch.accepted_at) : "",
+        sr.completed_at ? fmtDateTime(sr.completed_at) : "",
+      ];
+    });
 
     const csvContent = [headers.join(";"), ...rows.map((r) => r.map((c) => `"${c}"`).join(";"))].join("\n");
     const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
@@ -142,7 +160,7 @@ export default function ClientReports() {
             <Filter className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">Filtros</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -174,6 +192,21 @@ export default function ClientReports() {
                 ))}
               </SelectContent>
             </Select>
+            {providerNames.length > 0 && (
+              <Select value={providerFilter} onValueChange={setProviderFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Prestador" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Prestadores</SelectItem>
+                  {providerNames.map((p) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
             <Input
               type="date"
               value={dateFrom}
@@ -186,6 +219,19 @@ export default function ClientReports() {
               onChange={(e) => setDateTo(e.target.value)}
               placeholder="Data Fim"
             />
+            {cooperativas.length > 0 && (
+              <Select value={cooperativaFilter} onValueChange={setCooperativaFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Cooperativa/Filial" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas Cooperativas</SelectItem>
+                  {cooperativas.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -241,10 +287,10 @@ export default function ClientReports() {
                   <th className="text-left p-3 font-medium">Data</th>
                   <th className="text-left p-3 font-medium">Placa</th>
                   <th className="text-left p-3 font-medium">Serviço</th>
+                  <th className="text-left p-3 font-medium">Prestador</th>
                   <th className="text-left p-3 font-medium">Status</th>
                   <th className="text-left p-3 font-medium">Valor</th>
                   <th className="text-left p-3 font-medium">KM</th>
-                  <th className="text-left p-3 font-medium">Roteiro</th>
                 </tr>
               </thead>
               <tbody>
@@ -257,6 +303,8 @@ export default function ClientReports() {
                 ) : (
                   filtered.map((sr) => {
                     const statusInfo = STATUS_LABELS[sr.status] || { label: sr.status, variant: "outline" as const };
+                    const dispatch = dispatchMap[sr.id];
+                    const providerName = (dispatch?.providers as any)?.name || "—";
                     const isExpanded = expandedId === sr.id;
                     return (
                       <>
@@ -267,7 +315,7 @@ export default function ClientReports() {
                         >
                           <td className="p-3 font-mono text-xs">{sr.protocol}</td>
                           <td className="p-3 text-muted-foreground whitespace-nowrap">
-                            {new Date(sr.created_at).toLocaleDateString("pt-BR")}
+                            {fmtDate(sr.created_at)}
                           </td>
                           <td className="p-3">
                             {sr.vehicle_plate ? (
@@ -278,23 +326,17 @@ export default function ClientReports() {
                           </td>
                           <td className="p-3">{SERVICE_LABELS[sr.service_type] || sr.service_type}</td>
                           <td className="p-3">
+                            <span className="flex items-center gap-1 text-xs">
+                              <Truck className="h-3 w-3 text-muted-foreground" />
+                              {providerName}
+                            </span>
+                          </td>
+                          <td className="p-3">
                             <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
                           </td>
                           <td className="p-3 font-medium">{fmt(Number(sr.charged_amount || 0))}</td>
                           <td className="p-3">
                             {sr.estimated_km ? `${Number(sr.estimated_km).toFixed(0)} km` : "—"}
-                          </td>
-                          <td className="p-3">
-                            {(sr.origin_address || sr.destination_address) ? (
-                              <div className="flex items-center gap-1 text-xs text-muted-foreground max-w-[200px]">
-                                <MapPin className="h-3 w-3 shrink-0 text-success" />
-                                <span className="truncate">{sr.origin_address ? sr.origin_address.split(",")[0] : "—"}</span>
-                                <ArrowRight className="h-3 w-3 shrink-0" />
-                                <span className="truncate">{sr.destination_address ? sr.destination_address.split(",")[0] : "—"}</span>
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground text-xs">—</span>
-                            )}
                           </td>
                         </tr>
                         {isExpanded && (
@@ -316,9 +358,6 @@ export default function ClientReports() {
                                     {sr.vehicle_model && <span className="ml-1">— {sr.vehicle_model}</span>}
                                     {sr.vehicle_year && <span className="text-muted-foreground ml-1">({sr.vehicle_year})</span>}
                                   </p>
-                                  {sr.vehicle_category && (
-                                    <p className="text-muted-foreground capitalize">{sr.vehicle_category}</p>
-                                  )}
                                 </div>
                                 <div>
                                   <p className="text-xs text-muted-foreground mb-1 font-medium">Financeiro</p>
@@ -340,16 +379,44 @@ export default function ClientReports() {
                                   <p>{sr.destination_address || "Não informado"}</p>
                                 </div>
                                 <div>
-                                  <p className="text-xs text-muted-foreground mb-1 font-medium">Roteirização</p>
-                                  <p>Distância: {sr.estimated_km ? `${Number(sr.estimated_km).toFixed(1)} km` : "—"}</p>
+                                  <p className="text-xs text-muted-foreground mb-1 font-medium flex items-center gap-1">
+                                    <Truck className="h-3 w-3" /> Prestador
+                                  </p>
+                                  <p className="font-medium">{providerName}</p>
+                                </div>
+
+                                {/* Detailed Timestamps */}
+                                <div className="md:col-span-2 lg:col-span-3 border-t pt-3 mt-1">
+                                  <p className="text-xs text-muted-foreground mb-2 font-medium flex items-center gap-1">
+                                    <Clock className="h-3 w-3" /> Cronologia do Atendimento
+                                  </p>
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    <div className="bg-muted/50 rounded-md p-2">
+                                      <p className="text-xs text-muted-foreground">Acionamento</p>
+                                      <p className="text-sm font-medium">{fmtDateTime(sr.created_at)}</p>
+                                    </div>
+                                    <div className="bg-muted/50 rounded-md p-2">
+                                      <p className="text-xs text-muted-foreground">Início Atend.</p>
+                                      <p className="text-sm font-medium">
+                                        {dispatch?.accepted_at ? fmtDateTime(dispatch.accepted_at) : "—"}
+                                      </p>
+                                    </div>
+                                    <div className="bg-muted/50 rounded-md p-2">
+                                      <p className="text-xs text-muted-foreground">Chegada Prestador</p>
+                                      <p className="text-sm font-medium">
+                                        {dispatch?.provider_arrived_at ? fmtDateTime(dispatch.provider_arrived_at) : "—"}
+                                      </p>
+                                    </div>
+                                    <div className="bg-muted/50 rounded-md p-2">
+                                      <p className="text-xs text-muted-foreground">Finalização</p>
+                                      <p className="text-sm font-medium">
+                                        {sr.completed_at ? fmtDateTime(sr.completed_at) : "—"}
+                                      </p>
+                                    </div>
+                                  </div>
                                   {sr.completed_at && (
-                                    <p className="text-muted-foreground">
-                                      Concluído: {new Date(sr.completed_at).toLocaleString("pt-BR")}
-                                    </p>
-                                  )}
-                                  {sr.completed_at && (
-                                    <p className="text-muted-foreground">
-                                      Duração: {(() => {
+                                    <p className="text-xs text-muted-foreground mt-2">
+                                      Duração total: {(() => {
                                         const mins = (new Date(sr.completed_at).getTime() - new Date(sr.created_at).getTime()) / 60000;
                                         if (mins < 60) return `${Math.round(mins)} min`;
                                         const h = Math.floor(mins / 60);
@@ -374,14 +441,19 @@ export default function ClientReports() {
                   })
                 )}
               </tbody>
+              {filtered.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 bg-muted/30 font-medium">
+                    <td className="p-3" colSpan={6}>TOTAIS ({filtered.length} atendimentos)</td>
+                    <td className="p-3">{fmt(summary.totalCharged)}</td>
+                    <td className="p-3">{summary.totalKm.toFixed(0)} km</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </CardContent>
       </Card>
-
-      <p className="text-xs text-muted-foreground text-center">
-        Mostrando {filtered.length} de {serviceRequests.length} atendimentos · Clique em uma linha para ver detalhes
-      </p>
     </div>
   );
 }
