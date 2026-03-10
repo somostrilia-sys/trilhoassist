@@ -5,8 +5,6 @@ import { useAuth } from "@/contexts/AuthContext";
 export function useClientData() {
   const { user } = useAuth();
 
-  // Get the client record linked to the current user's tenant
-  // The client user sees clients in their tenant
   const { data: clients = [], isLoading: clientsLoading } = useQuery({
     queryKey: ["client-portal-clients", user?.id],
     queryFn: async () => {
@@ -19,7 +17,6 @@ export function useClientData() {
     enabled: !!user?.id,
   });
 
-  // For client role, they see service_requests where client_id matches their clients
   const clientIds = clients.map((c) => c.id);
 
   const { data: serviceRequests = [], isLoading: requestsLoading } = useQuery({
@@ -37,7 +34,6 @@ export function useClientData() {
     enabled: clientIds.length > 0,
   });
 
-  // Beneficiaries for plate tracking
   const { data: beneficiaries = [], isLoading: beneficiariesLoading } = useQuery({
     queryKey: ["client-portal-beneficiaries", clientIds],
     queryFn: async () => {
@@ -52,7 +48,54 @@ export function useClientData() {
     enabled: clientIds.length > 0,
   });
 
-  // Financial summary (client sees charged_amount, NOT provider_cost)
+  // Fetch dispatches with provider info for reports
+  const serviceRequestIds = serviceRequests.map((sr) => sr.id);
+
+  const { data: dispatches = [], isLoading: dispatchesLoading } = useQuery({
+    queryKey: ["client-portal-dispatches", serviceRequestIds.slice(0, 50)],
+    queryFn: async () => {
+      if (serviceRequestIds.length === 0) return [];
+      // Fetch in batches of 100
+      const allDispatches: any[] = [];
+      for (let i = 0; i < serviceRequestIds.length; i += 100) {
+        const batch = serviceRequestIds.slice(i, i + 100);
+        const { data, error } = await supabase
+          .from("dispatches")
+          .select("id, service_request_id, provider_id, status, accepted_at, provider_arrived_at, completed_at, providers(name)")
+          .in("service_request_id", batch)
+          .in("status", ["accepted", "arrived", "completed", "in_progress"]);
+        if (error) throw error;
+        if (data) allDispatches.push(...data);
+      }
+      return allDispatches;
+    },
+    enabled: serviceRequestIds.length > 0,
+  });
+
+  // Fetch representatives for filters
+  const { data: representatives = [] } = useQuery({
+    queryKey: ["client-portal-representatives", clientIds],
+    queryFn: async () => {
+      if (clientIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("client_representatives" as any)
+        .select("*")
+        .in("client_id", clientIds)
+        .order("name");
+      if (error) throw error;
+      return (data || []) as any[];
+    },
+    enabled: clientIds.length > 0,
+  });
+
+  // Build dispatch map: service_request_id -> dispatch info
+  const dispatchMap: Record<string, any> = {};
+  dispatches.forEach((d: any) => {
+    if (!dispatchMap[d.service_request_id] || d.status === "completed") {
+      dispatchMap[d.service_request_id] = d;
+    }
+  });
+
   const financialSummary = serviceRequests.reduce(
     (acc, sr) => {
       acc.totalRequests += 1;
@@ -65,7 +108,6 @@ export function useClientData() {
     { totalRequests: 0, totalCharged: 0, completed: 0, cancelled: 0, active: 0 }
   );
 
-  // Monthly breakdown
   const monthlyData = serviceRequests.reduce((acc: Record<string, {
     month: string;
     requests: number;
@@ -83,14 +125,24 @@ export function useClientData() {
     return acc;
   }, {});
 
-  // Plates active/inactive
   const activePlates = beneficiaries.filter((b) => b.active).length;
   const inactivePlates = beneficiaries.filter((b) => !b.active).length;
+
+  // Extract unique cooperativas
+  const cooperativas = [...new Set(beneficiaries.map(b => (b as any).cooperativa).filter(Boolean))].sort();
+
+  // Extract unique providers from dispatches
+  const providerNames = [...new Set(dispatches.map((d: any) => (d.providers as any)?.name).filter(Boolean))].sort();
 
   return {
     clients,
     serviceRequests,
     beneficiaries,
+    dispatches,
+    dispatchMap,
+    representatives,
+    cooperativas,
+    providerNames,
     financialSummary,
     monthlyData: Object.values(monthlyData).sort((a, b) => b.month.localeCompare(a.month)),
     activePlates,
