@@ -63,7 +63,7 @@ export function useClientData() {
           .from("dispatches")
           .select("id, service_request_id, provider_id, status, accepted_at, provider_arrived_at, completed_at, providers(name)")
           .in("service_request_id", batch)
-          .in("status", ["accepted", "arrived", "completed", "in_progress"]);
+          .in("status", ["accepted", "completed", "sent"]);
         if (error) throw error;
         if (data) allDispatches.push(...data);
       }
