@@ -13,6 +13,8 @@ import { maskPhone, maskCNPJ } from "@/lib/masks";
 import { Loader2, ArrowLeft, Save } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { MessageSquare } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import ClientRepresentatives from "@/components/business/ClientRepresentatives";
 
 interface ClientFormData {
   name: string;
