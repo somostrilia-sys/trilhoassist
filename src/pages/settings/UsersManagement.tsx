@@ -316,6 +316,24 @@ export default function UsersManagement() {
                   </SelectContent>
                 </Select>
               </div>
+              {newUser.role === "client" && (
+                <div className="space-y-2">
+                  <Label>Associação vinculada</Label>
+                  <Select
+                    value={newUser.client_id}
+                    onValueChange={(v) => setNewUser({ ...newUser, client_id: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a associação" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clientsList.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )
               <Button
                 type="submit"
                 className="w-full"
