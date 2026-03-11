@@ -136,7 +136,7 @@ export default function UsersManagement() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       setOpen(false);
-      setNewUser({ email: "", password: "", full_name: "", role: "", tenant_id: "" });
+      setNewUser({ email: "", password: "", full_name: "", role: "", tenant_id: "", client_id: "" });
       toast({ title: "Usuário criado com sucesso!" });
     },
     onError: (err: any) => {
