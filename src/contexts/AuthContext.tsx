@@ -24,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [roles, setRoles] = useState<string[]>([]);
   const [clientId, setClientId] = useState<string | null>(null);
+  const [rolesLoaded, setRolesLoaded] = useState(false);
 
   const fetchRoles = async (userId: string) => {
     const { data } = await supabase
@@ -33,6 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRoles(data?.map((r) => r.role) || []);
     const clientRole = data?.find((r) => r.role === "client" && r.client_id);
     setClientId(clientRole?.client_id || null);
+    setRolesLoaded(true);
   };
 
   const hasRole = (role: string) => roles.includes(role);
