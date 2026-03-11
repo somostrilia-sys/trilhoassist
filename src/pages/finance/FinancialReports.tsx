@@ -248,13 +248,13 @@ export default function FinancialReports() {
     return { totalAtendimentos, totalCusto, totalFaturado, totalMarkup, totalPlacasAtivas };
   }, [requests, beneficiaries]);
 
-  // === Vehicle usage ranking (last 3 months, only valid statuses) ===
+  // === Vehicle usage ranking (last 12 months, only valid statuses) ===
   const vehicleUsageRanking = useMemo(() => {
-    const threeMonthsAgo = subMonths(new Date(), 3);
-    const map = new Map<string, { plate: string; model: string; beneficiary: string; client: string; clientId: string; count: number; lastDate: string }>();
+    const twelveMonthsAgo = subMonths(new Date(), 12);
+    const map = new Map<string, { plate: string; model: string; beneficiary: string; client: string; clientId: string; count: number; lastDate: string; requestIds: string[] }>();
     requests.forEach((r) => {
       if (!r.vehicle_plate) return;
-      if (new Date(r.created_at) < threeMonthsAgo) return;
+      if (new Date(r.created_at) < twelveMonthsAgo) return;
       if (["cancelled", "refunded"].includes(r.status)) return;
       const plate = r.vehicle_plate.toUpperCase().replace(/[^A-Z0-9]/g, "");
       const entry = map.get(plate) || {
@@ -265,13 +265,26 @@ export default function FinancialReports() {
         clientId: r.client_id || "",
         count: 0,
         lastDate: r.created_at,
+        requestIds: [],
       };
       entry.count += 1;
+      entry.requestIds.push(r.id);
       if (r.created_at > entry.lastDate) entry.lastDate = r.created_at;
       map.set(plate, entry);
     });
     return Array.from(map.values()).sort((a, b) => b.count - a.count);
   }, [requests]);
+
+  const [expandedVehiclePlate, setExpandedVehiclePlate] = useState<string | null>(null);
+
+  const expandedVehicleRequests = useMemo(() => {
+    if (!expandedVehiclePlate) return [];
+    const entry = vehicleUsageRanking.find((v) => v.plate === expandedVehiclePlate);
+    if (!entry) return [];
+    return requests
+      .filter((r) => entry.requestIds.includes(r.id))
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [expandedVehiclePlate, vehicleUsageRanking, requests]);
 
   // === Filtered requests ===
   const filteredRequests = useMemo(() => {
