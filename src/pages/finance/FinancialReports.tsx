@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { format, subMonths, startOfMonth, endOfMonth, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -248,13 +248,13 @@ export default function FinancialReports() {
     return { totalAtendimentos, totalCusto, totalFaturado, totalMarkup, totalPlacasAtivas };
   }, [requests, beneficiaries]);
 
-  // === Vehicle usage ranking (last 3 months, only valid statuses) ===
+  // === Vehicle usage ranking (last 12 months, only valid statuses) ===
   const vehicleUsageRanking = useMemo(() => {
-    const threeMonthsAgo = subMonths(new Date(), 3);
-    const map = new Map<string, { plate: string; model: string; beneficiary: string; client: string; clientId: string; count: number; lastDate: string }>();
+    const twelveMonthsAgo = subMonths(new Date(), 12);
+    const map = new Map<string, { plate: string; model: string; beneficiary: string; client: string; clientId: string; count: number; lastDate: string; requestIds: string[] }>();
     requests.forEach((r) => {
       if (!r.vehicle_plate) return;
-      if (new Date(r.created_at) < threeMonthsAgo) return;
+      if (new Date(r.created_at) < twelveMonthsAgo) return;
       if (["cancelled", "refunded"].includes(r.status)) return;
       const plate = r.vehicle_plate.toUpperCase().replace(/[^A-Z0-9]/g, "");
       const entry = map.get(plate) || {
@@ -265,13 +265,26 @@ export default function FinancialReports() {
         clientId: r.client_id || "",
         count: 0,
         lastDate: r.created_at,
+        requestIds: [],
       };
       entry.count += 1;
+      entry.requestIds.push(r.id);
       if (r.created_at > entry.lastDate) entry.lastDate = r.created_at;
       map.set(plate, entry);
     });
     return Array.from(map.values()).sort((a, b) => b.count - a.count);
   }, [requests]);
+
+  const [expandedVehiclePlate, setExpandedVehiclePlate] = useState<string | null>(null);
+
+  const expandedVehicleRequests = useMemo(() => {
+    if (!expandedVehiclePlate) return [];
+    const entry = vehicleUsageRanking.find((v) => v.plate === expandedVehiclePlate);
+    if (!entry) return [];
+    return requests
+      .filter((r) => entry.requestIds.includes(r.id))
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [expandedVehiclePlate, vehicleUsageRanking, requests]);
 
   // === Filtered requests ===
   const filteredRequests = useMemo(() => {
@@ -954,10 +967,10 @@ export default function FinancialReports() {
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-destructive" />
-                Veículos com Mais Acionamentos (Últimos 3 meses)
+                Veículos com Mais Acionamentos (Últimos 12 meses)
               </CardTitle>
               <CardDescription>
-                Ranking de placas que mais utilizaram serviços nos últimos 90 dias. Atendimentos cancelados e estornados são excluídos.
+                Ranking de placas que mais utilizaram serviços nos últimos 12 meses. Atendimentos cancelados e estornados são excluídos.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -979,21 +992,65 @@ export default function FinancialReports() {
                     </TableHeader>
                     <TableBody>
                       {vehicleUsageRanking.slice(0, 50).map((v, idx) => (
-                        <TableRow key={v.plate} className={idx < 3 ? "bg-destructive/5" : ""}>
-                          <TableCell className="font-bold text-muted-foreground">{idx + 1}</TableCell>
-                          <TableCell className="font-mono font-bold">{v.plate}</TableCell>
-                          <TableCell>{v.model}</TableCell>
-                          <TableCell>{v.beneficiary}</TableCell>
-                          <TableCell>{v.client}</TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant={v.count >= 4 ? "destructive" : v.count >= 2 ? "secondary" : "outline"}>
-                              {v.count}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {format(parseISO(v.lastDate), "dd/MM/yyyy")}
-                          </TableCell>
-                        </TableRow>
+                        <React.Fragment key={v.plate}>
+                          <TableRow
+                            className={`cursor-pointer hover:bg-muted/50 ${idx < 3 ? "bg-destructive/5" : ""} ${expandedVehiclePlate === v.plate ? "bg-muted/40" : ""}`}
+                            onClick={() => setExpandedVehiclePlate(expandedVehiclePlate === v.plate ? null : v.plate)}
+                          >
+                            <TableCell className="font-bold text-muted-foreground">{idx + 1}</TableCell>
+                            <TableCell className="font-mono font-bold">{v.plate}</TableCell>
+                            <TableCell>{v.model}</TableCell>
+                            <TableCell>{v.beneficiary}</TableCell>
+                            <TableCell>{v.client}</TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant={v.count >= 4 ? "destructive" : v.count >= 2 ? "secondary" : "outline"}>
+                                {v.count}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {format(parseISO(v.lastDate), "dd/MM/yyyy")}
+                            </TableCell>
+                          </TableRow>
+                          {expandedVehiclePlate === v.plate && (
+                            <TableRow>
+                              <TableCell colSpan={7} className="p-0">
+                                <div className="bg-muted/20 p-4 border-t">
+                                  <p className="text-sm font-medium mb-3">Histórico de Atendimentos — {v.plate}</p>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="border-b">
+                                          <th className="text-left p-2 font-medium">Data</th>
+                                          <th className="text-left p-2 font-medium">Tipo de Serviço</th>
+                                          <th className="text-left p-2 font-medium">KM</th>
+                                          <th className="text-left p-2 font-medium">Origem</th>
+                                          <th className="text-left p-2 font-medium">Destino</th>
+                                          <th className="text-left p-2 font-medium">Status</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {expandedVehicleRequests.map((r) => (
+                                          <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30">
+                                            <td className="p-2 whitespace-nowrap">{format(parseISO(r.created_at), "dd/MM/yyyy HH:mm")}</td>
+                                            <td className="p-2">{SERVICE_TYPE_LABELS[r.service_type] || r.service_type}</td>
+                                            <td className="p-2">{r.estimated_km ? `${Number(r.estimated_km).toFixed(0)} km` : "—"}</td>
+                                            <td className="p-2 max-w-[200px] truncate">{r.origin_address || "—"}</td>
+                                            <td className="p-2 max-w-[200px] truncate">{r.destination_address || "—"}</td>
+                                            <td className="p-2">
+                                              <Badge variant="outline" className="text-[10px]">
+                                                {r.status === "completed" ? "Concluído" : r.status === "cancelled" ? "Cancelado" : r.status}
+                                              </Badge>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
                       ))}
                     </TableBody>
                   </Table>
