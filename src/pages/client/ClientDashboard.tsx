@@ -4,7 +4,7 @@ import { useClientData } from "@/hooks/useClientData";
 import { FileText, CheckCircle, DollarSign, Car, AlertTriangle, Clock, TrendingUp, Users } from "lucide-react";
 
 export default function ClientDashboard() {
-  const { clients, financialSummary, activePlates, inactivePlates, monthlyData, serviceRequests, beneficiaries, dispatches, isLoading } = useClientData();
+  const { clients, financialSummary, activePlates, inactivePlates, totalBeneficiaries, monthlyData, serviceRequests, beneficiaries, dispatches, isLoading } = useClientData();
 
   if (isLoading) {
     return (
@@ -174,7 +174,7 @@ export default function ClientDashboard() {
               <p className="text-muted-foreground text-sm">Nenhum atendimento registrado.</p>
             ) : (
               <div className="space-y-3 max-h-64 overflow-y-auto">
-                {monthlyData.map((m) => {
+                {monthlyData.map((m: any) => {
                   const [y, mo] = m.month.split("-");
                   const names = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
                   const label = `${names[parseInt(mo) - 1]} ${y}`;

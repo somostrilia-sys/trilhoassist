@@ -39,6 +39,7 @@ import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientRequests from "./pages/client/ClientRequests";
 import ClientPlates from "./pages/client/ClientPlates";
 import ClientReports from "./pages/client/ClientReports";
+import ClientDispatches from "./pages/client/ClientDispatches";
 import ClientBeneficiaries from "./pages/client/ClientBeneficiaries";
 import ProvidersList from "./pages/network/ProvidersList";
 import ProviderForm from "./pages/network/ProviderForm";
@@ -107,6 +108,7 @@ const App = () => (
             {/* Client/Association Portal */}
             <Route element={<ClientLayout />}>
               <Route path="/client/dashboard" element={<ClientDashboard />} />
+              <Route path="/client/dispatches" element={<ClientDispatches />} />
               <Route path="/client/requests" element={<ClientRequests />} />
               <Route path="/client/reports" element={<ClientReports />} />
               <Route path="/client/beneficiaries" element={<ClientBeneficiaries />} />
