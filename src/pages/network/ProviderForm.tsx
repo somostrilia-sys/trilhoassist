@@ -172,6 +172,8 @@ export default function ProviderForm() {
         payload.tenant_id = tenantId;
       }
 
+      let savedProviderId = id;
+
       if (isEdit) {
         const { error } = await supabase
           .from("providers")
@@ -179,10 +181,29 @@ export default function ProviderForm() {
           .eq("id", id!);
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { data: inserted, error } = await supabase
           .from("providers")
-          .insert(payload as any);
+          .insert(payload as any)
+          .select("id")
+          .single();
         if (error) throw error;
+        savedProviderId = inserted.id;
+      }
+
+      // Auto-create auth user for provider if email is set
+      if (form.email && savedProviderId) {
+        try {
+          await supabase.functions.invoke("admin-users", {
+            body: {
+              action: "create_provider_user",
+              email: form.email,
+              provider_id: savedProviderId,
+              tenant_id: tenantId,
+            },
+          });
+        } catch (e) {
+          console.warn("Não foi possível criar acesso automático:", e);
+        }
       }
     },
     onSuccess: () => {
