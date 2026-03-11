@@ -17,6 +17,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Search, Plus, UserCheck, CheckCircle, XCircle, Pencil, MoreVertical, Car, FileSpreadsheet, ChevronLeft, ChevronRight } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { maskCPF, maskPhone } from "@/lib/masks";
 import BeneficiaryImport from "@/components/import/BeneficiaryImport";
@@ -31,6 +33,7 @@ export default function BeneficiariesList() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [clientFilter, setClientFilter] = useState<string>("all");
+  const [showInactive, setShowInactive] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [page, setPage] = useState(0);
   const debounceRef = useState<ReturnType<typeof setTimeout> | null>(null);
@@ -97,7 +100,7 @@ export default function BeneficiariesList() {
 
   // Server-side paginated + filtered query
   const { data: queryResult, isLoading } = useQuery<{ data: any[]; count: number }>({
-    queryKey: ["admin-beneficiaries", clientIds, clientFilter, debouncedSearch, page],
+    queryKey: ["admin-beneficiaries", clientIds, clientFilter, debouncedSearch, page, showInactive],
     queryFn: async () => {
       if (clientIds.length === 0) return { data: [], count: 0 };
 
@@ -111,6 +114,10 @@ export default function BeneficiariesList() {
         .in("client_id", filterClientIds)
         .order("name")
         .range(from, to);
+
+      if (!showInactive) {
+        query = query.eq("active", true);
+      }
 
       if (debouncedSearch) {
         const q = `%${debouncedSearch}%`;
@@ -218,6 +225,16 @@ export default function BeneficiariesList() {
             ))}
           </SelectContent>
         </Select>
+        <div className="flex items-center gap-2">
+          <Switch
+            id="show-inactive"
+            checked={showInactive}
+            onCheckedChange={(v) => { setShowInactive(v); setPage(0); }}
+          />
+          <Label htmlFor="show-inactive" className="text-sm cursor-pointer whitespace-nowrap">
+            Mostrar inativos
+          </Label>
+        </div>
         {clientFilter !== "all" && counts && (
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="text-sm px-3 py-1">
