@@ -100,7 +100,7 @@ export default function BeneficiariesList() {
 
   // Server-side paginated + filtered query
   const { data: queryResult, isLoading } = useQuery<{ data: any[]; count: number }>({
-    queryKey: ["admin-beneficiaries", clientIds, clientFilter, debouncedSearch, page],
+    queryKey: ["admin-beneficiaries", clientIds, clientFilter, debouncedSearch, page, showInactive],
     queryFn: async () => {
       if (clientIds.length === 0) return { data: [], count: 0 };
 
@@ -114,6 +114,10 @@ export default function BeneficiariesList() {
         .in("client_id", filterClientIds)
         .order("name")
         .range(from, to);
+
+      if (!showInactive) {
+        query = query.eq("active", true);
+      }
 
       if (debouncedSearch) {
         const q = `%${debouncedSearch}%`;
