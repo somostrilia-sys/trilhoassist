@@ -17,6 +17,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Search, Plus, UserCheck, CheckCircle, XCircle, Pencil, MoreVertical, Car, FileSpreadsheet, ChevronLeft, ChevronRight } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { maskCPF, maskPhone } from "@/lib/masks";
 import BeneficiaryImport from "@/components/import/BeneficiaryImport";
