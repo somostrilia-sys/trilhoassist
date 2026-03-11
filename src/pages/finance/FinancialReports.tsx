@@ -1032,7 +1032,7 @@ export default function FinancialReports() {
                                         {expandedVehicleRequests.map((r) => (
                                           <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30">
                                             <td className="p-2 whitespace-nowrap">{format(parseISO(r.created_at), "dd/MM/yyyy HH:mm")}</td>
-                                            <td className="p-2">{serviceTypeLabels[r.service_type] || r.service_type}</td>
+                                            <td className="p-2">{SERVICE_TYPE_LABELS[r.service_type] || r.service_type}</td>
                                             <td className="p-2">{r.estimated_km ? `${Number(r.estimated_km).toFixed(0)} km` : "—"}</td>
                                             <td className="p-2 max-w-[200px] truncate">{r.origin_address || "—"}</td>
                                             <td className="p-2 max-w-[200px] truncate">{r.destination_address || "—"}</td>
