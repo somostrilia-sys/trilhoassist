@@ -1,0 +1,1 @@
+ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS client_id UUID REFERENCES public.clients(id);
