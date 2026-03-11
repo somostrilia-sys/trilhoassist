@@ -40,20 +40,17 @@ export default function ProviderFinancial() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  if (isLoading) {
-    return <div className="space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-64" /></div>;
-  }
-
   // Generate available months from dispatches
-  const months = Array.from(
+  const months = useMemo(() => Array.from(
     new Set(dispatches.map((d) => {
       const dt = new Date(d.created_at);
       return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
     }))
-  ).sort().reverse();
+  ).sort().reverse(), [dispatches]);
 
   // Filter dispatches by period
   const periodDispatches = useMemo(() => {
+
     return dispatches.filter((d) => {
       const dt = new Date(d.created_at);
       if (periodMode === "month") {
