@@ -108,6 +108,7 @@ const App = () => (
             {/* Client/Association Portal */}
             <Route element={<ClientLayout />}>
               <Route path="/client/dashboard" element={<ClientDashboard />} />
+              <Route path="/client/dispatches" element={<ClientDispatches />} />
               <Route path="/client/requests" element={<ClientRequests />} />
               <Route path="/client/reports" element={<ClientReports />} />
               <Route path="/client/beneficiaries" element={<ClientBeneficiaries />} />

@@ -4,7 +4,7 @@ import { useClientData } from "@/hooks/useClientData";
 import { FileText, CheckCircle, DollarSign, Car, AlertTriangle, Clock, TrendingUp, Users } from "lucide-react";
 
 export default function ClientDashboard() {
-  const { clients, financialSummary, activePlates, inactivePlates, monthlyData, serviceRequests, beneficiaries, dispatches, isLoading } = useClientData();
+  const { clients, financialSummary, activePlates, inactivePlates, totalBeneficiaries, monthlyData, serviceRequests, beneficiaries, dispatches, isLoading } = useClientData();
 
   if (isLoading) {
     return (
