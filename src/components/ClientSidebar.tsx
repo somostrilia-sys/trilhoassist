@@ -1,9 +1,11 @@
 import {
-  LayoutDashboard, FileText, Car, LogOut, BarChart3, Users,
+  LayoutDashboard, FileText, Car, LogOut, BarChart3, Users, AlertCircle,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem,
@@ -14,6 +16,7 @@ import { Building2 } from "lucide-react";
 
 const menuItems = [
   { title: "Dashboard", url: "/client/dashboard", icon: LayoutDashboard },
+  { title: "Acionamentos", url: "/client/dispatches", icon: AlertCircle, showBadge: true },
   { title: "Atendimentos", url: "/client/requests", icon: FileText },
   { title: "Relatórios", url: "/client/reports", icon: BarChart3 },
   { title: "Beneficiários", url: "/client/beneficiaries", icon: Users },
@@ -21,8 +24,25 @@ const menuItems = [
 ];
 
 export function ClientSidebar() {
-  const { signOut } = useAuth();
+  const { signOut, clientId } = useAuth();
   const navigate = useNavigate();
+
+  // Fetch active dispatch count for badge
+  const { data: activeCount = 0 } = useQuery({
+    queryKey: ["client-active-count", clientId],
+    queryFn: async () => {
+      if (!clientId) return 0;
+      const { count, error } = await supabase
+        .from("service_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("client_id", clientId)
+        .in("status", ["open", "awaiting_dispatch", "dispatched", "in_progress"]);
+      if (error) return 0;
+      return count ?? 0;
+    },
+    enabled: !!clientId,
+    refetchInterval: 30000,
+  });
 
   const handleSignOut = async () => {
     await signOut();
@@ -57,7 +77,12 @@ export function ClientSidebar() {
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                     >
                       <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                      <span className="flex-1">{item.title}</span>
+                      {item.showBadge && activeCount > 0 && (
+                        <span className="ml-auto inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold">
+                          {activeCount}
+                        </span>
+                      )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

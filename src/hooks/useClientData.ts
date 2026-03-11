@@ -23,31 +23,94 @@ export function useClientData() {
 
   const clientIds = clients.map((c) => c.id);
 
-  const { data: serviceRequests = [], isLoading: requestsLoading } = useQuery({
-    queryKey: ["client-portal-requests", clientIds],
+  // Exact counts using head:true to bypass 1000-row limit
+  const { data: beneficiaryCounts } = useQuery({
+    queryKey: ["client-portal-beneficiary-counts", clientIds],
     queryFn: async () => {
-      if (clientIds.length === 0) return [];
-      const { data, error } = await supabase
-        .from("service_requests")
-        .select("*")
-        .in("client_id", clientIds)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      if (clientIds.length === 0) return { active: 0, inactive: 0, total: 0 };
+
+      const [activeRes, inactiveRes] = await Promise.all([
+        supabase
+          .from("beneficiaries")
+          .select("id", { count: "exact", head: true })
+          .in("client_id", clientIds)
+          .eq("active", true),
+        supabase
+          .from("beneficiaries")
+          .select("id", { count: "exact", head: true })
+          .in("client_id", clientIds)
+          .eq("active", false),
+      ]);
+
+      const active = activeRes.count ?? 0;
+      const inactive = inactiveRes.count ?? 0;
+      return { active, inactive, total: active + inactive };
     },
     enabled: clientIds.length > 0,
   });
 
+  // Exact count for service requests
+  const { data: requestCount } = useQuery({
+    queryKey: ["client-portal-request-count", clientIds],
+    queryFn: async () => {
+      if (clientIds.length === 0) return 0;
+      const { count, error } = await supabase
+        .from("service_requests")
+        .select("id", { count: "exact", head: true })
+        .in("client_id", clientIds);
+      if (error) throw error;
+      return count ?? 0;
+    },
+    enabled: clientIds.length > 0,
+  });
+
+  // Fetch all service requests using recursive pagination
+  const { data: serviceRequests = [], isLoading: requestsLoading } = useQuery({
+    queryKey: ["client-portal-requests", clientIds],
+    queryFn: async () => {
+      if (clientIds.length === 0) return [];
+      const all: any[] = [];
+      let from = 0;
+      const size = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from("service_requests")
+          .select("*")
+          .in("client_id", clientIds)
+          .order("created_at", { ascending: false })
+          .range(from, from + size - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        all.push(...data);
+        if (data.length < size) break;
+        from += size;
+      }
+      return all;
+    },
+    enabled: clientIds.length > 0,
+  });
+
+  // Fetch all beneficiaries using recursive pagination
   const { data: beneficiaries = [], isLoading: beneficiariesLoading } = useQuery({
     queryKey: ["client-portal-beneficiaries", clientIds],
     queryFn: async () => {
       if (clientIds.length === 0) return [];
-      const { data, error } = await supabase
-        .from("beneficiaries")
-        .select("*")
-        .in("client_id", clientIds);
-      if (error) throw error;
-      return data;
+      const all: any[] = [];
+      let from = 0;
+      const size = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from("beneficiaries")
+          .select("*")
+          .in("client_id", clientIds)
+          .range(from, from + size - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        all.push(...data);
+        if (data.length < size) break;
+        from += size;
+      }
+      return all;
     },
     enabled: clientIds.length > 0,
   });
@@ -128,8 +191,10 @@ export function useClientData() {
     return acc;
   }, {});
 
-  const activePlates = beneficiaries.filter((b) => b.active).length;
-  const inactivePlates = beneficiaries.filter((b) => !b.active).length;
+  // Use exact counts from head queries
+  const activePlates = beneficiaryCounts?.active ?? beneficiaries.filter((b) => b.active).length;
+  const inactivePlates = beneficiaryCounts?.inactive ?? beneficiaries.filter((b) => !b.active).length;
+  const totalBeneficiaries = beneficiaryCounts?.total ?? beneficiaries.length;
 
   // Extract unique cooperativas
   const cooperativas = [...new Set(beneficiaries.map(b => (b as any).cooperativa).filter(Boolean))].sort();
@@ -151,6 +216,8 @@ export function useClientData() {
     monthlyData: Object.values(monthlyData).sort((a, b) => b.month.localeCompare(a.month)),
     activePlates,
     inactivePlates,
+    totalBeneficiaries,
+    exactRequestCount: requestCount ?? financialSummary.totalRequests,
     isLoading: clientsLoading || requestsLoading || beneficiariesLoading,
   };
 }
