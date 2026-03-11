@@ -7,6 +7,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   roles: string[];
+  clientId: string | null;
   hasRole: (role: string) => boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
@@ -22,13 +23,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [roles, setRoles] = useState<string[]>([]);
+  const [clientId, setClientId] = useState<string | null>(null);
 
   const fetchRoles = async (userId: string) => {
     const { data } = await supabase
       .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
+      .select("role, client_id")
+      .eq("user_id", userId) as { data: { role: string; client_id: string | null }[] | null };
     setRoles(data?.map((r) => r.role) || []);
+    const clientRole = data?.find((r) => r.role === "client" && r.client_id);
+    setClientId(clientRole?.client_id || null);
   };
 
   const hasRole = (role: string) => roles.includes(role);
@@ -40,9 +44,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session?.user) {
         setTimeout(() => fetchRoles(session.user.id), 0);
       } else {
-        setRoles([]);
-      }
-      setLoading(false);
+      setRoles([]);
+      setClientId(null);
+    }
+    setLoading(false);
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -80,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, roles, hasRole, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, roles, clientId, hasRole, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );

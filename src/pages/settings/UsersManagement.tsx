@@ -79,6 +79,7 @@ export default function UsersManagement() {
     full_name: "",
     role: "",
     tenant_id: "",
+    client_id: "",
   });
 
   const { data: tenants = [] } = useQuery<TenantItem[]>({
@@ -86,6 +87,19 @@ export default function UsersManagement() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenants_safe")
+        .select("id, name")
+        .eq("active", true)
+        .order("name");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: clientsList = [] } = useQuery({
+    queryKey: ["clients-for-users"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
         .select("id, name")
         .eq("active", true)
         .order("name");
@@ -122,7 +136,7 @@ export default function UsersManagement() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       setOpen(false);
-      setNewUser({ email: "", password: "", full_name: "", role: "", tenant_id: "" });
+      setNewUser({ email: "", password: "", full_name: "", role: "", tenant_id: "", client_id: "" });
       toast({ title: "Usuário criado com sucesso!" });
     },
     onError: (err: any) => {
@@ -302,6 +316,24 @@ export default function UsersManagement() {
                   </SelectContent>
                 </Select>
               </div>
+              {newUser.role === "client" && (
+                <div className="space-y-2">
+                  <Label>Associação vinculada</Label>
+                  <Select
+                    value={newUser.client_id}
+                    onValueChange={(v) => setNewUser({ ...newUser, client_id: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a associação" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clientsList.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <Button
                 type="submit"
                 className="w-full"
