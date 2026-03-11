@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useState, useMemo } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useClientData } from "@/hooks/useClientData";
 import {
   Search, Download, MapPin, Route, DollarSign, FileText, Car,
-  ArrowRight, Calendar, Filter, Clock, Truck, Users,
+  ArrowRight, Calendar, Filter, Clock, Truck, Users, AlertTriangle,
 } from "lucide-react";
 
 const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
