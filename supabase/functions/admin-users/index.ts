@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
 
     // ─── UPDATE ROLE ───
     if (action === "update_role") {
-      const { user_id, role } = body;
+      const { user_id, role, client_id } = body;
       if (!user_id || !role) return jsonRes({ error: "user_id e role são obrigatórios" }, 400);
 
       if (!isSuperAdmin) {
@@ -169,7 +169,11 @@ Deno.serve(async (req) => {
       }
 
       await adminClient.from("user_roles").delete().eq("user_id", user_id);
-      const { error: roleError } = await adminClient.from("user_roles").insert({ user_id, role });
+      const roleInsert: any = { user_id, role };
+      if (role === "client" && client_id) {
+        roleInsert.client_id = client_id;
+      }
+      const { error: roleError } = await adminClient.from("user_roles").insert(roleInsert);
       if (roleError) throw roleError;
 
       return jsonRes({ success: true });
