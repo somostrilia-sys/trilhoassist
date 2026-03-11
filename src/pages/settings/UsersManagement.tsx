@@ -333,7 +333,7 @@ export default function UsersManagement() {
                     </SelectContent>
                   </Select>
                 </div>
-              )
+              )}
               <Button
                 type="submit"
                 className="w-full"
