@@ -44,9 +44,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session?.user) {
         setTimeout(() => fetchRoles(session.user.id), 0);
       } else {
-        setRoles([]);
-      }
-      setLoading(false);
+      setRoles([]);
+      setClientId(null);
+    }
+    setLoading(false);
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
