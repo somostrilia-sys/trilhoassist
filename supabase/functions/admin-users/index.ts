@@ -93,6 +93,7 @@ Deno.serve(async (req) => {
         email: u.email,
         full_name: allProfiles?.find((p) => p.user_id === u.id)?.full_name || u.user_metadata?.full_name || "",
         roles: allRoles?.filter((r) => r.user_id === u.id).map((r) => r.role) || [],
+        client_id: allRoles?.find((r) => r.user_id === u.id && r.role === "client")?.client_id || null,
         tenant_ids: allUserTenants?.filter((ut) => ut.user_id === u.id).map((ut) => ut.tenant_id) || [],
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at,

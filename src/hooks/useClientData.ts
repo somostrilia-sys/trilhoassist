@@ -3,14 +3,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 export function useClientData() {
-  const { user } = useAuth();
+  const { user, clientId } = useAuth();
 
+  // If user has a clientId (association user), fetch only that client
+  // Otherwise fetch all accessible clients (admin/operator)
   const { data: clients = [], isLoading: clientsLoading } = useQuery({
-    queryKey: ["client-portal-clients", user?.id],
+    queryKey: ["client-portal-clients", user?.id, clientId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clients")
-        .select("*");
+      let query = supabase.from("clients").select("*");
+      if (clientId) {
+        query = query.eq("id", clientId);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
@@ -55,7 +59,6 @@ export function useClientData() {
     queryKey: ["client-portal-dispatches", serviceRequestIds.slice(0, 50)],
     queryFn: async () => {
       if (serviceRequestIds.length === 0) return [];
-      // Fetch in batches of 100
       const allDispatches: any[] = [];
       for (let i = 0; i < serviceRequestIds.length; i += 100) {
         const batch = serviceRequestIds.slice(i, i + 100);
@@ -136,6 +139,7 @@ export function useClientData() {
 
   return {
     clients,
+    clientId,
     serviceRequests,
     beneficiaries,
     dispatches,
