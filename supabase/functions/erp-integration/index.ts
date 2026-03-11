@@ -944,51 +944,73 @@ async function processSincronismoRecords(
 
   console.log(`Plates in page: ${pagePlates.length}, existing: ${existingByPlate.size}, new: ${pagePlates.length - existingByPlate.size}`);
 
-  const toInsert: any[] = [];
-  const toUpdate: any[] = [];
+  // Build all records for upsert (both new and existing use the same path)
+  const allUpsertRows: any[] = [];
 
   for (const rec of parsedRecords) {
     const existingId = existingByPlate.get(rec.plate);
+    const row: any = {
+      client_id: clientId,
+      vehicle_plate: rec.plate,
+      ...rec.data,
+    };
     if (existingId) {
-      toUpdate.push({ id: existingId, client_id: clientId, ...rec.data });
-    } else {
-      toInsert.push({ client_id: clientId, vehicle_plate: rec.plate, ...rec.data });
+      row.id = existingId;
     }
+    allUpsertRows.push(row);
   }
 
-  console.log(`Sincronismo - To insert: ${toInsert.length}, to update: ${toUpdate.length}`);
+  console.log(`Sincronismo - Total upsert rows: ${allUpsertRows.length} (${existingByPlate.size} existing, ${allUpsertRows.length - existingByPlate.size} new)`);
 
   let created = 0;
   let updated = 0;
   const BATCH_SIZE = 200;
 
-  for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
-    const chunk = toInsert.slice(i, i + BATCH_SIZE);
-    const { data: inserted, error: insertErr } = await serviceSupabase
+  // Split into rows with plates (use vehicle_plate+client_id conflict) and without
+  const withPlate = allUpsertRows.filter(r => r.vehicle_plate && r.vehicle_plate !== "");
+  const withoutPlate = allUpsertRows.filter(r => !r.vehicle_plate || r.vehicle_plate === "");
+
+  // Upsert rows WITH plate using the unique index
+  for (let i = 0; i < withPlate.length; i += BATCH_SIZE) {
+    const chunk = withPlate.slice(i, i + BATCH_SIZE);
+    const newCount = chunk.filter(r => !r.id).length;
+    const updateCount = chunk.filter(r => r.id).length;
+    const { error: upsertErr } = await serviceSupabase
       .from("beneficiaries")
-      .insert(chunk)
-      .select("id");
-    if (!insertErr) {
-      created += (inserted?.length || chunk.length);
+      .upsert(chunk, { onConflict: "vehicle_plate,client_id", ignoreDuplicates: false });
+    if (!upsertErr) {
+      created += newCount;
+      updated += updateCount;
     } else {
-      console.error(`Sincronismo insert error (chunk ${i}):`, insertErr.message);
+      console.error(`Sincronismo upsert error (chunk ${i}):`, upsertErr.message);
+      // Fallback: individual upserts
       for (const row of chunk) {
         const { error: singleErr } = await serviceSupabase
           .from("beneficiaries")
-          .insert(row);
-        if (!singleErr) created++;
-        else console.error(`Single insert error (plate ${row.vehicle_plate}):`, singleErr.message);
+          .upsert(row, { onConflict: "vehicle_plate,client_id", ignoreDuplicates: false });
+        if (!singleErr) {
+          if (row.id) updated++;
+          else created++;
+        } else {
+          console.error(`Single upsert error (plate ${row.vehicle_plate}):`, singleErr.message);
+        }
       }
     }
   }
 
-  for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
-    const chunk = toUpdate.slice(i, i + BATCH_SIZE);
-    const { error: upsertErr } = await serviceSupabase
-      .from("beneficiaries")
-      .upsert(chunk, { onConflict: "id" });
-    if (!upsertErr) updated += chunk.length;
-    else console.error(`Sincronismo upsert error (chunk ${i}):`, upsertErr.message);
+  // Insert rows WITHOUT plate (no conflict resolution possible, just insert)
+  for (let i = 0; i < withoutPlate.length; i += BATCH_SIZE) {
+    const chunk = withoutPlate.slice(i, i + BATCH_SIZE);
+    if (chunk.some(r => r.id)) {
+      // Update existing
+      const { error } = await serviceSupabase.from("beneficiaries").upsert(chunk, { onConflict: "id" });
+      if (!error) updated += chunk.length;
+      else console.error(`No-plate upsert error:`, error.message);
+    } else {
+      const { error } = await serviceSupabase.from("beneficiaries").insert(chunk);
+      if (!error) created += chunk.length;
+      else console.error(`No-plate insert error:`, error.message);
+    }
   }
 
   return { records_found: records.length, records_created: created, records_updated: updated };
