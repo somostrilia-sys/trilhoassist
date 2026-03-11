@@ -39,6 +39,7 @@ import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientRequests from "./pages/client/ClientRequests";
 import ClientPlates from "./pages/client/ClientPlates";
 import ClientReports from "./pages/client/ClientReports";
+import ClientDispatches from "./pages/client/ClientDispatches";
 import ClientBeneficiaries from "./pages/client/ClientBeneficiaries";
 import ProvidersList from "./pages/network/ProvidersList";
 import ProviderForm from "./pages/network/ProviderForm";
