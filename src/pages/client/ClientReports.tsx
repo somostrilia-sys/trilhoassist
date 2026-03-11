@@ -35,11 +35,18 @@ const SERVICE_LABELS: Record<string, string> = {
   other: "Outro",
 };
 
+const ATTENDANCE_TYPE_OPTIONS = [
+  { value: "all", label: "Todos os Tipos" },
+  { value: "particular", label: "Particular" },
+  { value: "associado", label: "Associado (com plano)" },
+];
+
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
 const fmtDate = (d: string) => new Date(d).toLocaleDateString("pt-BR");
 const fmtDateTime = (d: string) => new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const fmtTime = (d: string) => new Date(d).toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
 export default function ClientReports() {
   const { serviceRequests, dispatchMap, cooperativas, providerNames, representatives, isLoading } = useClientData();
@@ -51,12 +58,20 @@ export default function ClientReports() {
   const [dateTo, setDateTo] = useState("");
   const [cooperativaFilter, setCooperativaFilter] = useState("all");
   const [providerFilter, setProviderFilter] = useState("all");
+  const [attendanceType, setAttendanceType] = useState("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     return serviceRequests.filter((sr) => {
       if (statusFilter !== "all" && sr.status !== statusFilter) return false;
       if (serviceFilter !== "all" && sr.service_type !== serviceFilter) return false;
+
+      // Attendance type filter: particular = no beneficiary/plan, associado = has beneficiary or plan
+      if (attendanceType === "particular") {
+        if (sr.beneficiary_id || sr.plan_id) return false;
+      } else if (attendanceType === "associado") {
+        if (!sr.beneficiary_id && !sr.plan_id) return false;
+      }
 
       if (dateFrom) {
         const from = new Date(dateFrom);
@@ -88,7 +103,7 @@ export default function ClientReports() {
       }
       return true;
     });
-  }, [serviceRequests, search, statusFilter, serviceFilter, dateFrom, dateTo, cooperativaFilter, providerFilter, dispatchMap]);
+  }, [serviceRequests, search, statusFilter, serviceFilter, dateFrom, dateTo, cooperativaFilter, providerFilter, attendanceType, dispatchMap]);
 
   const summary = useMemo(() => {
     const total = filtered.length;
@@ -100,29 +115,50 @@ export default function ClientReports() {
 
   const handleExportCSV = () => {
     const headers = [
-      "Protocolo", "Data Acionamento", "Status", "Serviço", "Placa", "Veículo",
-      "Solicitante", "Telefone", "Origem", "Destino", "KM Estimado",
-      "Valor Cobrado", "Prestador", "Início Atendimento", "Finalização",
+      "Protocolo", "Data", "Hora Acionamento", "Solicitante", "Associado", "Telefone",
+      "Veículo (Placa)", "Veículo (Modelo)", "Tipo de Serviço", "Prestador",
+      "Status", "Origem", "Destino", "KM Estimado",
+      "Valor Cobrado", "Hora Atribuição", "Hora Início Atendimento", "Hora Finalização",
+      "Tempo Total", "Observações",
     ];
     const rows = filtered.map((sr) => {
       const dispatch = dispatchMap[sr.id];
-      const providerName = (dispatch?.providers as any)?.name || "";
+      const providerName = (dispatch?.providers as any)?.name || "Não atribuído";
+
+      // Calculate total time
+      let tempoTotal = "";
+      if (sr.completed_at) {
+        const mins = (new Date(sr.completed_at).getTime() - new Date(sr.created_at).getTime()) / 60000;
+        if (mins < 60) {
+          tempoTotal = `${Math.round(mins)} min`;
+        } else {
+          const h = Math.floor(mins / 60);
+          const m = Math.round(mins % 60);
+          tempoTotal = `${h}h ${m}min`;
+        }
+      }
+
       return [
         sr.protocol,
-        fmtDateTime(sr.created_at),
-        STATUS_LABELS[sr.status]?.label || sr.status,
-        SERVICE_LABELS[sr.service_type] || sr.service_type,
+        fmtDate(sr.created_at),
+        fmtTime(sr.created_at),
+        sr.requester_name,
+        sr.driver_name || sr.requester_name,
+        sr.requester_phone,
         sr.vehicle_plate || "",
         sr.vehicle_model || "",
-        sr.requester_name,
-        sr.requester_phone,
+        SERVICE_LABELS[sr.service_type] || sr.service_type,
+        providerName,
+        STATUS_LABELS[sr.status]?.label || sr.status,
         sr.origin_address || "",
         sr.destination_address || "",
         sr.estimated_km || "",
         Number(sr.charged_amount || 0).toFixed(2).replace(".", ","),
-        providerName,
         dispatch?.accepted_at ? fmtDateTime(dispatch.accepted_at) : "",
+        dispatch?.provider_arrived_at ? fmtDateTime(dispatch.provider_arrived_at) : "",
         sr.completed_at ? fmtDateTime(sr.completed_at) : "",
+        tempoTotal,
+        sr.notes || "",
       ];
     });
 
@@ -192,19 +228,16 @@ export default function ClientReports() {
                 ))}
               </SelectContent>
             </Select>
-            {providerNames.length > 0 && (
-              <Select value={providerFilter} onValueChange={setProviderFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Prestador" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os Prestadores</SelectItem>
-                  {providerNames.map((p) => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            <Select value={attendanceType} onValueChange={setAttendanceType}>
+              <SelectTrigger>
+                <SelectValue placeholder="Tipo de Atendimento" />
+              </SelectTrigger>
+              <SelectContent>
+                {ATTENDANCE_TYPE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
             <Input
@@ -219,6 +252,19 @@ export default function ClientReports() {
               onChange={(e) => setDateTo(e.target.value)}
               placeholder="Data Fim"
             />
+            {providerNames.length > 0 && (
+              <Select value={providerFilter} onValueChange={setProviderFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Prestador" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Prestadores</SelectItem>
+                  {providerNames.map((p) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {cooperativas.length > 0 && (
               <Select value={cooperativaFilter} onValueChange={setCooperativaFilter}>
                 <SelectTrigger>
@@ -285,6 +331,7 @@ export default function ClientReports() {
                 <tr className="border-b bg-muted/50">
                   <th className="text-left p-3 font-medium">Protocolo</th>
                   <th className="text-left p-3 font-medium">Data</th>
+                  <th className="text-left p-3 font-medium">Solicitante</th>
                   <th className="text-left p-3 font-medium">Placa</th>
                   <th className="text-left p-3 font-medium">Serviço</th>
                   <th className="text-left p-3 font-medium">Prestador</th>
@@ -296,7 +343,7 @@ export default function ClientReports() {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={9} className="p-8 text-center text-muted-foreground">
                       Nenhum atendimento encontrado com os filtros aplicados.
                     </td>
                   </tr>
@@ -304,7 +351,7 @@ export default function ClientReports() {
                   filtered.map((sr) => {
                     const statusInfo = STATUS_LABELS[sr.status] || { label: sr.status, variant: "outline" as const };
                     const dispatch = dispatchMap[sr.id];
-                    const providerName = (dispatch?.providers as any)?.name || "—";
+                    const providerName = (dispatch?.providers as any)?.name || "Não atribuído";
                     const isExpanded = expandedId === sr.id;
                     return (
                       <>
@@ -317,6 +364,7 @@ export default function ClientReports() {
                           <td className="p-3 text-muted-foreground whitespace-nowrap">
                             {fmtDate(sr.created_at)}
                           </td>
+                          <td className="p-3">{sr.requester_name}</td>
                           <td className="p-3">
                             {sr.vehicle_plate ? (
                               <span className="font-mono font-medium">{sr.vehicle_plate}</span>
@@ -341,7 +389,7 @@ export default function ClientReports() {
                         </tr>
                         {isExpanded && (
                           <tr key={`${sr.id}-detail`} className="bg-muted/20">
-                            <td colSpan={8} className="p-4">
+                            <td colSpan={9} className="p-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                                 <div>
                                   <p className="text-xs text-muted-foreground mb-1 font-medium">Solicitante</p>
@@ -396,7 +444,7 @@ export default function ClientReports() {
                                       <p className="text-sm font-medium">{fmtDateTime(sr.created_at)}</p>
                                     </div>
                                     <div className="bg-muted/50 rounded-md p-2">
-                                      <p className="text-xs text-muted-foreground">Início Atend.</p>
+                                      <p className="text-xs text-muted-foreground">Atribuição</p>
                                       <p className="text-sm font-medium">
                                         {dispatch?.accepted_at ? fmtDateTime(dispatch.accepted_at) : "—"}
                                       </p>
@@ -444,7 +492,7 @@ export default function ClientReports() {
               {filtered.length > 0 && (
                 <tfoot>
                   <tr className="border-t-2 bg-muted/30 font-medium">
-                    <td className="p-3" colSpan={6}>TOTAIS ({filtered.length} atendimentos)</td>
+                    <td className="p-3" colSpan={7}>TOTAIS ({filtered.length} atendimentos)</td>
                     <td className="p-3">{fmt(summary.totalCharged)}</td>
                     <td className="p-3">{summary.totalKm.toFixed(0)} km</td>
                   </tr>
