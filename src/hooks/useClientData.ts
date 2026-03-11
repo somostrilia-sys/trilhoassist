@@ -213,7 +213,7 @@ export function useClientData() {
     cooperativas,
     providerNames,
     financialSummary,
-    monthlyData: Object.values(monthlyData).sort((a, b) => b.month.localeCompare(a.month)),
+    monthlyData: Object.values(monthlyData).sort((a: any, b: any) => b.month.localeCompare(a.month)),
     activePlates,
     inactivePlates,
     totalBeneficiaries,
