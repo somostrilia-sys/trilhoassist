@@ -193,6 +193,67 @@ Deno.serve(async (req) => {
       return jsonRes({ success: true });
     }
 
+    // ─── CREATE PROVIDER USER ───
+    if (action === "create_provider_user") {
+      const { email, provider_id, tenant_id: provTenantId } = body;
+      if (!email || !provider_id) {
+        return jsonRes({ error: "email e provider_id são obrigatórios" }, 400);
+      }
+
+      const defaultPassword = "Prestador@2026";
+
+      // Check if user already exists
+      const { data: { users: existingUsers } } = await adminClient.auth.admin.listUsers();
+      const existingUser = existingUsers?.find((u) => u.email === email);
+
+      let userId: string;
+
+      if (existingUser) {
+        userId = existingUser.id;
+      } else {
+        const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
+          email,
+          password: defaultPassword,
+          email_confirm: true,
+          user_metadata: { full_name: email },
+        });
+        if (createError) throw createError;
+        userId = newUser.user.id;
+      }
+
+      // Add provider role if not present
+      const { data: existingRoles } = await adminClient
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId);
+      
+      if (!existingRoles?.some((r) => r.role === "provider")) {
+        await adminClient.from("user_roles").insert({ user_id: userId, role: "provider" });
+      }
+
+      // Link to tenant if provided
+      if (provTenantId) {
+        const { data: existingTenant } = await adminClient
+          .from("user_tenants")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("tenant_id", provTenantId)
+          .maybeSingle();
+        
+        if (!existingTenant) {
+          await adminClient.from("user_tenants").insert({ user_id: userId, tenant_id: provTenantId });
+        }
+      }
+
+      // Update provider record with user_id
+      await adminClient
+        .from("providers")
+        .update({ user_id: userId })
+        .eq("id", provider_id);
+
+      return jsonRes({ success: true, user_id: userId });
+    }
+
 
     if (action === "delete") {
       const user_id = body.user_id;
