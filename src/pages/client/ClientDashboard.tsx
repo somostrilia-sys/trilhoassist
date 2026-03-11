@@ -174,7 +174,7 @@ export default function ClientDashboard() {
               <p className="text-muted-foreground text-sm">Nenhum atendimento registrado.</p>
             ) : (
               <div className="space-y-3 max-h-64 overflow-y-auto">
-                {monthlyData.map((m) => {
+                {monthlyData.map((m: any) => {
                   const [y, mo] = m.month.split("-");
                   const names = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
                   const label = `${names[parseInt(mo) - 1]} ${y}`;
