@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data } = await supabase
       .from("user_roles")
       .select("role, client_id")
-      .eq("user_id", userId);
+      .eq("user_id", userId) as { data: { role: string; client_id: string | null }[] | null };
     setRoles(data?.map((r) => r.role) || []);
     const clientRole = data?.find((r) => r.role === "client" && r.client_id);
     setClientId(clientRole?.client_id || null);
