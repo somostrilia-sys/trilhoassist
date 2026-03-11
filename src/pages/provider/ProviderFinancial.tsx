@@ -100,6 +100,10 @@ export default function ProviderFinancial() {
     return `${names[parseInt(mo) - 1]} ${y}`;
   };
 
+  if (isLoading) {
+    return <div className="space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-64" /></div>;
+  }
+
   const periodLabel = periodMode === "month"
     ? monthLabel(selectedMonth)
     : `${dateFrom ? new Date(dateFrom + "T12:00:00").toLocaleDateString("pt-BR") : "..."} a ${dateTo ? new Date(dateTo + "T12:00:00").toLocaleDateString("pt-BR") : "..."}`;
