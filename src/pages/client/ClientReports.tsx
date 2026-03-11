@@ -502,6 +502,153 @@ export default function ClientReports() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Beneficiários que Mais Utilizaram (últimos 12 meses) */}
+      <TopBeneficiariesSection serviceRequests={serviceRequests} />
     </div>
+  );
+}
+
+function TopBeneficiariesSection({ serviceRequests }: { serviceRequests: any[] }) {
+  const [expandedPlate, setExpandedPlate] = useState<string | null>(null);
+
+  const ranking = useMemo(() => {
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+
+    const map = new Map<string, {
+      plate: string; name: string; model: string; count: number; totalKm: number;
+      lastDate: string; requests: any[];
+    }>();
+
+    serviceRequests.forEach((r) => {
+      if (!r.vehicle_plate) return;
+      if (new Date(r.created_at) < twelveMonthsAgo) return;
+      if (["cancelled", "refunded"].includes(r.status)) return;
+
+      const plate = r.vehicle_plate.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const entry = map.get(plate) || {
+        plate: r.vehicle_plate,
+        name: r.requester_name || "—",
+        model: r.vehicle_model || "—",
+        count: 0,
+        totalKm: 0,
+        lastDate: r.created_at,
+        requests: [],
+      };
+      entry.count += 1;
+      entry.totalKm += Number(r.estimated_km || 0);
+      entry.requests.push(r);
+      if (r.created_at > entry.lastDate) entry.lastDate = r.created_at;
+      map.set(plate, entry);
+    });
+
+    return Array.from(map.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 30);
+  }, [serviceRequests]);
+
+  const expandedRequests = useMemo(() => {
+    if (!expandedPlate) return [];
+    const entry = ranking.find((v) => v.plate === expandedPlate);
+    if (!entry) return [];
+    return [...entry.requests].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [expandedPlate, ranking]);
+
+  const fmtDate = (d: string) => new Date(d).toLocaleDateString("pt-BR");
+  const fmtDateTime = (d: string) => new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  if (ranking.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <AlertTriangle className="h-5 w-5 text-destructive" />
+          Beneficiários que Mais Utilizaram (Últimos 12 meses)
+        </CardTitle>
+        <CardDescription>
+          Ranking de placas/solicitantes com mais acionamentos. Clique para ver o histórico detalhado.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="text-left p-3 font-medium w-10">#</th>
+                <th className="text-left p-3 font-medium">Solicitante</th>
+                <th className="text-left p-3 font-medium">Placa</th>
+                <th className="text-left p-3 font-medium">Modelo</th>
+                <th className="text-center p-3 font-medium">Acionamentos</th>
+                <th className="text-left p-3 font-medium">KM Total</th>
+                <th className="text-left p-3 font-medium">Último Uso</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranking.map((v, idx) => (
+                <React.Fragment key={v.plate}>
+                  <tr
+                    className={`border-b cursor-pointer hover:bg-muted/30 ${idx < 3 ? "bg-destructive/5" : ""} ${expandedPlate === v.plate ? "bg-muted/40" : ""}`}
+                    onClick={() => setExpandedPlate(expandedPlate === v.plate ? null : v.plate)}
+                  >
+                    <td className="p-3 font-bold text-muted-foreground">{idx + 1}</td>
+                    <td className="p-3">{v.name}</td>
+                    <td className="p-3 font-mono font-bold">{v.plate}</td>
+                    <td className="p-3">{v.model}</td>
+                    <td className="p-3 text-center">
+                      <Badge variant={v.count >= 4 ? "destructive" : v.count >= 2 ? "secondary" : "outline"}>
+                        {v.count}
+                      </Badge>
+                    </td>
+                    <td className="p-3">{v.totalKm.toFixed(0)} km</td>
+                    <td className="p-3 text-muted-foreground">{fmtDate(v.lastDate)}</td>
+                  </tr>
+                  {expandedPlate === v.plate && (
+                    <tr>
+                      <td colSpan={7} className="p-0">
+                        <div className="bg-muted/20 p-4 border-t">
+                          <p className="text-sm font-medium mb-3">Histórico de Atendimentos — {v.plate}</p>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b">
+                                  <th className="text-left p-2 font-medium">Data</th>
+                                  <th className="text-left p-2 font-medium">Tipo de Serviço</th>
+                                  <th className="text-left p-2 font-medium">KM</th>
+                                  <th className="text-left p-2 font-medium">Origem</th>
+                                  <th className="text-left p-2 font-medium">Destino</th>
+                                  <th className="text-left p-2 font-medium">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {expandedRequests.map((r) => (
+                                  <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30">
+                                    <td className="p-2 whitespace-nowrap">{fmtDateTime(r.created_at)}</td>
+                                    <td className="p-2">{SERVICE_LABELS[r.service_type] || r.service_type}</td>
+                                    <td className="p-2">{r.estimated_km ? `${Number(r.estimated_km).toFixed(0)} km` : "—"}</td>
+                                    <td className="p-2 max-w-[200px] truncate">{r.origin_address || "—"}</td>
+                                    <td className="p-2 max-w-[200px] truncate">{r.destination_address || "—"}</td>
+                                    <td className="p-2">
+                                      <Badge variant={STATUS_LABELS[r.status]?.variant || "outline"} className="text-[10px]">
+                                        {STATUS_LABELS[r.status]?.label || r.status}
+                                      </Badge>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
