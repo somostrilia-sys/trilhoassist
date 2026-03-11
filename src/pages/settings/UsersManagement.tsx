@@ -95,6 +95,19 @@ export default function UsersManagement() {
     },
   });
 
+  const { data: clientsList = [] } = useQuery({
+    queryKey: ["clients-for-users"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name")
+        .eq("active", true)
+        .order("name");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   const { data: users = [], isLoading } = useQuery<UserItem[]>({
     queryKey: ["admin-users", selectedTenantId],
     queryFn: async () => {
