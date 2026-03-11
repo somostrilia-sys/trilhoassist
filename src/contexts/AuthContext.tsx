@@ -23,13 +23,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [roles, setRoles] = useState<string[]>([]);
+  const [clientId, setClientId] = useState<string | null>(null);
 
   const fetchRoles = async (userId: string) => {
     const { data } = await supabase
       .from("user_roles")
-      .select("role")
+      .select("role, client_id")
       .eq("user_id", userId);
     setRoles(data?.map((r) => r.role) || []);
+    const clientRole = data?.find((r) => r.role === "client" && r.client_id);
+    setClientId(clientRole?.client_id || null);
   };
 
   const hasRole = (role: string) => roles.includes(role);
