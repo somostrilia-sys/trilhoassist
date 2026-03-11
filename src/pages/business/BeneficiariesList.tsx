@@ -225,6 +225,16 @@ export default function BeneficiariesList() {
             ))}
           </SelectContent>
         </Select>
+        <div className="flex items-center gap-2">
+          <Switch
+            id="show-inactive"
+            checked={showInactive}
+            onCheckedChange={(v) => { setShowInactive(v); setPage(0); }}
+          />
+          <Label htmlFor="show-inactive" className="text-sm cursor-pointer whitespace-nowrap">
+            Mostrar inativos
+          </Label>
+        </div>
         {clientFilter !== "all" && counts && (
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="text-sm px-3 py-1">
