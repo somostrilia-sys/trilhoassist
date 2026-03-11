@@ -100,7 +100,7 @@ export default function UsersManagement() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("id, name")
+        .select("id, name, contact_email, cnpj")
         .eq("active", true)
         .order("name");
       if (error) throw error;
@@ -302,7 +302,13 @@ export default function UsersManagement() {
                 <Label>Perfil de acesso</Label>
                 <Select
                   value={newUser.role}
-                  onValueChange={(v) => setNewUser({ ...newUser, role: v })}
+                  onValueChange={(v) => {
+                    const updated = { ...newUser, role: v };
+                    if (v !== "client") {
+                      updated.client_id = "";
+                    }
+                    setNewUser(updated);
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o perfil" />
@@ -321,17 +327,33 @@ export default function UsersManagement() {
                   <Label>Associação vinculada</Label>
                   <Select
                     value={newUser.client_id}
-                    onValueChange={(v) => setNewUser({ ...newUser, client_id: v })}
+                    onValueChange={(v) => {
+                      const selected = clientsList.find((c) => c.id === v);
+                      setNewUser((prev) => ({
+                        ...prev,
+                        client_id: v,
+                        full_name: selected?.name || prev.full_name,
+                        email: selected?.contact_email || prev.email,
+                      }));
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione a associação" />
                     </SelectTrigger>
                     <SelectContent>
                       {clientsList.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}{c.cnpj ? ` — ${c.cnpj}` : ""}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {newUser.client_id && (() => {
+                    const sel = clientsList.find((c) => c.id === newUser.client_id);
+                    return sel?.cnpj ? (
+                      <p className="text-xs text-muted-foreground">CNPJ: {sel.cnpj}</p>
+                    ) : null;
+                  })()}
                 </div>
               )}
               <Button
