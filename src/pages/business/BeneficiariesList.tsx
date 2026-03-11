@@ -31,6 +31,7 @@ export default function BeneficiariesList() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [clientFilter, setClientFilter] = useState<string>("all");
+  const [showInactive, setShowInactive] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [page, setPage] = useState(0);
   const debounceRef = useState<ReturnType<typeof setTimeout> | null>(null);
