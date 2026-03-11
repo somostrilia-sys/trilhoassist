@@ -115,7 +115,7 @@ Deno.serve(async (req) => {
 
     // ─── CREATE USER ───
     if (action === "create") {
-      const { email, password, full_name, role, tenant_id } = body;
+      const { email, password, full_name, role, tenant_id, client_id } = body;
 
       if (!email || !password || !full_name || !role) {
         return jsonRes({ error: "Campos obrigatórios: email, password, full_name, role" }, 400);
@@ -135,7 +135,11 @@ Deno.serve(async (req) => {
 
       if (createError) throw createError;
 
-      await adminClient.from("user_roles").insert({ user_id: newUser.user.id, role });
+      const roleInsert: any = { user_id: newUser.user.id, role };
+      if (role === "client" && client_id) {
+        roleInsert.client_id = client_id;
+      }
+      await adminClient.from("user_roles").insert(roleInsert);
 
       if (tenant_id) {
         await adminClient.from("user_tenants").insert({
