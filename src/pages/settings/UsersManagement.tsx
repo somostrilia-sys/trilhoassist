@@ -79,6 +79,7 @@ export default function UsersManagement() {
     full_name: "",
     role: "",
     tenant_id: "",
+    client_id: "",
   });
 
   const { data: tenants = [] } = useQuery<TenantItem[]>({
