@@ -24,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [roles, setRoles] = useState<string[]>([]);
   const [clientId, setClientId] = useState<string | null>(null);
+  const [rolesLoaded, setRolesLoaded] = useState(false);
 
   const fetchRoles = async (userId: string) => {
     const { data } = await supabase
@@ -33,6 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRoles(data?.map((r) => r.role) || []);
     const clientRole = data?.find((r) => r.role === "client" && r.client_id);
     setClientId(clientRole?.client_id || null);
+    setRolesLoaded(true);
   };
 
   const hasRole = (role: string) => roles.includes(role);
@@ -42,21 +44,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        setTimeout(() => fetchRoles(session.user.id), 0);
+        fetchRoles(session.user.id).finally(() => setLoading(false));
       } else {
-      setRoles([]);
-      setClientId(null);
-    }
-    setLoading(false);
+        setRoles([]);
+        setClientId(null);
+        setRolesLoaded(true);
+        setLoading(false);
+      }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchRoles(session.user.id);
+        fetchRoles(session.user.id).finally(() => setLoading(false));
+      } else {
+        setRolesLoaded(true);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
