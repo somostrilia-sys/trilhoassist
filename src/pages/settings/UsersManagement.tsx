@@ -100,7 +100,7 @@ export default function UsersManagement() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("id, name")
+        .select("id, name, contact_email, cnpj")
         .eq("active", true)
         .order("name");
       if (error) throw error;
