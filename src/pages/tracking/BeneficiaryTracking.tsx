@@ -647,6 +647,23 @@ export default function BeneficiaryTracking() {
     );
   }
 
+  if (beneficiaryInactive) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4 p-4">
+        <img src={logoTrilho} alt="Trilho Assist" className="h-12 mb-4" />
+        <Card className="max-w-md w-full border-destructive bg-destructive/10">
+          <CardContent className="p-6 text-center space-y-3">
+            <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
+            <h2 className="text-lg font-bold text-destructive">Situação: INATIVA</h2>
+            <p className="text-sm text-muted-foreground">
+              Este beneficiário não está ativo no sistema. Entre em contato com sua associação.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const isCompleted = dispatch?.status === "completed";
   const isCollision = request?.service_type === "collision";
 
