@@ -149,7 +149,10 @@ export default function ServiceRequests() {
     loadCounts();
     const channel = supabase
       .channel("requests-list")
-      .on("postgres_changes", { event: "*", schema: "public", table: "service_requests" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "service_requests" }, (payload) => {
+        if (payload.eventType === "INSERT" && !isFirstLoadRef.current) {
+          sonnerToast("Novo atendimento chegou!", { icon: "🔔" });
+        }
         loadRequests();
         loadCounts();
       })
