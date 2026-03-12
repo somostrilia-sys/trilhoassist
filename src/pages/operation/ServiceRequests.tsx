@@ -139,11 +139,30 @@ export default function ServiceRequests() {
     const { data, count } = await query;
     setRequests(data || []);
     if (count !== null && count !== undefined) {
-      // Use filtered count for pagination
       setTotalCount(count);
     }
     setLoading(false);
+    isFirstLoadRef.current = false;
   }, [page, pageSize, statusFilter, serviceTypeFilter, paymentFilter, search, dateFrom, dateTo, sortField, sortDirection]);
+
+  const handleAssign = async (e: React.MouseEvent, reqId: string) => {
+    e.stopPropagation();
+    setAssigningId(reqId);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const assignedName = user?.user_metadata?.full_name || user?.email || "Operador";
+      await supabase.from("service_requests").update({
+        assigned_to: user?.id,
+        assigned_at: new Date().toISOString(),
+        assigned_name: assignedName,
+      } as any).eq("id", reqId);
+      sonnerToast.success("Atendimento assumido!");
+      loadRequests();
+    } catch {
+      sonnerToast.error("Erro ao assumir atendimento");
+    }
+    setAssigningId(null);
+  };
 
   useEffect(() => {
     loadCounts();
