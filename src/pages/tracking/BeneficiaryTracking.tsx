@@ -136,6 +136,8 @@ export default function BeneficiaryTracking() {
   }, []);
 
   // Load data
+  const [beneficiaryInactive, setBeneficiaryInactive] = useState(false);
+
   const loadData = useCallback(async () => {
     if (!token) return;
     const { data: sr } = await supabase
@@ -149,6 +151,21 @@ export default function BeneficiaryTracking() {
       setLoading(false);
       return;
     }
+
+    // Check if beneficiary is active
+    if (sr.beneficiary_id) {
+      const { data: ben } = await supabase
+        .from("beneficiaries")
+        .select("active")
+        .eq("id", sr.beneficiary_id)
+        .maybeSingle();
+      if (ben && ben.active === false) {
+        setBeneficiaryInactive(true);
+        setLoading(false);
+        return;
+      }
+    }
+
     setRequest(sr);
 
     const { data: d } = await supabase
@@ -626,6 +643,23 @@ export default function BeneficiaryTracking() {
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4 p-4">
         <AlertCircle className="h-12 w-12 text-destructive" />
         <p className="text-destructive text-center">{error}</p>
+      </div>
+    );
+  }
+
+  if (beneficiaryInactive) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4 p-4">
+        <img src={logoTrilho} alt="Trilho Assist" className="h-12 mb-4" />
+        <Card className="max-w-md w-full border-destructive bg-destructive/10">
+          <CardContent className="p-6 text-center space-y-3">
+            <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
+            <h2 className="text-lg font-bold text-destructive">Situação: INATIVA</h2>
+            <p className="text-sm text-muted-foreground">
+              Este beneficiário não está ativo no sistema. Entre em contato com sua associação.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }

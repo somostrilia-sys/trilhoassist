@@ -1578,6 +1578,71 @@ ${etaStr ? `*PREVISÃO DE CHEGADA*: ${etaStr}` : ""}
         </>
       )}
 
+      {/* Responsável pelo Atendimento */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <User className="h-5 w-5" /> RESPONSÁVEL PELO ATENDIMENTO
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {request.assigned_to ? (
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">{request.assigned_name || "Operador"}</p>
+                {request.assigned_at && (
+                  <p className="text-xs text-muted-foreground">
+                    Assumiu em: {new Date(request.assigned_at).toLocaleDateString("pt-BR")} às{" "}
+                    {new Date(request.assigned_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1"
+                onClick={async () => {
+                  await supabase.from("service_requests").update({
+                    assigned_to: null,
+                    assigned_at: null,
+                    assigned_name: null,
+                  } as any).eq("id", id);
+                  await logEvent("update", "Atendimento liberado", request.assigned_name || "", "—");
+                  toast.success("Atendimento liberado");
+                  loadData();
+                  loadEvents();
+                }}
+              >
+                Liberar Atendimento
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">Nenhum operador assumiu este atendimento.</p>
+              <Button
+                size="sm"
+                className="gap-1"
+                onClick={async () => {
+                  const { data: { user: authUser } } = await supabase.auth.getUser();
+                  const name = authUser?.user_metadata?.full_name || operatorName || authUser?.email || "Operador";
+                  await supabase.from("service_requests").update({
+                    assigned_to: authUser?.id,
+                    assigned_at: new Date().toISOString(),
+                    assigned_name: name,
+                  } as any).eq("id", id);
+                  await logEvent("update", `Atendimento assumido por ${name}`);
+                  toast.success("Atendimento assumido!");
+                  loadData();
+                  loadEvents();
+                }}
+              >
+                Assumir Atendimento
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Notes */}
       <Card>
         <CardHeader>

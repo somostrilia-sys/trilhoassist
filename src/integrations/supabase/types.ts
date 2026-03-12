@@ -1290,6 +1290,9 @@ export type Database = {
       }
       service_requests: {
         Row: {
+          assigned_at: string | null
+          assigned_name: string | null
+          assigned_to: string | null
           beneficiary_id: string | null
           beneficiary_token: string | null
           charged_amount: number | null
@@ -1336,6 +1339,9 @@ export type Database = {
           verification_answers: Json | null
         }
         Insert: {
+          assigned_at?: string | null
+          assigned_name?: string | null
+          assigned_to?: string | null
           beneficiary_id?: string | null
           beneficiary_token?: string | null
           charged_amount?: number | null
@@ -1382,6 +1388,9 @@ export type Database = {
           verification_answers?: Json | null
         }
         Update: {
+          assigned_at?: string | null
+          assigned_name?: string | null
+          assigned_to?: string | null
           beneficiary_id?: string | null
           beneficiary_token?: string | null
           charged_amount?: number | null

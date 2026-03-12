@@ -1,11 +1,12 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Clock, CheckCircle, AlertCircle, XCircle, ChevronLeft, ChevronRight, CalendarIcon, X, Download, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Search, Clock, CheckCircle, AlertCircle, XCircle, ChevronLeft, ChevronRight, CalendarIcon, X, Download, ArrowUpDown, ArrowUp, ArrowDown, UserCheck, Radio } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { toast as sonnerToast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import * as XLSX from "xlsx";
@@ -58,6 +59,9 @@ export default function ServiceRequests() {
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [sortField, setSortField] = useState<SortField>("created_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+  const previousIdsRef = useRef<Set<string>>(new Set());
+  const isFirstLoadRef = useRef(true);
   const navigate = useNavigate();
 
   const toggleSort = (field: SortField) => {
@@ -135,17 +139,39 @@ export default function ServiceRequests() {
     const { data, count } = await query;
     setRequests(data || []);
     if (count !== null && count !== undefined) {
-      // Use filtered count for pagination
       setTotalCount(count);
     }
     setLoading(false);
+    isFirstLoadRef.current = false;
   }, [page, pageSize, statusFilter, serviceTypeFilter, paymentFilter, search, dateFrom, dateTo, sortField, sortDirection]);
+
+  const handleAssign = async (e: React.MouseEvent, reqId: string) => {
+    e.stopPropagation();
+    setAssigningId(reqId);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const assignedName = user?.user_metadata?.full_name || user?.email || "Operador";
+      await supabase.from("service_requests").update({
+        assigned_to: user?.id,
+        assigned_at: new Date().toISOString(),
+        assigned_name: assignedName,
+      } as any).eq("id", reqId);
+      sonnerToast.success("Atendimento assumido!");
+      loadRequests();
+    } catch {
+      sonnerToast.error("Erro ao assumir atendimento");
+    }
+    setAssigningId(null);
+  };
 
   useEffect(() => {
     loadCounts();
     const channel = supabase
       .channel("requests-list")
-      .on("postgres_changes", { event: "*", schema: "public", table: "service_requests" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "service_requests" }, (payload) => {
+        if (payload.eventType === "INSERT" && !isFirstLoadRef.current) {
+          sonnerToast("Novo atendimento chegou!", { icon: "🔔" });
+        }
         loadRequests();
         loadCounts();
       })
@@ -235,7 +261,13 @@ export default function ServiceRequests() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="page-header">
-          <h1>Atendimentos</h1>
+          <div className="flex items-center gap-3">
+            <h1>Atendimentos</h1>
+            <Badge variant="outline" className="gap-1.5 border-green-500 text-green-600 animate-pulse">
+              <Radio className="h-3 w-3" />
+              Ao vivo
+            </Badge>
+          </div>
           <p>Visualize e acompanhe todos os atendimentos</p>
         </div>
         <div className="flex items-center gap-2">
@@ -409,10 +441,28 @@ export default function ServiceRequests() {
                             </Badge>
                           )}
                           <span>{req.requester_name}</span>
+                          {req.assigned_name && (
+                            <Badge variant="secondary" className="text-xs gap-1">
+                              <UserCheck className="h-3 w-3" />
+                              {req.assigned_name}
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {!req.assigned_to && (req.status === "open" || req.status === "awaiting_dispatch") && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="gap-1 text-xs"
+                          disabled={assigningId === req.id}
+                          onClick={(e) => handleAssign(e, req.id)}
+                        >
+                          <UserCheck className="h-3.5 w-3.5" />
+                          Assumir
+                        </Button>
+                      )}
                       <Badge variant={st.variant}>{st.label}</Badge>
                       <span className="text-sm font-mono text-muted-foreground">{req.protocol}</span>
                     </div>
