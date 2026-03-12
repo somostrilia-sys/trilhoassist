@@ -441,10 +441,28 @@ export default function ServiceRequests() {
                             </Badge>
                           )}
                           <span>{req.requester_name}</span>
+                          {req.assigned_name && (
+                            <Badge variant="secondary" className="text-xs gap-1">
+                              <UserCheck className="h-3 w-3" />
+                              {req.assigned_name}
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {!req.assigned_to && (req.status === "open" || req.status === "awaiting_dispatch") && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="gap-1 text-xs"
+                          disabled={assigningId === req.id}
+                          onClick={(e) => handleAssign(e, req.id)}
+                        >
+                          <UserCheck className="h-3.5 w-3.5" />
+                          Assumir
+                        </Button>
+                      )}
                       <Badge variant={st.variant}>{st.label}</Badge>
                       <span className="text-sm font-mono text-muted-foreground">{req.protocol}</span>
                     </div>
