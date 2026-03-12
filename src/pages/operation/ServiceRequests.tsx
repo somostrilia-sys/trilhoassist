@@ -261,7 +261,13 @@ export default function ServiceRequests() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="page-header">
-          <h1>Atendimentos</h1>
+          <div className="flex items-center gap-3">
+            <h1>Atendimentos</h1>
+            <Badge variant="outline" className="gap-1.5 border-green-500 text-green-600 animate-pulse">
+              <Radio className="h-3 w-3" />
+              Ao vivo
+            </Badge>
+          </div>
           <p>Visualize e acompanhe todos os atendimentos</p>
         </div>
         <div className="flex items-center gap-2">
