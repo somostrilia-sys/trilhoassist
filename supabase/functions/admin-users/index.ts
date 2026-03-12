@@ -44,13 +44,12 @@ Deno.serve(async (req) => {
         global: { headers: { Authorization: authHeader } },
       });
 
-      const token = authHeader.replace("Bearer ", "");
-      const { data: claimsData, error: claimsError } = await callerClient.auth.getClaims(token);
-      if (claimsError || !claimsData?.claims) {
+      const { data: { user: callerUser }, error: userError } = await callerClient.auth.getUser();
+      if (userError || !callerUser) {
         return jsonRes({ error: "Não autorizado" }, 401);
       }
 
-      const userId = claimsData.claims.sub;
+      const userId = callerUser.id;
       caller = { id: userId };
 
       const { data: callerRoles } = await adminClient
