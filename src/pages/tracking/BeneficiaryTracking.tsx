@@ -136,6 +136,8 @@ export default function BeneficiaryTracking() {
   }, []);
 
   // Load data
+  const [beneficiaryInactive, setBeneficiaryInactive] = useState(false);
+
   const loadData = useCallback(async () => {
     if (!token) return;
     const { data: sr } = await supabase
@@ -149,6 +151,21 @@ export default function BeneficiaryTracking() {
       setLoading(false);
       return;
     }
+
+    // Check if beneficiary is active
+    if (sr.beneficiary_id) {
+      const { data: ben } = await supabase
+        .from("beneficiaries")
+        .select("active")
+        .eq("id", sr.beneficiary_id)
+        .maybeSingle();
+      if (ben && ben.active === false) {
+        setBeneficiaryInactive(true);
+        setLoading(false);
+        return;
+      }
+    }
+
     setRequest(sr);
 
     const { data: d } = await supabase
