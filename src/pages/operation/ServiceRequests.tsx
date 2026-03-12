@@ -59,6 +59,9 @@ export default function ServiceRequests() {
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [sortField, setSortField] = useState<SortField>("created_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+  const previousIdsRef = useRef<Set<string>>(new Set());
+  const isFirstLoadRef = useRef(true);
   const navigate = useNavigate();
 
   const toggleSort = (field: SortField) => {
