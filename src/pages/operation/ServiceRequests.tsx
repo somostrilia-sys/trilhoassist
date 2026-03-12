@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Plus, Search, Clock, CheckCircle, AlertCircle, XCircle, ChevronLeft, ChevronRight, CalendarIcon, X, Download, ArrowUpDown, ArrowUp, ArrowDown, UserCheck, Radio } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast as sonnerToast } from "sonner";
-import { useNavigate } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import * as XLSX from "xlsx";
