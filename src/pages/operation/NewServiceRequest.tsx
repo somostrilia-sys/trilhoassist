@@ -35,8 +35,6 @@ import { classifyVehicle, getCompatiblePlanCategories, PLAN_VEHICLE_CATEGORY_LAB
 type VehicleCategory = "car" | "motorcycle" | "truck";
 type AttendanceType = "pane" | "collision" | "periferico";
 
-
-
 export default function NewServiceRequest() {
   const { user } = useAuth();
   const navigate = useNavigate();
