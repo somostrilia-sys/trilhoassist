@@ -406,7 +406,7 @@ export default function PublicServiceRequest() {
             vehicle_year: form.vehicle_year,
             vehicle_category: vehicleCategory,
             service_type: effectiveServiceType,
-            event_type: attendanceType === "collision" ? "accident" : form.event_type,
+            event_type: attendanceType === "collision" ? "accident" : attendanceType === "periferico" ? "periferico" : form.event_type,
             origin_address: form.origin_address,
             origin_lat: originCoords?.lat || null,
             origin_lng: originCoords?.lng || null,
@@ -418,6 +418,8 @@ export default function PublicServiceRequest() {
               hasThirdParty ? `TERCEIRO ENVOLVIDO - Placa: ${thirdPartyPlate || "Não informada"} | Documento: ${thirdPartyDocument || "Não informado"}` : null,
             ].filter(Boolean).join("\n") || null,
             verification_answers: getVerificationAnswers(),
+            payment_method: paymentMethod || null,
+            attendance_type: attendanceType,
           }),
         }
       );
