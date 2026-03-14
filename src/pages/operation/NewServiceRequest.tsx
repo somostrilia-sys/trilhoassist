@@ -491,6 +491,7 @@ export default function NewServiceRequest() {
 
     const effectiveServiceType = getEffectiveServiceType();
     const beneficiaryToken = crypto.randomUUID();
+    const isAutoComplete = attendanceType === "collision" || attendanceType === "periferico";
 
     const { data: inserted, error } = await supabase.from("service_requests").insert({
       requester_name: form.requester_name,
@@ -502,7 +503,7 @@ export default function NewServiceRequest() {
       vehicle_lowered: form.vehicle_lowered,
       difficult_access: form.difficult_access,
       service_type: effectiveServiceType as any,
-      event_type: (attendanceType === "collision" ? "accident" : form.event_type) as any,
+      event_type: (attendanceType === "collision" ? "accident" : attendanceType === "periferico" ? "periferico" : form.event_type) as any,
       origin_address: form.origin_address || null,
       origin_lat: geoCoords.origin?.lat || null,
       origin_lng: geoCoords.origin?.lng || null,
@@ -526,6 +527,8 @@ export default function NewServiceRequest() {
       scheduled_date: isScheduled && scheduledDate ? format(scheduledDate, "yyyy-MM-dd") : null,
       scheduled_time: isScheduled && scheduledTime ? scheduledTime : null,
       driver_name: driverIsBeneficiary ? null : (driverName.trim() || null),
+      payment_method: paymentMethod || null,
+      ...(isAutoComplete ? { status: "completed" as any, completed_at: new Date().toISOString() } : {}),
     } as any).select("id").single();
 
     if (!error && inserted) {
@@ -533,7 +536,9 @@ export default function NewServiceRequest() {
         service_request_id: inserted.id,
         event_type: "creation",
         description: attendanceType === "collision"
-          ? "Registro de colisão criado"
+          ? "Registro de colisão criado — finalizado automaticamente"
+          : attendanceType === "periferico"
+          ? "Registro de periféricos criado — finalizado automaticamente"
           : "Atendimento criado — aguardando acionamento de prestador",
         user_id: user?.id || null,
       });
@@ -549,7 +554,7 @@ export default function NewServiceRequest() {
           .eq("id", conversationId);
       }
 
-      if (attendanceType === "collision") {
+      if (attendanceType === "collision" || attendanceType === "periferico") {
         const { data: reqData } = await supabase
           .from("service_requests")
           .select("share_token")
@@ -558,7 +563,7 @@ export default function NewServiceRequest() {
         setCreatedRequestId(inserted.id);
         setShareToken(reqData?.share_token || null);
         setLoading(false);
-        toast({ title: "Registro de colisão criado!", description: "Agora anexe as mídias obrigatórias." });
+        toast({ title: attendanceType === "periferico" ? "Registro de periféricos criado!" : "Registro de colisão criado!", description: "Agora anexe as mídias obrigatórias." });
         return;
       }
     }
