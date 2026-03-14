@@ -554,6 +554,7 @@ export default function PublicServiceRequest() {
   const needsDestination = attendanceType === "pane" 
     ? !onSiteServices.includes(form.service_type) 
     : (attendanceType === "collision" && needsTow === true);
+  const isPeriferico = attendanceType === "periferico";
 
   return (
     <div className="min-h-screen bg-muted/30">
