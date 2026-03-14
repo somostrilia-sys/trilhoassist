@@ -23,12 +23,7 @@ import PublicCollisionMedia from "@/components/collision/PublicCollisionMedia";
 type VehicleCategory = "car" | "motorcycle" | "truck";
 type AttendanceType = "pane" | "collision" | "periferico";
 
-const PAYMENT_METHOD_OPTIONS = [
-  { value: "a_vista_pix", label: "À Vista - PIX" },
-  { value: "faturado_mensal", label: "Faturado Mensal" },
-  { value: "faturado_quinzenal", label: "Faturado Quinzenal" },
-  { value: "faturado_semanal", label: "Faturado Semanal" },
-];
+
 
 // Motivos de pane — SEM "Acidente"
 const eventTypeOptions = [
@@ -105,7 +100,7 @@ export default function PublicServiceRequest() {
     destination_uf: "",
     notes: "",
   });
-  const [paymentMethod, setPaymentMethod] = useState<string>("");
+
 
   const update = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
@@ -344,7 +339,7 @@ export default function PublicServiceRequest() {
     if (!form.origin_number.trim()) errs.origin_number = "Número é obrigatório (ou S/N)";
     if (!form.origin_city.trim()) errs.origin_city = "Cidade de origem é obrigatória";
     if (!originCoords) errs.origin_geo = "Selecione o endereço nas sugestões ou use o GPS para geolocalização";
-    if (!paymentMethod) errs.payment_method = "Forma de pagamento é obrigatória";
+
 
     if (attendanceType === "pane") {
       const onSiteServices = ["locksmith", "tire_change", "battery", "fuel"];
@@ -418,7 +413,7 @@ export default function PublicServiceRequest() {
               hasThirdParty ? `TERCEIRO ENVOLVIDO - Placa: ${thirdPartyPlate || "Não informada"} | Documento: ${thirdPartyDocument || "Não informado"}` : null,
             ].filter(Boolean).join("\n") || null,
             verification_answers: getVerificationAnswers(),
-            payment_method: paymentMethod || null,
+
             attendance_type: attendanceType,
           }),
         }
@@ -1049,30 +1044,7 @@ export default function PublicServiceRequest() {
             </CardContent>
           </Card>
 
-          {/* ═══ Forma de Pagamento ═══ */}
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
-                💳 Forma de Pagamento
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-1.5">
-                <Label className="text-sm">Forma de Pagamento *</Label>
-                <Select value={paymentMethod} onValueChange={(v) => { setPaymentMethod(v); setErrors((p) => ({ ...p, payment_method: "" })); }}>
-                  <SelectTrigger className={errors.payment_method ? "border-destructive" : ""}>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAYMENT_METHOD_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.payment_method && <p className="text-xs text-destructive">{errors.payment_method}</p>}
-              </div>
-            </CardContent>
-          </Card>
+
 
           {/* ═══ Observações ═══ */}
           <Card className="shadow-sm">
