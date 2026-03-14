@@ -422,9 +422,6 @@ export default function NewServiceRequest() {
     if (!form.origin_city.trim()) errs.origin_city = "Cidade de origem é obrigatória";
     if (!geoCoords.origin) errs.origin_geo = "Selecione o endereço nas sugestões para obter geolocalização";
 
-    // Payment method is always required
-
-
     if (attendanceType === "pane") {
       const selectedServiceType = getPaneServiceType();
       if (!form.service_type?.trim()) {
