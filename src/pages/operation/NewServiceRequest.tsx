@@ -629,6 +629,7 @@ export default function NewServiceRequest() {
   const paneServiceOptions = getServiceOptionsForEvent();
 
   const isCollision = attendanceType === "collision";
+  const isPeriferico = attendanceType === "periferico";
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
