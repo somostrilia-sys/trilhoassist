@@ -1147,7 +1147,7 @@ export default function NewServiceRequest() {
                     if (place.city) { update("origin_city", place.city); setErrors(prev => ({ ...prev, origin_city: "" })); }
                     if (place.state) update("origin_uf", place.state);
                   }}
-                  placeholder={isCollision ? "Local do acidente" : "Digite o endereço de origem"}
+                  placeholder={(isCollision || isPeriferico) ? "Local do ocorrido" : "Digite o endereço de origem"}
                   error={errors.origin_address}
                   tenantId={tenantId}
                    coords={geoCoords.origin}
