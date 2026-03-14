@@ -579,7 +579,7 @@ export default function PublicServiceRequest() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 <Button
                   type="button"
                   variant={attendanceType === "pane" ? "default" : "outline"}
@@ -596,6 +596,15 @@ export default function PublicServiceRequest() {
                   className="h-14 text-sm font-semibold"
                 >
                   💥 Colisão
+                </Button>
+                <Button
+                  type="button"
+                  variant={attendanceType === "periferico" ? "default" : "outline"}
+                  onClick={() => { setAttendanceType("periferico"); setNeedsTow(null); setHasThirdParty(null); }}
+                  className="h-14 text-sm font-semibold flex-col gap-0.5"
+                >
+                  <span>🪟 Periféricos</span>
+                  <span className="text-[10px] font-normal opacity-70">Troca de Vidros</span>
                 </Button>
               </div>
             </CardContent>
