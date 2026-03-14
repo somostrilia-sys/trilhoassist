@@ -1246,6 +1246,31 @@ export default function NewServiceRequest() {
           </CardContent>
         </Card>
 
+        {/* Payment Method */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              💳 FORMA DE PAGAMENTO
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label>Forma de Pagamento *</Label>
+              <Select value={paymentMethod} onValueChange={(v) => { setPaymentMethod(v); setErrors(prev => ({ ...prev, payment_method: "" })); }}>
+                <SelectTrigger className={errors.payment_method ? "border-destructive" : ""}>
+                  <SelectValue placeholder="Selecione a forma de pagamento" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_METHOD_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.payment_method && <p className="text-xs text-destructive">{errors.payment_method}</p>}
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Notes */}
         <Card>
           <CardContent className="pt-6">
