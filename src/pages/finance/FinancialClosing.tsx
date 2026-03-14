@@ -37,12 +37,16 @@ const PAYMENT_TABS = [
 function filterByPaymentMethod(dispatches: any[], tabKey: string): any[] {
   return dispatches.filter((d: any) => {
     const sr = d.service_requests;
-    const method = (sr?.payment_method || "").trim();
-    if (tabKey === "a_vista_pix") return method === "a_vista_pix";
-    if (tabKey === "faturado_quinzenal") return method === "faturado_quinzenal";
-    if (tabKey === "faturado_semanal") return method === "faturado_semanal";
-    // faturado_mensal: explicit match OR fallback for old records without payment_method
-    return method === "faturado_mensal" || method === "" || (method !== "a_vista_pix" && method !== "faturado_quinzenal" && method !== "faturado_semanal");
+    const method = (sr?.payment_method || "").trim().toLowerCase();
+    const isPix = method === "a_vista_pix" || method.includes("pix");
+    const isQuinzenal = method === "faturado_quinzenal" || method.includes("quinzenal");
+    const isSemanal = method === "faturado_semanal" || method.includes("semanal");
+
+    if (tabKey === "a_vista_pix") return isPix;
+    if (tabKey === "faturado_quinzenal") return isQuinzenal;
+    if (tabKey === "faturado_semanal") return isSemanal;
+    // faturado_mensal: explicit match, null/empty, or anything not matched above
+    return !isPix && !isQuinzenal && !isSemanal;
   });
 }
 
