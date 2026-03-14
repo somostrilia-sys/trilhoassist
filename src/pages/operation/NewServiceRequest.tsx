@@ -35,8 +35,6 @@ import { classifyVehicle, getCompatiblePlanCategories, PLAN_VEHICLE_CATEGORY_LAB
 type VehicleCategory = "car" | "motorcycle" | "truck";
 type AttendanceType = "pane" | "collision" | "periferico";
 
-
-
 export default function NewServiceRequest() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -423,9 +421,6 @@ export default function NewServiceRequest() {
       errs.origin_address = (attendanceType === "collision" || attendanceType === "periferico") ? "Local do ocorrido é obrigatório" : "Endereço de origem é obrigatório";
     if (!form.origin_city.trim()) errs.origin_city = "Cidade de origem é obrigatória";
     if (!geoCoords.origin) errs.origin_geo = "Selecione o endereço nas sugestões para obter geolocalização";
-
-    // Payment method is always required
-
 
     if (attendanceType === "pane") {
       const selectedServiceType = getPaneServiceType();
@@ -1241,8 +1236,6 @@ export default function NewServiceRequest() {
           </CardContent>
         </Card>
 
-
-
         {/* Notes */}
         <Card>
           <CardContent className="pt-6">
@@ -1304,7 +1297,6 @@ export default function NewServiceRequest() {
                   <span>Solicitante:</span><span className="font-medium text-foreground">{form.requester_name || "—"}</span>
                   <span>Veículo:</span><span className="font-medium text-foreground">{form.vehicle_plate || "—"} {form.vehicle_model}</span>
                   <span>Categoria:</span><span className="font-medium text-foreground">{vehicleCategory === "car" ? "Carro" : vehicleCategory === "motorcycle" ? "Moto" : "Caminhão"}</span>
-
                    {!isCollision && !isPeriferico && (
                     <>
                       <span>Serviço:</span><span className="font-medium text-foreground">{paneServiceOptions.find(o => o.value === form.service_type)?.label || "—"}</span>
