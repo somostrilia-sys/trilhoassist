@@ -1328,11 +1328,12 @@ export default function NewServiceRequest() {
               <div className="text-sm space-y-2">
                 <p className="font-medium text-primary">Resumo do Atendimento</p>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
-                  <span>Tipo:</span><span className="font-medium text-foreground">{isCollision ? "Colisão" : "Pane / Assistência"}</span>
+                  <span>Tipo:</span><span className="font-medium text-foreground">{isCollision ? "Colisão" : isPeriferico ? "Periféricos (Troca de Vidros)" : "Pane / Assistência"}</span>
                   <span>Solicitante:</span><span className="font-medium text-foreground">{form.requester_name || "—"}</span>
                   <span>Veículo:</span><span className="font-medium text-foreground">{form.vehicle_plate || "—"} {form.vehicle_model}</span>
                   <span>Categoria:</span><span className="font-medium text-foreground">{vehicleCategory === "car" ? "Carro" : vehicleCategory === "motorcycle" ? "Moto" : "Caminhão"}</span>
-                   {!isCollision && (
+                  <span>Pagamento:</span><span className="font-medium text-foreground">{PAYMENT_METHOD_OPTIONS.find(o => o.value === paymentMethod)?.label || "—"}</span>
+                   {!isCollision && !isPeriferico && (
                     <>
                       <span>Serviço:</span><span className="font-medium text-foreground">{paneServiceOptions.find(o => o.value === form.service_type)?.label || "—"}</span>
                     </>
@@ -1342,7 +1343,7 @@ export default function NewServiceRequest() {
                       <span>Reboque:</span><span className="font-medium text-foreground">{needsTow ? "Sim" : "Não"}</span>
                     </>
                   )}
-                  <span>Status:</span><span className="font-medium text-foreground">Aguardando acionamento</span>
+                  <span>Status:</span><span className="font-medium text-foreground">{(isCollision || isPeriferico) ? "Finalizado automaticamente" : "Aguardando acionamento"}</span>
                   {isScheduled && isTowService && attendanceType === "pane" && scheduledDate && (
                     <>
                       <span>Agendamento:</span>
