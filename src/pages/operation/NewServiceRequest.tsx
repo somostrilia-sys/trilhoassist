@@ -491,7 +491,7 @@ export default function NewServiceRequest() {
 
     const effectiveServiceType = getEffectiveServiceType();
     const beneficiaryToken = crypto.randomUUID();
-    const isAutoComplete = attendanceType === "collision" || attendanceType === "periferico";
+    const isAutoComplete = (attendanceType === "collision" && !needsTow) || attendanceType === "periferico";
 
     const { data: inserted, error } = await supabase.from("service_requests").insert({
       requester_name: form.requester_name,

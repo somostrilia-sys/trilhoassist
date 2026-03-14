@@ -185,7 +185,8 @@ Deno.serve(async (req) => {
     const validCategories = ["car", "motorcycle", "truck", "van"];
     const safeCategory = validCategories.includes(vehicleCategory) ? vehicleCategory : "car";
 
-    const isAutoComplete = event_type === "accident" || event_type === "periferico" || body.attendance_type === "collision" || body.attendance_type === "periferico";
+    const needsTow = body.service_type && ["tow_light", "tow_heavy", "tow_motorcycle"].includes(body.service_type);
+    const isAutoComplete = ((body.attendance_type === "collision" || event_type === "accident") && !needsTow) || body.attendance_type === "periferico" || event_type === "periferico";
 
     const { data: inserted, error } = await supabase.from("service_requests").insert({
       requester_name: requester_name.trim().slice(0, 200),
