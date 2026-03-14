@@ -1281,17 +1281,24 @@ export default function NewServiceRequest() {
           </CardContent>
         </Card>
 
-        {/* Collision Media Upload (shown after creation) */}
-        {isCollision && createdRequestId && (
+        {/* Collision/Periferico Media Upload (shown after creation) */}
+        {(isCollision || isPeriferico) && createdRequestId && (
           <div className="space-y-4">
             <CollisionMediaUpload serviceRequestId={createdRequestId} />
+            {isPeriferico && (
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                <p className="font-semibold mb-1">📸 Instruções para Periféricos</p>
+                <p>Tire uma foto próxima do vidro quebrado e uma foto distante mostrando a placa do veículo.</p>
+                <p className="text-xs mt-1 opacity-80">Obrigatório: foto + áudio</p>
+              </div>
+            )}
             {shareToken && (
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-3">
                     <Share2 className="h-5 w-5 text-primary shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">Link público da colisão:</p>
+                      <p className="text-sm font-medium">Link público:</p>
                       <p className="text-xs text-muted-foreground truncate">
                         {window.location.origin}/collision/{shareToken}
                       </p>
