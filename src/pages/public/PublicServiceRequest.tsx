@@ -476,10 +476,20 @@ export default function PublicServiceRequest() {
             onMediaChange={setCollisionMediaFiles}
           />
 
+          {attendanceType === "periferico" && (
+            <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
+              <p className="font-semibold mb-1">📸 Instruções</p>
+              <p>Tire uma foto próxima do vidro quebrado e uma foto distante mostrando a placa do veículo.</p>
+              <p className="text-xs mt-1">Obrigatório: foto + áudio</p>
+            </div>
+          )}
+
           {!allRequired && (
             <div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 shrink-0" />
-              Envie todas as mídias obrigatórias (fotos, áudio e documentos) para concluir.
+              {attendanceType === "periferico"
+                ? "Envie as mídias obrigatórias (fotos e áudio) para concluir."
+                : "Envie todas as mídias obrigatórias (fotos, áudio e documentos) para concluir."}
             </div>
           )}
 
