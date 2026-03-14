@@ -33,7 +33,14 @@ import RouteDistanceDisplay from "@/components/service-request/RouteDistanceDisp
 import { classifyVehicle, getCompatiblePlanCategories, PLAN_VEHICLE_CATEGORY_LABELS } from "@/lib/vehicleClassification";
 
 type VehicleCategory = "car" | "motorcycle" | "truck";
-type AttendanceType = "pane" | "collision";
+type AttendanceType = "pane" | "collision" | "periferico";
+
+const PAYMENT_METHOD_OPTIONS = [
+  { value: "a_vista_pix", label: "À Vista - PIX" },
+  { value: "faturado_mensal", label: "Faturado Mensal" },
+  { value: "faturado_quinzenal", label: "Faturado Quinzenal" },
+  { value: "faturado_semanal", label: "Faturado Semanal" },
+];
 
 export default function NewServiceRequest() {
   const { user } = useAuth();
