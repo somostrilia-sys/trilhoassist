@@ -119,14 +119,18 @@ Deno.serve(async (req) => {
     ];
     const validEventTypes = [
       "mechanical_failure", "accident", "theft", "flat_tire",
-      "locked_out", "battery_dead", "fuel_empty", "other",
+      "locked_out", "battery_dead", "fuel_empty", "other", "periferico",
     ];
+    const validPaymentMethods = ["a_vista_pix", "faturado_mensal", "faturado_quinzenal", "faturado_semanal"];
 
     if (service_type && !validServiceTypes.includes(service_type)) {
       throw new Error("Tipo de serviço inválido");
     }
     if (event_type && !validEventTypes.includes(event_type)) {
       throw new Error("Tipo de evento inválido");
+    }
+    if (body.payment_method && !validPaymentMethods.includes(body.payment_method)) {
+      throw new Error("Forma de pagamento inválida");
     }
 
     // Validate coordinates if provided
@@ -181,6 +185,8 @@ Deno.serve(async (req) => {
     const validCategories = ["car", "motorcycle", "truck", "van"];
     const safeCategory = validCategories.includes(vehicleCategory) ? vehicleCategory : "car";
 
+    const isAutoComplete = event_type === "accident" || event_type === "periferico" || body.attendance_type === "collision" || body.attendance_type === "periferico";
+
     const { data: inserted, error } = await supabase.from("service_requests").insert({
       requester_name: requester_name.trim().slice(0, 200),
       requester_phone: cleanPhone,
@@ -209,6 +215,8 @@ Deno.serve(async (req) => {
       tenant_id: tenantId,
       provider_cost: 0,
       charged_amount: 0,
+      payment_method: body.payment_method || null,
+      ...(isAutoComplete ? { status: "completed", completed_at: new Date().toISOString() } : {}),
     }).select("id, protocol").single();
 
     if (error) {

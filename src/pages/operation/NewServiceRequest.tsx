@@ -33,7 +33,14 @@ import RouteDistanceDisplay from "@/components/service-request/RouteDistanceDisp
 import { classifyVehicle, getCompatiblePlanCategories, PLAN_VEHICLE_CATEGORY_LABELS } from "@/lib/vehicleClassification";
 
 type VehicleCategory = "car" | "motorcycle" | "truck";
-type AttendanceType = "pane" | "collision";
+type AttendanceType = "pane" | "collision" | "periferico";
+
+const PAYMENT_METHOD_OPTIONS = [
+  { value: "a_vista_pix", label: "À Vista - PIX" },
+  { value: "faturado_mensal", label: "Faturado Mensal" },
+  { value: "faturado_quinzenal", label: "Faturado Quinzenal" },
+  { value: "faturado_semanal", label: "Faturado Semanal" },
+];
 
 export default function NewServiceRequest() {
   const { user } = useAuth();
@@ -94,12 +101,13 @@ export default function NewServiceRequest() {
   const paramServiceType = normalizeServiceType(searchParams.get("service_type"));
   const initialCategory: VehicleCategory = paramCategory || (paramServiceType === "tow_motorcycle" ? "motorcycle" : paramServiceType === "tow_heavy" ? "truck" : "car");
 
-  // ═══ Top-level: Pane vs Colisão ═══
+  // ═══ Top-level: Pane vs Colisão vs Periféricos ═══
   const [attendanceType, setAttendanceType] = useState<AttendanceType>(
     paramServiceType === "collision" ? "collision" : "pane"
   );
   const [vehicleCategory, setVehicleCategory] = useState<VehicleCategory>(initialCategory);
   const [needsTow, setNeedsTow] = useState<boolean | null>(null); // collision only
+  const [paymentMethod, setPaymentMethod] = useState<string>("");
 
   const [form, setForm] = useState({
     requester_name: searchParams.get("name") || "",
@@ -398,6 +406,7 @@ export default function NewServiceRequest() {
   };
 
   const getEffectiveServiceType = () => {
+    if (attendanceType === "periferico") return "other";
     if (attendanceType === "collision") {
       return needsTow
         ? (vehicleCategory === "motorcycle" ? "tow_motorcycle" : vehicleCategory === "truck" ? "tow_heavy" : "tow_light")
@@ -416,9 +425,12 @@ export default function NewServiceRequest() {
     if (!form.vehicle_model.trim()) errs.vehicle_model = "Modelo do veículo é obrigatório";
     if (!form.vehicle_year.trim()) errs.vehicle_year = "Ano do veículo é obrigatório";
     if (!form.origin_address.trim())
-      errs.origin_address = attendanceType === "collision" ? "Local do ocorrido é obrigatório" : "Endereço de origem é obrigatório";
+      errs.origin_address = (attendanceType === "collision" || attendanceType === "periferico") ? "Local do ocorrido é obrigatório" : "Endereço de origem é obrigatório";
     if (!form.origin_city.trim()) errs.origin_city = "Cidade de origem é obrigatória";
     if (!geoCoords.origin) errs.origin_geo = "Selecione o endereço nas sugestões para obter geolocalização";
+
+    // Payment method is always required
+    if (!paymentMethod) errs.payment_method = "Forma de pagamento é obrigatória";
 
     if (attendanceType === "pane") {
       const selectedServiceType = getPaneServiceType();
@@ -435,7 +447,7 @@ export default function NewServiceRequest() {
         errs.destination_geo = "Selecione o endereço de destino nas sugestões para geolocalização";
       const checklistError = validateChecklist();
       if (checklistError) errs.checklist = checklistError;
-    } else {
+    } else if (attendanceType === "collision") {
       if (needsTow === null) errs.needs_tow = "Informe se precisa de reboque";
       if (needsTow && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório para reboque";
       if (needsTow && !form.destination_city.trim()) errs.destination_city = "Cidade de destino é obrigatória";
@@ -445,6 +457,7 @@ export default function NewServiceRequest() {
         if (checklistError) errs.checklist = checklistError;
       }
     }
+    // periferico: no destination, no checklist, no tow
 
     // Avulso (99) validation: require authorization when no beneficiary found
     if (!beneficiaryFound && form.vehicle_plate.replace(/[^A-Z0-9]/g, "").length >= 7 && !avulsoAuthorized) {
@@ -478,6 +491,7 @@ export default function NewServiceRequest() {
 
     const effectiveServiceType = getEffectiveServiceType();
     const beneficiaryToken = crypto.randomUUID();
+    const isAutoComplete = attendanceType === "collision" || attendanceType === "periferico";
 
     const { data: inserted, error } = await supabase.from("service_requests").insert({
       requester_name: form.requester_name,
@@ -489,7 +503,7 @@ export default function NewServiceRequest() {
       vehicle_lowered: form.vehicle_lowered,
       difficult_access: form.difficult_access,
       service_type: effectiveServiceType as any,
-      event_type: (attendanceType === "collision" ? "accident" : form.event_type) as any,
+      event_type: (attendanceType === "collision" ? "accident" : attendanceType === "periferico" ? "periferico" : form.event_type) as any,
       origin_address: form.origin_address || null,
       origin_lat: geoCoords.origin?.lat || null,
       origin_lng: geoCoords.origin?.lng || null,
@@ -513,6 +527,8 @@ export default function NewServiceRequest() {
       scheduled_date: isScheduled && scheduledDate ? format(scheduledDate, "yyyy-MM-dd") : null,
       scheduled_time: isScheduled && scheduledTime ? scheduledTime : null,
       driver_name: driverIsBeneficiary ? null : (driverName.trim() || null),
+      payment_method: paymentMethod || null,
+      ...(isAutoComplete ? { status: "completed" as any, completed_at: new Date().toISOString() } : {}),
     } as any).select("id").single();
 
     if (!error && inserted) {
@@ -520,7 +536,9 @@ export default function NewServiceRequest() {
         service_request_id: inserted.id,
         event_type: "creation",
         description: attendanceType === "collision"
-          ? "Registro de colisão criado"
+          ? "Registro de colisão criado — finalizado automaticamente"
+          : attendanceType === "periferico"
+          ? "Registro de periféricos criado — finalizado automaticamente"
           : "Atendimento criado — aguardando acionamento de prestador",
         user_id: user?.id || null,
       });
@@ -536,7 +554,7 @@ export default function NewServiceRequest() {
           .eq("id", conversationId);
       }
 
-      if (attendanceType === "collision") {
+      if (attendanceType === "collision" || attendanceType === "periferico") {
         const { data: reqData } = await supabase
           .from("service_requests")
           .select("share_token")
@@ -545,7 +563,7 @@ export default function NewServiceRequest() {
         setCreatedRequestId(inserted.id);
         setShareToken(reqData?.share_token || null);
         setLoading(false);
-        toast({ title: "Registro de colisão criado!", description: "Agora anexe as mídias obrigatórias." });
+        toast({ title: attendanceType === "periferico" ? "Registro de periféricos criado!" : "Registro de colisão criado!", description: "Agora anexe as mídias obrigatórias." });
         return;
       }
     }
@@ -611,6 +629,7 @@ export default function NewServiceRequest() {
   const paneServiceOptions = getServiceOptionsForEvent();
 
   const isCollision = attendanceType === "collision";
+  const isPeriferico = attendanceType === "periferico";
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -621,7 +640,7 @@ export default function NewServiceRequest() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
 
-        {/* ═══════════════ TIPO: PANE vs COLISÃO ═══════════════ */}
+        {/* ═══════════════ TIPO: PANE vs COLISÃO vs PERIFÉRICOS ═══════════════ */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">TIPO DE ATENDIMENTO</CardTitle>
@@ -643,11 +662,23 @@ export default function NewServiceRequest() {
               <Button
                 type="button"
                 variant={attendanceType === "collision" ? "default" : "outline"}
-                onClick={() => setAttendanceType("collision")}
+                onClick={() => { setAttendanceType("collision"); setNeedsTow(null); }}
                 className="flex-1 h-14 text-base gap-2"
               >
                 <ShieldAlert className="h-5 w-5" />
                 Colisão
+              </Button>
+              <Button
+                type="button"
+                variant={attendanceType === "periferico" ? "default" : "outline"}
+                onClick={() => { setAttendanceType("periferico"); setNeedsTow(null); }}
+                className="flex-1 h-14 text-base gap-2 flex-col py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <Car className="h-5 w-5" />
+                  Periféricos
+                </div>
+                <span className="text-xs font-normal opacity-70">Troca de Vidros</span>
               </Button>
             </div>
           </CardContent>
@@ -1051,14 +1082,32 @@ export default function NewServiceRequest() {
               </div>
               {needsTow === false && (
                 <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                  Será criado apenas o registro de colisão com fotos e documentos. O link público será gerado para compartilhamento.
+                  Será criado apenas o registro de colisão com fotos e documentos. O atendimento será finalizado automaticamente.
                 </div>
               )}
             </CardContent>
           </Card>
         )}
 
-        {/* ═══════════════ VERIFICAÇÃO DO VEÍCULO (pane com reboque OU colisão com reboque) ═══════════════ */}
+        {/* ═══════════════ PERIFÉRICOS: INSTRUÇÕES ═══════════════ */}
+        {attendanceType === "periferico" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Car className="h-5 w-5" /> PERIFÉRICOS (TROCA DE VIDROS)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 space-y-2">
+                <p className="font-semibold">📸 Mídias obrigatórias: Foto + Áudio</p>
+                <p>Tire uma foto próxima do vidro quebrado e uma foto distante mostrando a placa do veículo.</p>
+                <p className="text-xs opacity-80">O atendimento será finalizado automaticamente após o envio das mídias.</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ═══════════════ VERIFICAÇÃO DO VEÍCULO (pane com reboque OU colisão com reboque — NÃO periféricos) ═══════════════ */}
         {((attendanceType === "pane" && !["locksmith", "tire_change", "battery", "fuel"].includes(form.service_type)) || (isCollision && needsTow)) && (
           <>
             <div className={vehicleCategory !== "car" ? "hidden" : ""}>
@@ -1089,7 +1138,7 @@ export default function NewServiceRequest() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>{isCollision ? "Local do Ocorrido *" : "Endereço de Origem *"}</Label>
+                <Label>{(isCollision || isPeriferico) ? "Local do Ocorrido *" : "Endereço de Origem *"}</Label>
                 <AddressAutocomplete
                   value={form.origin_address}
                   onChange={(v) => { update("origin_address", v); setErrors(prev => ({ ...prev, origin_address: "" })); }}
@@ -1098,7 +1147,7 @@ export default function NewServiceRequest() {
                     if (place.city) { update("origin_city", place.city); setErrors(prev => ({ ...prev, origin_city: "" })); }
                     if (place.state) update("origin_uf", place.state);
                   }}
-                  placeholder={isCollision ? "Local do acidente" : "Digite o endereço de origem"}
+                  placeholder={(isCollision || isPeriferico) ? "Local do ocorrido" : "Digite o endereço de origem"}
                   error={errors.origin_address}
                   tenantId={tenantId}
                    coords={geoCoords.origin}
@@ -1197,6 +1246,31 @@ export default function NewServiceRequest() {
           </CardContent>
         </Card>
 
+        {/* Payment Method */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              💳 FORMA DE PAGAMENTO
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label>Forma de Pagamento *</Label>
+              <Select value={paymentMethod} onValueChange={(v) => { setPaymentMethod(v); setErrors(prev => ({ ...prev, payment_method: "" })); }}>
+                <SelectTrigger className={errors.payment_method ? "border-destructive" : ""}>
+                  <SelectValue placeholder="Selecione a forma de pagamento" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_METHOD_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.payment_method && <p className="text-xs text-destructive">{errors.payment_method}</p>}
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Notes */}
         <Card>
           <CardContent className="pt-6">
@@ -1207,17 +1281,24 @@ export default function NewServiceRequest() {
           </CardContent>
         </Card>
 
-        {/* Collision Media Upload (shown after creation) */}
-        {isCollision && createdRequestId && (
+        {/* Collision/Periferico Media Upload (shown after creation) */}
+        {(isCollision || isPeriferico) && createdRequestId && (
           <div className="space-y-4">
             <CollisionMediaUpload serviceRequestId={createdRequestId} />
+            {isPeriferico && (
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                <p className="font-semibold mb-1">📸 Instruções para Periféricos</p>
+                <p>Tire uma foto próxima do vidro quebrado e uma foto distante mostrando a placa do veículo.</p>
+                <p className="text-xs mt-1 opacity-80">Obrigatório: foto + áudio</p>
+              </div>
+            )}
             {shareToken && (
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-3">
                     <Share2 className="h-5 w-5 text-primary shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">Link público da colisão:</p>
+                      <p className="text-sm font-medium">Link público:</p>
                       <p className="text-xs text-muted-foreground truncate">
                         {window.location.origin}/collision/{shareToken}
                       </p>
@@ -1247,11 +1328,12 @@ export default function NewServiceRequest() {
               <div className="text-sm space-y-2">
                 <p className="font-medium text-primary">Resumo do Atendimento</p>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
-                  <span>Tipo:</span><span className="font-medium text-foreground">{isCollision ? "Colisão" : "Pane / Assistência"}</span>
+                  <span>Tipo:</span><span className="font-medium text-foreground">{isCollision ? "Colisão" : isPeriferico ? "Periféricos (Troca de Vidros)" : "Pane / Assistência"}</span>
                   <span>Solicitante:</span><span className="font-medium text-foreground">{form.requester_name || "—"}</span>
                   <span>Veículo:</span><span className="font-medium text-foreground">{form.vehicle_plate || "—"} {form.vehicle_model}</span>
                   <span>Categoria:</span><span className="font-medium text-foreground">{vehicleCategory === "car" ? "Carro" : vehicleCategory === "motorcycle" ? "Moto" : "Caminhão"}</span>
-                   {!isCollision && (
+                  <span>Pagamento:</span><span className="font-medium text-foreground">{PAYMENT_METHOD_OPTIONS.find(o => o.value === paymentMethod)?.label || "—"}</span>
+                   {!isCollision && !isPeriferico && (
                     <>
                       <span>Serviço:</span><span className="font-medium text-foreground">{paneServiceOptions.find(o => o.value === form.service_type)?.label || "—"}</span>
                     </>
@@ -1261,7 +1343,7 @@ export default function NewServiceRequest() {
                       <span>Reboque:</span><span className="font-medium text-foreground">{needsTow ? "Sim" : "Não"}</span>
                     </>
                   )}
-                  <span>Status:</span><span className="font-medium text-foreground">Aguardando acionamento</span>
+                  <span>Status:</span><span className="font-medium text-foreground">{(isCollision || isPeriferico) ? "Finalizado automaticamente" : "Aguardando acionamento"}</span>
                   {isScheduled && isTowService && attendanceType === "pane" && scheduledDate && (
                     <>
                       <span>Agendamento:</span>
@@ -1282,7 +1364,7 @@ export default function NewServiceRequest() {
               Cancelar
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Salvando..." : isCollision ? "Criar Registro de Colisão" : "Criar Atendimento"}
+              {loading ? "Salvando..." : isCollision ? "Criar Registro de Colisão" : isPeriferico ? "Criar Registro de Periféricos" : "Criar Atendimento"}
             </Button>
           </div>
         )}

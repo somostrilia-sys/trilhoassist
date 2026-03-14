@@ -21,7 +21,14 @@ import RouteDistanceDisplay from "@/components/service-request/RouteDistanceDisp
 import PublicCollisionMedia from "@/components/collision/PublicCollisionMedia";
 
 type VehicleCategory = "car" | "motorcycle" | "truck";
-type AttendanceType = "pane" | "collision";
+type AttendanceType = "pane" | "collision" | "periferico";
+
+const PAYMENT_METHOD_OPTIONS = [
+  { value: "a_vista_pix", label: "À Vista - PIX" },
+  { value: "faturado_mensal", label: "Faturado Mensal" },
+  { value: "faturado_quinzenal", label: "Faturado Quinzenal" },
+  { value: "faturado_semanal", label: "Faturado Semanal" },
+];
 
 // Motivos de pane — SEM "Acidente"
 const eventTypeOptions = [
@@ -98,6 +105,7 @@ export default function PublicServiceRequest() {
     destination_uf: "",
     notes: "",
   });
+  const [paymentMethod, setPaymentMethod] = useState<string>("");
 
   const update = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
@@ -319,7 +327,9 @@ export default function PublicServiceRequest() {
     return null;
   };
 
-  const effectiveServiceType = attendanceType === "collision"
+  const effectiveServiceType = attendanceType === "periferico"
+    ? "other"
+    : attendanceType === "collision"
     ? (needsTow ? (vehicleCategory === "motorcycle" ? "tow_motorcycle" : vehicleCategory === "truck" ? "tow_heavy" : "tow_light") : "collision")
     : form.service_type;
 
@@ -330,10 +340,11 @@ export default function PublicServiceRequest() {
     if (!form.vehicle_plate.trim() || form.vehicle_plate.length < 7) errs.vehicle_plate = "Placa é obrigatória (7 caracteres)";
     if (!form.vehicle_model.trim()) errs.vehicle_model = "Modelo do veículo é obrigatório";
     if (!form.vehicle_year.trim()) errs.vehicle_year = "Ano do veículo é obrigatório";
-    if (!form.origin_address.trim()) errs.origin_address = attendanceType === "collision" ? "Local do ocorrido é obrigatório" : "Endereço de origem é obrigatório";
+    if (!form.origin_address.trim()) errs.origin_address = (attendanceType === "collision" || attendanceType === "periferico") ? "Local do ocorrido é obrigatório" : "Endereço de origem é obrigatório";
     if (!form.origin_number.trim()) errs.origin_number = "Número é obrigatório (ou S/N)";
     if (!form.origin_city.trim()) errs.origin_city = "Cidade de origem é obrigatória";
     if (!originCoords) errs.origin_geo = "Selecione o endereço nas sugestões ou use o GPS para geolocalização";
+    if (!paymentMethod) errs.payment_method = "Forma de pagamento é obrigatória";
 
     if (attendanceType === "pane") {
       const onSiteServices = ["locksmith", "tire_change", "battery", "fuel"];
@@ -343,7 +354,7 @@ export default function PublicServiceRequest() {
       if (!onSiteServices.includes(form.service_type) && !destinationCoords) errs.destination_geo = "Selecione o endereço de destino nas sugestões para geolocalização";
       const checklistError = validateChecklist();
       if (checklistError) errs.checklist = checklistError;
-    } else {
+    } else if (attendanceType === "collision") {
       if (needsTow === null) errs.needs_tow = "Informe se precisa de reboque";
       if (needsTow && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório para reboque";
       if (needsTow && !form.destination_number.trim()) errs.destination_number = "Número de destino é obrigatório (ou S/N)";
@@ -354,6 +365,7 @@ export default function PublicServiceRequest() {
         if (checklistError) errs.checklist = checklistError;
       }
     }
+    // periferico: no destination, no checklist
     return errs;
   };
 
@@ -394,7 +406,7 @@ export default function PublicServiceRequest() {
             vehicle_year: form.vehicle_year,
             vehicle_category: vehicleCategory,
             service_type: effectiveServiceType,
-            event_type: attendanceType === "collision" ? "accident" : form.event_type,
+            event_type: attendanceType === "collision" ? "accident" : attendanceType === "periferico" ? "periferico" : form.event_type,
             origin_address: form.origin_address,
             origin_lat: originCoords?.lat || null,
             origin_lng: originCoords?.lng || null,
@@ -406,6 +418,8 @@ export default function PublicServiceRequest() {
               hasThirdParty ? `TERCEIRO ENVOLVIDO - Placa: ${thirdPartyPlate || "Não informada"} | Documento: ${thirdPartyDocument || "Não informado"}` : null,
             ].filter(Boolean).join("\n") || null,
             verification_answers: getVerificationAnswers(),
+            payment_method: paymentMethod || null,
+            attendance_type: attendanceType,
           }),
         }
       );
@@ -413,8 +427,8 @@ export default function PublicServiceRequest() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Erro ao enviar solicitação");
 
-      // For collision, always go to media upload step
-      if (attendanceType === "collision") {
+      // For collision/periferico, always go to media upload step
+      if (attendanceType === "collision" || attendanceType === "periferico") {
         setCreatedRequestId(result.id);
         setTenantId(result.tenant_id || tenantId);
         setSubmitted({
@@ -422,7 +436,7 @@ export default function PublicServiceRequest() {
           trackingUrl: `${window.location.origin}/tracking/${result.beneficiary_token}`,
         });
         setLoading(false);
-        toast({ title: "Solicitação criada! Agora envie as mídias da colisão." });
+        toast({ title: attendanceType === "periferico" ? "Solicitação criada! Agora envie foto e áudio." : "Solicitação criada! Agora envie as mídias da colisão." });
         return;
       }
 
@@ -438,12 +452,12 @@ export default function PublicServiceRequest() {
     }
   };
 
-  // ═══ Collision media upload step ═══
-  if (createdRequestId && submitted && attendanceType === "collision") {
+  // ═══ Collision/Periferico media upload step ═══
+  if (createdRequestId && submitted && (attendanceType === "collision" || attendanceType === "periferico")) {
     const hasPhotos = collisionMediaFiles.some((f) => f.file_type === "photo");
     const hasAudio = collisionMediaFiles.some((f) => f.file_type === "audio");
     const hasDocs = collisionMediaFiles.some((f) => f.file_type === "document");
-    const allRequired = hasPhotos && hasAudio && hasDocs;
+    const allRequired = attendanceType === "periferico" ? (hasPhotos && hasAudio) : (hasPhotos && hasAudio && hasDocs);
 
     return (
       <div className="min-h-screen bg-muted/30">
@@ -451,7 +465,7 @@ export default function PublicServiceRequest() {
           <div className="max-w-lg mx-auto px-4 py-5 flex items-center gap-3">
             <img src={logoTrilho} alt="Logo" className="h-10 w-auto rounded bg-white/90 p-1" />
             <div>
-              <h1 className="text-lg font-bold">Registro de Colisão</h1>
+              <h1 className="text-lg font-bold">{attendanceType === "periferico" ? "Periféricos - Troca de Vidros" : "Registro de Colisão"}</h1>
               <p className="text-xs opacity-80">Protocolo: {submitted.protocol}</p>
             </div>
           </div>
@@ -462,10 +476,20 @@ export default function PublicServiceRequest() {
             onMediaChange={setCollisionMediaFiles}
           />
 
+          {attendanceType === "periferico" && (
+            <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
+              <p className="font-semibold mb-1">📸 Instruções</p>
+              <p>Tire uma foto próxima do vidro quebrado e uma foto distante mostrando a placa do veículo.</p>
+              <p className="text-xs mt-1">Obrigatório: foto + áudio</p>
+            </div>
+          )}
+
           {!allRequired && (
             <div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 shrink-0" />
-              Envie todas as mídias obrigatórias (fotos, áudio e documentos) para concluir.
+              {attendanceType === "periferico"
+                ? "Envie as mídias obrigatórias (fotos e áudio) para concluir."
+                : "Envie todas as mídias obrigatórias (fotos, áudio e documentos) para concluir."}
             </div>
           )}
 
@@ -530,6 +554,7 @@ export default function PublicServiceRequest() {
   const needsDestination = attendanceType === "pane" 
     ? !onSiteServices.includes(form.service_type) 
     : (attendanceType === "collision" && needsTow === true);
+  const isPeriferico = attendanceType === "periferico";
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -554,7 +579,7 @@ export default function PublicServiceRequest() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 <Button
                   type="button"
                   variant={attendanceType === "pane" ? "default" : "outline"}
@@ -571,6 +596,15 @@ export default function PublicServiceRequest() {
                   className="h-14 text-sm font-semibold"
                 >
                   💥 Colisão
+                </Button>
+                <Button
+                  type="button"
+                  variant={attendanceType === "periferico" ? "default" : "outline"}
+                  onClick={() => { setAttendanceType("periferico"); setNeedsTow(null); setHasThirdParty(null); }}
+                  className="h-14 text-sm font-semibold flex-col gap-0.5"
+                >
+                  <span>🪟 Periféricos</span>
+                  <span className="text-[10px] font-normal opacity-70">Troca de Vidros</span>
                 </Button>
               </div>
             </CardContent>
@@ -830,6 +864,24 @@ export default function PublicServiceRequest() {
             </Card>
           )}
 
+          {/* ═══ PERIFÉRICOS: Instruções ═══ */}
+          {attendanceType === "periferico" && (
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
+                  🪟 Periféricos (Troca de Vidros)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900 space-y-2">
+                  <p className="font-semibold">📸 Mídias obrigatórias: Foto + Áudio</p>
+                  <p>Tire uma foto próxima do vidro quebrado e uma foto distante mostrando a placa do veículo.</p>
+                  <p className="text-xs opacity-80">O atendimento será finalizado automaticamente após o envio.</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* ═══ Checklist (PANE ou COLISÃO COM REBOQUE) ═══ */}
           {showChecklist && (
             <>
@@ -994,6 +1046,31 @@ export default function PublicServiceRequest() {
               )}
 
               <RouteDistanceDisplay originCoords={originCoords} destinationCoords={destinationCoords} />
+            </CardContent>
+          </Card>
+
+          {/* ═══ Forma de Pagamento ═══ */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
+                💳 Forma de Pagamento
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Forma de Pagamento *</Label>
+                <Select value={paymentMethod} onValueChange={(v) => { setPaymentMethod(v); setErrors((p) => ({ ...p, payment_method: "" })); }}>
+                  <SelectTrigger className={errors.payment_method ? "border-destructive" : ""}>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHOD_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.payment_method && <p className="text-xs text-destructive">{errors.payment_method}</p>}
+              </div>
             </CardContent>
           </Card>
 

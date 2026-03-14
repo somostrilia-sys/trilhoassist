@@ -125,7 +125,15 @@ export const SERVICE_TYPE_LABELS: Record<string, string> = {
   battery: "Bateria",
   fuel: "Combustível",
   lodging: "Hospedagem",
+  collision: "Colisão",
   other: "Outro",
+};
+
+export const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  a_vista_pix: "À Vista - PIX",
+  faturado_mensal: "Faturado Mensal",
+  faturado_quinzenal: "Faturado Quinzenal",
+  faturado_semanal: "Faturado Semanal",
 };
 
 export const CLOSING_STATUS_LABELS: Record<string, string> = {

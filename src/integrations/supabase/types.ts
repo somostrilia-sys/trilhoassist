@@ -2303,6 +2303,7 @@ export type Database = {
         | "battery_dead"
         | "fuel_empty"
         | "other"
+        | "periferico"
       request_status:
         | "open"
         | "awaiting_dispatch"
@@ -2471,6 +2472,7 @@ export const Constants = {
         "battery_dead",
         "fuel_empty",
         "other",
+        "periferico",
       ],
       request_status: [
         "open",
