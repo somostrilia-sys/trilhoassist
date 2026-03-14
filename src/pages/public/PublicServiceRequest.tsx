@@ -1054,7 +1054,7 @@ export default function PublicServiceRequest() {
               <Textarea
                 value={form.notes}
                 onChange={(e) => update("notes", e.target.value)}
-                placeholder="Informações adicionais..."
+                placeholder="Descreva o problema do seu veículo..."
                 rows={3}
               />
             </CardContent>
