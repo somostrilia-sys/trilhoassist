@@ -640,7 +640,7 @@ export default function NewServiceRequest() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
 
-        {/* ═══════════════ TIPO: PANE vs COLISÃO ═══════════════ */}
+        {/* ═══════════════ TIPO: PANE vs COLISÃO vs PERIFÉRICOS ═══════════════ */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">TIPO DE ATENDIMENTO</CardTitle>
@@ -662,11 +662,23 @@ export default function NewServiceRequest() {
               <Button
                 type="button"
                 variant={attendanceType === "collision" ? "default" : "outline"}
-                onClick={() => setAttendanceType("collision")}
+                onClick={() => { setAttendanceType("collision"); setNeedsTow(null); }}
                 className="flex-1 h-14 text-base gap-2"
               >
                 <ShieldAlert className="h-5 w-5" />
                 Colisão
+              </Button>
+              <Button
+                type="button"
+                variant={attendanceType === "periferico" ? "default" : "outline"}
+                onClick={() => { setAttendanceType("periferico"); setNeedsTow(null); }}
+                className="flex-1 h-14 text-base gap-2 flex-col py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <Car className="h-5 w-5" />
+                  Periféricos
+                </div>
+                <span className="text-xs font-normal opacity-70">Troca de Vidros</span>
               </Button>
             </div>
           </CardContent>
