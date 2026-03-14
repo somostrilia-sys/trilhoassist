@@ -35,12 +35,7 @@ import { classifyVehicle, getCompatiblePlanCategories, PLAN_VEHICLE_CATEGORY_LAB
 type VehicleCategory = "car" | "motorcycle" | "truck";
 type AttendanceType = "pane" | "collision" | "periferico";
 
-const PAYMENT_METHOD_OPTIONS = [
-  { value: "a_vista_pix", label: "À Vista - PIX" },
-  { value: "faturado_mensal", label: "Faturado Mensal" },
-  { value: "faturado_quinzenal", label: "Faturado Quinzenal" },
-  { value: "faturado_semanal", label: "Faturado Semanal" },
-];
+
 
 export default function NewServiceRequest() {
   const { user } = useAuth();
@@ -107,7 +102,7 @@ export default function NewServiceRequest() {
   );
   const [vehicleCategory, setVehicleCategory] = useState<VehicleCategory>(initialCategory);
   const [needsTow, setNeedsTow] = useState<boolean | null>(null); // collision only
-  const [paymentMethod, setPaymentMethod] = useState<string>("");
+
 
   const [form, setForm] = useState({
     requester_name: searchParams.get("name") || "",
@@ -430,7 +425,7 @@ export default function NewServiceRequest() {
     if (!geoCoords.origin) errs.origin_geo = "Selecione o endereço nas sugestões para obter geolocalização";
 
     // Payment method is always required
-    if (!paymentMethod) errs.payment_method = "Forma de pagamento é obrigatória";
+
 
     if (attendanceType === "pane") {
       const selectedServiceType = getPaneServiceType();
@@ -527,7 +522,7 @@ export default function NewServiceRequest() {
       scheduled_date: isScheduled && scheduledDate ? format(scheduledDate, "yyyy-MM-dd") : null,
       scheduled_time: isScheduled && scheduledTime ? scheduledTime : null,
       driver_name: driverIsBeneficiary ? null : (driverName.trim() || null),
-      payment_method: paymentMethod || null,
+
       ...(isAutoComplete ? { status: "completed" as any, completed_at: new Date().toISOString() } : {}),
     } as any).select("id").single();
 
@@ -1246,30 +1241,7 @@ export default function NewServiceRequest() {
           </CardContent>
         </Card>
 
-        {/* Payment Method */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              💳 FORMA DE PAGAMENTO
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label>Forma de Pagamento *</Label>
-              <Select value={paymentMethod} onValueChange={(v) => { setPaymentMethod(v); setErrors(prev => ({ ...prev, payment_method: "" })); }}>
-                <SelectTrigger className={errors.payment_method ? "border-destructive" : ""}>
-                  <SelectValue placeholder="Selecione a forma de pagamento" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAYMENT_METHOD_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.payment_method && <p className="text-xs text-destructive">{errors.payment_method}</p>}
-            </div>
-          </CardContent>
-        </Card>
+
 
         {/* Notes */}
         <Card>
@@ -1332,7 +1304,7 @@ export default function NewServiceRequest() {
                   <span>Solicitante:</span><span className="font-medium text-foreground">{form.requester_name || "—"}</span>
                   <span>Veículo:</span><span className="font-medium text-foreground">{form.vehicle_plate || "—"} {form.vehicle_model}</span>
                   <span>Categoria:</span><span className="font-medium text-foreground">{vehicleCategory === "car" ? "Carro" : vehicleCategory === "motorcycle" ? "Moto" : "Caminhão"}</span>
-                  <span>Pagamento:</span><span className="font-medium text-foreground">{PAYMENT_METHOD_OPTIONS.find(o => o.value === paymentMethod)?.label || "—"}</span>
+
                    {!isCollision && !isPeriferico && (
                     <>
                       <span>Serviço:</span><span className="font-medium text-foreground">{paneServiceOptions.find(o => o.value === form.service_type)?.label || "—"}</span>
