@@ -427,8 +427,8 @@ export default function PublicServiceRequest() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Erro ao enviar solicitação");
 
-      // For collision, always go to media upload step
-      if (attendanceType === "collision") {
+      // For collision/periferico, always go to media upload step
+      if (attendanceType === "collision" || attendanceType === "periferico") {
         setCreatedRequestId(result.id);
         setTenantId(result.tenant_id || tenantId);
         setSubmitted({
@@ -436,7 +436,7 @@ export default function PublicServiceRequest() {
           trackingUrl: `${window.location.origin}/tracking/${result.beneficiary_token}`,
         });
         setLoading(false);
-        toast({ title: "Solicitação criada! Agora envie as mídias da colisão." });
+        toast({ title: attendanceType === "periferico" ? "Solicitação criada! Agora envie foto e áudio." : "Solicitação criada! Agora envie as mídias da colisão." });
         return;
       }
 
