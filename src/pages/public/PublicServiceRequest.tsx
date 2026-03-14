@@ -1049,6 +1049,31 @@ export default function PublicServiceRequest() {
             </CardContent>
           </Card>
 
+          {/* ═══ Forma de Pagamento ═══ */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
+                💳 Forma de Pagamento
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Forma de Pagamento *</Label>
+                <Select value={paymentMethod} onValueChange={(v) => { setPaymentMethod(v); setErrors((p) => ({ ...p, payment_method: "" })); }}>
+                  <SelectTrigger className={errors.payment_method ? "border-destructive" : ""}>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHOD_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.payment_method && <p className="text-xs text-destructive">{errors.payment_method}</p>}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* ═══ Observações ═══ */}
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
