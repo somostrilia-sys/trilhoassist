@@ -105,6 +105,7 @@ export default function PublicServiceRequest() {
     destination_uf: "",
     notes: "",
   });
+  const [paymentMethod, setPaymentMethod] = useState<string>("");
 
   const update = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
