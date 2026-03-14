@@ -15,21 +15,137 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, Plus, FileCheck, DollarSign, Clock, CheckCircle, Download, AlertTriangle, Banknote, ListChecks, Loader2 } from "lucide-react";
+import { Search, Plus, FileCheck, DollarSign, Clock, CheckCircle, Download, AlertTriangle, Banknote, ListChecks, Loader2, Receipt } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import {
   useTenantId, useFinancialClosings, useProviders,
-  CLOSING_STATUS_LABELS, SERVICE_TYPE_LABELS, formatCurrency,
+  CLOSING_STATUS_LABELS, SERVICE_TYPE_LABELS, PAYMENT_METHOD_LABELS, formatCurrency,
 } from "@/hooks/useFinancialData";
 import { format, subDays } from "date-fns";
 import { generateFinancialPdf } from "@/lib/generateFinancialPdf";
 import { ProviderInvoiceReview } from "@/components/provider/ProviderInvoiceReview";
 
-const isTermPayment = (method: string | null | undefined) => {
-  if (!method) return true;
-  return method.toLowerCase().trim() === "boleto";
-};
+// ═══ Payment method tab definitions ═══
+const PAYMENT_TABS = [
+  { key: "a_vista_pix", label: "À Vista (Pendente NF)", icon: Banknote },
+  { key: "faturado_mensal", label: "Faturado Mensal", icon: Receipt },
+  { key: "faturado_quinzenal", label: "Faturado Quinzenal", icon: Receipt },
+  { key: "faturado_semanal", label: "Faturado Semanal", icon: Receipt },
+] as const;
+
+function filterByPaymentMethod(dispatches: any[], tabKey: string): any[] {
+  return dispatches.filter((d: any) => {
+    const sr = d.service_requests;
+    const method = (sr?.payment_method || "").trim();
+    if (tabKey === "a_vista_pix") return method === "a_vista_pix";
+    if (tabKey === "faturado_quinzenal") return method === "faturado_quinzenal";
+    if (tabKey === "faturado_semanal") return method === "faturado_semanal";
+    // faturado_mensal: explicit match OR fallback for old records without payment_method
+    return method === "faturado_mensal" || method === "" || (method !== "a_vista_pix" && method !== "faturado_quinzenal" && method !== "faturado_semanal");
+  });
+}
+
+// ═══ Reusable dispatch table for payment tabs ═══
+function PaymentMethodTable({ dispatches, showNfBadge }: { dispatches: any[]; showNfBadge?: boolean }) {
+  if (dispatches.length === 0) {
+    return <div className="p-8 text-center text-muted-foreground">Nenhum atendimento encontrado nesta categoria.</div>;
+  }
+
+  const total = dispatches.reduce(
+    (s: number, d: any) => s + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0),
+    0
+  );
+
+  return (
+    <>
+      <div className="p-4 border-b bg-muted/30">
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-muted-foreground">
+            Total: <strong>{dispatches.length}</strong> atendimentos
+          </span>
+          <span className="text-sm font-semibold">{formatCurrency(total)}</span>
+        </div>
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Protocolo</TableHead>
+            <TableHead>Data</TableHead>
+            <TableHead>Beneficiário</TableHead>
+            <TableHead>Prestador</TableHead>
+            <TableHead>Tipo</TableHead>
+            <TableHead>Valor Cobrado</TableHead>
+            <TableHead>Valor Prestador</TableHead>
+            <TableHead>NF</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {dispatches.map((d: any) => {
+            const sr = d.service_requests;
+            return (
+              <TableRow key={d.id}>
+                <TableCell className="font-mono text-xs">{sr?.protocol}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {sr?.completed_at ? format(new Date(sr.completed_at), "dd/MM/yyyy") : "—"}
+                </TableCell>
+                <TableCell className="text-sm">{sr?.requester_name}</TableCell>
+                <TableCell className="text-sm">{(d.providers as any)?.name || "—"}</TableCell>
+                <TableCell className="text-xs">
+                  <Badge variant="outline" className="text-xs">
+                    {SERVICE_TYPE_LABELS[sr?.service_type] || sr?.service_type}
+                  </Badge>
+                </TableCell>
+                <TableCell className="font-medium">
+                  {formatCurrency(Number(sr?.charged_amount || 0))}
+                </TableCell>
+                <TableCell className="font-medium">
+                  {formatCurrency(Number(d.final_amount || d.quoted_amount || sr?.provider_cost || 0))}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <ProviderInvoiceReview dispatchId={d.id} />
+                    {showNfBadge && (
+                      <NfBadge dispatchId={d.id} />
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+        <TableFooter>
+          <TableRow>
+            <TableCell colSpan={5} className="text-right font-medium">Total</TableCell>
+            <TableCell className="font-bold">
+              {formatCurrency(dispatches.reduce((s: number, d: any) => s + Number(d.service_requests?.charged_amount || 0), 0))}
+            </TableCell>
+            <TableCell className="font-bold">{formatCurrency(total)}</TableCell>
+            <TableCell />
+          </TableRow>
+        </TableFooter>
+      </Table>
+    </>
+  );
+}
+
+// Badge that shows "Pendente NF" if no invoice exists for this dispatch
+function NfBadge({ dispatchId }: { dispatchId: string }) {
+  const { data: invoices } = useQuery({
+    queryKey: ["provider-invoice-check", dispatchId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("provider_invoices")
+        .select("id")
+        .eq("dispatch_id", dispatchId)
+        .limit(1);
+      return data ?? [];
+    },
+  });
+
+  if (!invoices || invoices.length > 0) return null;
+  return <Badge variant="destructive" className="text-[10px] ml-1">Pendente NF</Badge>;
+}
 
 export default function FinancialClosing() {
   const { toast } = useToast();
@@ -47,10 +163,9 @@ export default function FinancialClosing() {
   const { data: closings = [], isLoading } = useFinancialClosings(tenantId);
   const { data: providers = [] } = useProviders(tenantId);
 
-  // Fetch ALL pending term dispatches (last 30 days) for the new Pendentes tab
-  const thirtyDaysAgo = useMemo(() => subDays(new Date(), 30).toISOString(), []);
-  const { data: allPendingTerm = [], isLoading: pendingLoading } = useQuery({
-    queryKey: ["all-pending-term", tenantId, thirtyDaysAgo],
+  // Fetch ALL completed dispatches for payment-method tabs
+  const { data: allCompletedDispatches = [], isLoading: dispatchesLoading } = useQuery({
+    queryKey: ["all-completed-dispatches", tenantId],
     queryFn: async () => {
       const { data: dispatches, error } = await supabase
         .from("dispatches")
@@ -59,7 +174,7 @@ export default function FinancialClosing() {
           providers (id, name),
           service_requests!inner (
             id, protocol, requester_name, vehicle_plate, service_type,
-            provider_cost, completed_at, financial_status, tenant_id, status,
+            provider_cost, charged_amount, completed_at, financial_status, tenant_id, status,
             payment_method, payment_term, client_id, clients (id, name)
           )
         `)
@@ -67,20 +182,27 @@ export default function FinancialClosing() {
       if (error) throw error;
       return (dispatches ?? []).filter((d: any) => {
         const sr = d.service_requests;
-        if (!sr || sr.tenant_id !== tenantId || sr.status !== "completed") return false;
-        if (sr.financial_status !== "pending") return false;
-        if (!isTermPayment(sr.payment_method)) return false;
-        if (!sr.completed_at) return false;
-        return new Date(sr.completed_at) >= new Date(thirtyDaysAgo);
+        return sr && sr.tenant_id === tenantId && sr.status === "completed";
       });
     },
     enabled: !!tenantId,
   });
 
+  // Pending term dispatches (for Fechamentos tab bulk closing)
+  const thirtyDaysAgo = useMemo(() => subDays(new Date(), 30).toISOString(), []);
+  const pendingTermDispatches = useMemo(() => {
+    return allCompletedDispatches.filter((d: any) => {
+      const sr = d.service_requests;
+      if (sr.financial_status !== "pending") return false;
+      if (!sr.completed_at) return false;
+      return new Date(sr.completed_at) >= new Date(thirtyDaysAgo);
+    });
+  }, [allCompletedDispatches, thirtyDaysAgo]);
+
   // Group pending by provider
   const pendingByProvider = useMemo(() => {
     const map = new Map<string, { provider_id: string; provider_name: string; dispatches: any[]; total: number }>();
-    allPendingTerm.forEach((d: any) => {
+    pendingTermDispatches.forEach((d: any) => {
       const pid = d.provider_id || "unknown";
       const pname = (d.providers as any)?.name || "Sem prestador";
       if (!map.has(pid)) map.set(pid, { provider_id: pid, provider_name: pname, dispatches: [], total: 0 });
@@ -90,11 +212,11 @@ export default function FinancialClosing() {
       group.total += amount;
     });
     return Array.from(map.values()).sort((a, b) => a.provider_name.localeCompare(b.provider_name));
-  }, [allPendingTerm]);
+  }, [pendingTermDispatches]);
 
   const filteredPending = pendingProviderFilter === "all"
-    ? allPendingTerm
-    : allPendingTerm.filter((d: any) => d.provider_id === pendingProviderFilter);
+    ? pendingTermDispatches
+    : pendingTermDispatches.filter((d: any) => d.provider_id === pendingProviderFilter);
 
   const filteredPendingByProvider = pendingProviderFilter === "all"
     ? pendingByProvider
@@ -102,32 +224,14 @@ export default function FinancialClosing() {
 
   const pendingTotal = filteredPending.reduce((s: number, d: any) => s + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0), 0);
 
-  // Fetch cash payments for the cash tab
-  const { data: allCashPayments = [] } = useQuery({
-    queryKey: ["cash-payments", tenantId],
-    queryFn: async () => {
-      const { data: dispatches, error } = await supabase
-        .from("dispatches")
-        .select(`
-          id, final_amount, quoted_amount, provider_id,
-          providers (id, name),
-          service_requests!inner (
-            id, protocol, requester_name, vehicle_plate, service_type,
-            provider_cost, completed_at, financial_status, tenant_id, status,
-            payment_method, payment_term
-          )
-        `)
-        .eq("status", "completed");
-      if (error) throw error;
-      return (dispatches ?? []).filter((d: any) => {
-        const sr = d.service_requests;
-        if (!sr || sr.tenant_id !== tenantId || sr.status !== "completed") return false;
-        const method = (sr.payment_method || "").toLowerCase().trim();
-        return method !== "boleto" && method !== "";
-      });
-    },
-    enabled: !!tenantId,
-  });
+  // Counts per payment tab
+  const tabCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    PAYMENT_TABS.forEach(tab => {
+      counts[tab.key] = filterByPaymentMethod(allCompletedDispatches, tab.key).length;
+    });
+    return counts;
+  }, [allCompletedDispatches]);
 
   // Bulk closing mutation
   const bulkClosingMutation = useMutation({
@@ -179,7 +283,7 @@ export default function FinancialClosing() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["financial-closings"] });
-      queryClient.invalidateQueries({ queryKey: ["all-pending-term"] });
+      queryClient.invalidateQueries({ queryKey: ["all-completed-dispatches"] });
       toast({ title: "Fechamento(s) criado(s) com sucesso!" });
       setShowConfirmBulk(false);
       setSelectedProviders(new Set());
@@ -290,7 +394,7 @@ export default function FinancialClosing() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Pendentes</p>
-              <p className="text-2xl font-bold">{allPendingTerm.length}</p>
+              <p className="text-2xl font-bold">{pendingTermDispatches.length}</p>
             </div>
           </CardContent>
         </Card>
@@ -340,216 +444,254 @@ export default function FinancialClosing() {
         </Card>
       </div>
 
-      <Tabs defaultValue="pending" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="pending" className="gap-1">
-            <ListChecks className="h-4 w-4" />
-            Pendentes
-            {allPendingTerm.length > 0 && (
-              <Badge variant="secondary" className="ml-1 text-xs">{allPendingTerm.length}</Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="closings">Fechamentos</TabsTrigger>
-          <TabsTrigger value="cash" className="gap-1">
-            <Banknote className="h-4 w-4" />
-            À Vista
-            {allCashPayments.length > 0 && (
-              <Badge variant="secondary" className="ml-1 text-xs">{allCashPayments.length}</Badge>
-            )}
-          </TabsTrigger>
+      <Tabs defaultValue="a_vista_pix" className="space-y-4">
+        <TabsList className="flex-wrap h-auto gap-1">
+          {PAYMENT_TABS.map(tab => (
+            <TabsTrigger key={tab.key} value={tab.key} className="gap-1">
+              <tab.icon className="h-4 w-4" />
+              {tab.label}
+              {tabCounts[tab.key] > 0 && (
+                <Badge variant="secondary" className="ml-1 text-xs">{tabCounts[tab.key]}</Badge>
+              )}
+            </TabsTrigger>
+          ))}
+          <TabsTrigger value="fechamentos">Fechamentos</TabsTrigger>
         </TabsList>
 
-        {/* ===== PENDENTES TAB ===== */}
-        <TabsContent value="pending">
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-              <Select value={pendingProviderFilter} onValueChange={setPendingProviderFilter}>
-                <SelectTrigger className="w-full sm:w-72"><SelectValue placeholder="Filtrar por prestador" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os prestadores</SelectItem>
-                  {pendingByProvider.map((g) => (
-                    <SelectItem key={g.provider_id} value={g.provider_id}>
-                      {g.provider_name} ({g.dispatches.length})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <div className="flex gap-2">
-                {selectedProviders.size > 0 && (
-                  <Button
-                    className="gap-2"
-                    onClick={() => { setBulkTarget("selected"); setShowConfirmBulk(true); }}
-                  >
-                    <FileCheck className="h-4 w-4" />
-                    Fechar {selectedProviders.size} prestador{selectedProviders.size > 1 ? "es" : ""}
-                  </Button>
-                )}
-                {filteredPendingByProvider.length > 0 && (
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => { setBulkTarget("all"); setShowConfirmBulk(true); }}
-                  >
-                    <Plus className="h-4 w-4" />
-                    Fechar Todos
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {/* Summary bar */}
-            <div className="flex items-center gap-6 p-3 rounded-lg bg-muted/40 border text-sm">
-              <span><strong>{filteredPending.length}</strong> atendimentos pendentes</span>
-              <span><strong>{filteredPendingByProvider.length}</strong> prestadores</span>
-              <span className="font-semibold">{formatCurrency(pendingTotal)}</span>
-            </div>
-
-            {pendingLoading ? (
-              <div className="p-8 text-center text-muted-foreground flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
-              </div>
-            ) : filteredPendingByProvider.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">Nenhum atendimento a prazo pendente nos últimos 30 dias.</div>
-            ) : (
-              <div className="space-y-4">
-                {filteredPendingByProvider.map((group) => (
-                  <Card key={group.provider_id}>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Checkbox
-                            checked={selectedProviders.has(group.provider_id)}
-                            onCheckedChange={() => toggleProvider(group.provider_id)}
-                          />
-                          <CardTitle className="text-base">{group.provider_name}</CardTitle>
-                          <Badge variant="outline">{group.dispatches.length} atendimento{group.dispatches.length > 1 ? "s" : ""}</Badge>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm font-bold">{formatCurrency(group.total)}</span>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-1"
-                            onClick={() => {
-                              setSelectedProviders(new Set([group.provider_id]));
-                              setBulkTarget("selected");
-                              setShowConfirmBulk(true);
-                            }}
-                          >
-                            <FileCheck className="h-3.5 w-3.5" />
-                            Fechar
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Protocolo</TableHead>
-                            <TableHead>Beneficiário</TableHead>
-                            <TableHead>Placa</TableHead>
-                            <TableHead>Empresa</TableHead>
-                            <TableHead>Tipo</TableHead>
-                            <TableHead>Data</TableHead>
-                            <TableHead>Valor</TableHead>
-                            <TableHead>NF</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {group.dispatches.map((d: any) => {
-                            const sr = d.service_requests;
-                            return (
-                              <TableRow key={d.id}>
-                                <TableCell className="font-mono text-xs">{sr?.protocol}</TableCell>
-                                <TableCell className="text-sm">{sr?.requester_name}</TableCell>
-                                <TableCell className="font-mono text-xs">{sr?.vehicle_plate || "—"}</TableCell>
-                                <TableCell className="text-sm">{sr?.clients?.name || "—"}</TableCell>
-                                <TableCell className="text-xs">
-                                  <Badge variant="outline" className="text-xs">
-                                    {SERVICE_TYPE_LABELS[sr?.service_type] || sr?.service_type}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-sm text-muted-foreground">
-                                  {sr?.completed_at ? format(new Date(sr.completed_at), "dd/MM/yyyy") : "—"}
-                                </TableCell>
-                                <TableCell className="font-medium">
-                                  {formatCurrency(Number(d.final_amount || d.quoted_amount || sr?.provider_cost || 0))}
-                                </TableCell>
-                                <TableCell>
-                                  <ProviderInvoiceReview dispatchId={d.id} />
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                        <TableFooter>
-                          <TableRow>
-                            <TableCell colSpan={6} className="text-right font-medium">Total</TableCell>
-                            <TableCell className="font-bold">{formatCurrency(group.total)}</TableCell>
-                            <TableCell />
-                          </TableRow>
-                        </TableFooter>
-                      </Table>
-                    </CardContent>
-                  </Card>
-                ))}
-
-                {/* Select all bar */}
-                <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
-                  <Checkbox
-                    checked={selectedProviders.size === filteredPendingByProvider.length && filteredPendingByProvider.length > 0}
-                    onCheckedChange={selectAllProviders}
+        {/* ===== PAYMENT METHOD TABS ===== */}
+        {PAYMENT_TABS.map(tab => (
+          <TabsContent key={tab.key} value={tab.key}>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <tab.icon className="h-5 w-5" />
+                  {tab.label}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {dispatchesLoading ? (
+                  <div className="p-8 text-center text-muted-foreground flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
+                  </div>
+                ) : (
+                  <PaymentMethodTable
+                    dispatches={filterByPaymentMethod(allCompletedDispatches, tab.key)}
+                    showNfBadge={tab.key === "a_vista_pix"}
                   />
-                  <span className="text-sm text-muted-foreground">Selecionar todos os prestadores</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </TabsContent>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        ))}
 
         {/* ===== FECHAMENTOS TAB ===== */}
-        <TabsContent value="closings">
+        <TabsContent value="fechamentos">
           <div className="space-y-4">
-            <div className="flex flex-col gap-3">
-              <div className="relative w-full sm:max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Buscar por prestador..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <Select value={providerFilter} onValueChange={setProviderFilter}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Prestador" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os prestadores</SelectItem>
-                    {providers.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Status" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os status</SelectItem>
-                    <SelectItem value="open">Aberto</SelectItem>
-                    <SelectItem value="closed">Fechado</SelectItem>
-                    <SelectItem value="paid">Pago</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Vencimento" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="overdue">Vencidos</SelectItem>
-                    <SelectItem value="due_soon">Vence em 7 dias</SelectItem>
-                    <SelectItem value="on_time">Em dia</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
+            {/* Pending section */}
             <Card>
-              <CardContent className="p-0">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ListChecks className="h-5 w-5" />
+                  Pendentes de Fechamento
+                  {pendingTermDispatches.length > 0 && (
+                    <Badge variant="secondary" className="text-xs">{pendingTermDispatches.length}</Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+                  <Select value={pendingProviderFilter} onValueChange={setPendingProviderFilter}>
+                    <SelectTrigger className="w-full sm:w-72"><SelectValue placeholder="Filtrar por prestador" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os prestadores</SelectItem>
+                      {pendingByProvider.map((g) => (
+                        <SelectItem key={g.provider_id} value={g.provider_id}>
+                          {g.provider_name} ({g.dispatches.length})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <div className="flex gap-2">
+                    {selectedProviders.size > 0 && (
+                      <Button
+                        className="gap-2"
+                        onClick={() => { setBulkTarget("selected"); setShowConfirmBulk(true); }}
+                      >
+                        <FileCheck className="h-4 w-4" />
+                        Fechar {selectedProviders.size} prestador{selectedProviders.size > 1 ? "es" : ""}
+                      </Button>
+                    )}
+                    {filteredPendingByProvider.length > 0 && (
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => { setBulkTarget("all"); setShowConfirmBulk(true); }}
+                      >
+                        <Plus className="h-4 w-4" />
+                        Fechar Todos
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-6 p-3 rounded-lg bg-muted/40 border text-sm">
+                  <span><strong>{filteredPending.length}</strong> atendimentos pendentes</span>
+                  <span><strong>{filteredPendingByProvider.length}</strong> prestadores</span>
+                  <span className="font-semibold">{formatCurrency(pendingTotal)}</span>
+                </div>
+
+                {dispatchesLoading ? (
+                  <div className="p-8 text-center text-muted-foreground flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
+                  </div>
+                ) : filteredPendingByProvider.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">Nenhum atendimento pendente nos últimos 30 dias.</div>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredPendingByProvider.map((group) => (
+                      <Card key={group.provider_id}>
+                        <CardHeader className="pb-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <Checkbox
+                                checked={selectedProviders.has(group.provider_id)}
+                                onCheckedChange={() => toggleProvider(group.provider_id)}
+                              />
+                              <CardTitle className="text-base">{group.provider_name}</CardTitle>
+                              <Badge variant="outline">{group.dispatches.length} atendimento{group.dispatches.length > 1 ? "s" : ""}</Badge>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-sm font-bold">{formatCurrency(group.total)}</span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1"
+                                onClick={() => {
+                                  setSelectedProviders(new Set([group.provider_id]));
+                                  setBulkTarget("selected");
+                                  setShowConfirmBulk(true);
+                                }}
+                              >
+                                <FileCheck className="h-3.5 w-3.5" />
+                                Fechar
+                              </Button>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Protocolo</TableHead>
+                                <TableHead>Beneficiário</TableHead>
+                                <TableHead>Placa</TableHead>
+                                <TableHead>Empresa</TableHead>
+                                <TableHead>Tipo</TableHead>
+                                <TableHead>Pagamento</TableHead>
+                                <TableHead>Data</TableHead>
+                                <TableHead>Valor</TableHead>
+                                <TableHead>NF</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {group.dispatches.map((d: any) => {
+                                const sr = d.service_requests;
+                                return (
+                                  <TableRow key={d.id}>
+                                    <TableCell className="font-mono text-xs">{sr?.protocol}</TableCell>
+                                    <TableCell className="text-sm">{sr?.requester_name}</TableCell>
+                                    <TableCell className="font-mono text-xs">{sr?.vehicle_plate || "—"}</TableCell>
+                                    <TableCell className="text-sm">{sr?.clients?.name || "—"}</TableCell>
+                                    <TableCell className="text-xs">
+                                      <Badge variant="outline" className="text-xs">
+                                        {SERVICE_TYPE_LABELS[sr?.service_type] || sr?.service_type}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-xs">
+                                      <Badge variant="secondary" className="text-xs">
+                                        {PAYMENT_METHOD_LABELS[sr?.payment_method] || sr?.payment_method || "—"}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">
+                                      {sr?.completed_at ? format(new Date(sr.completed_at), "dd/MM/yyyy") : "—"}
+                                    </TableCell>
+                                    <TableCell className="font-medium">
+                                      {formatCurrency(Number(d.final_amount || d.quoted_amount || sr?.provider_cost || 0))}
+                                    </TableCell>
+                                    <TableCell>
+                                      <ProviderInvoiceReview dispatchId={d.id} />
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                            <TableFooter>
+                              <TableRow>
+                                <TableCell colSpan={7} className="text-right font-medium">Total</TableCell>
+                                <TableCell className="font-bold">{formatCurrency(group.total)}</TableCell>
+                                <TableCell />
+                              </TableRow>
+                            </TableFooter>
+                          </Table>
+                        </CardContent>
+                      </Card>
+                    ))}
+
+                    <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+                      <Checkbox
+                        checked={selectedProviders.size === filteredPendingByProvider.length && filteredPendingByProvider.length > 0}
+                        onCheckedChange={selectAllProviders}
+                      />
+                      <span className="text-sm text-muted-foreground">Selecionar todos os prestadores</span>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Existing closings list */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Fechamentos Criados</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 p-4">
+                <div className="flex flex-col gap-3">
+                  <div className="relative w-full sm:max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Buscar por prestador..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Select value={providerFilter} onValueChange={setProviderFilter}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Prestador" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os prestadores</SelectItem>
+                        {providers.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Status" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os status</SelectItem>
+                        <SelectItem value="open">Aberto</SelectItem>
+                        <SelectItem value="closed">Fechado</SelectItem>
+                        <SelectItem value="paid">Pago</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Vencimento" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="overdue">Vencidos</SelectItem>
+                        <SelectItem value="due_soon">Vence em 7 dias</SelectItem>
+                        <SelectItem value="on_time">Em dia</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 {isLoading ? (
                   <div className="p-8 text-center text-muted-foreground">Carregando...</div>
                 ) : filtered.length === 0 ? (
@@ -669,67 +811,6 @@ export default function FinancialClosing() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-
-        {/* ===== CASH TAB ===== */}
-        <TabsContent value="cash">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Banknote className="h-5 w-5" />
-                Pagamentos à Vista
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              {allCashPayments.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground">Nenhum pagamento à vista encontrado.</div>
-              ) : (
-                <>
-                  <div className="p-4 border-b bg-muted/30">
-                    <div className="flex items-center gap-4">
-                      <span className="text-sm text-muted-foreground">Total: <strong>{allCashPayments.length}</strong> atendimentos</span>
-                      <span className="text-sm font-semibold">
-                        {formatCurrency(allCashPayments.reduce((s: number, d: any) => s + Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0), 0))}
-                      </span>
-                    </div>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Protocolo</TableHead>
-                        <TableHead>Prestador</TableHead>
-                        <TableHead>Beneficiário</TableHead>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>NF</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {allCashPayments.map((d: any) => {
-                        const sr = d.service_requests;
-                        return (
-                          <TableRow key={d.id}>
-                            <TableCell className="font-mono text-xs">{sr?.protocol}</TableCell>
-                            <TableCell>{(d.providers as any)?.name || "—"}</TableCell>
-                            <TableCell>{sr?.requester_name}</TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {sr?.completed_at ? format(new Date(sr.completed_at), "dd/MM/yyyy") : "—"}
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              {formatCurrency(Number(d.final_amount || d.quoted_amount || sr?.provider_cost || 0))}
-                            </TableCell>
-                            <TableCell>
-                              <ProviderInvoiceReview dispatchId={d.id} />
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </>
-              )}
-            </CardContent>
-          </Card>
         </TabsContent>
       </Tabs>
 
