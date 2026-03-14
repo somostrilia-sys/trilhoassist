@@ -2315,11 +2315,10 @@ ${etaStr ? `*PREVISÃO DE CHEGADA*: ${etaStr}` : ""}
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pix">PIX</SelectItem>
-                  <SelectItem value="credit_card">Cartão de Crédito</SelectItem>
-                  <SelectItem value="debit_card">Cartão de Débito</SelectItem>
-                  <SelectItem value="cash">Dinheiro</SelectItem>
-                  <SelectItem value="boleto">Boleto</SelectItem>
+                  <SelectItem value="a_vista_pix">À Vista - PIX</SelectItem>
+                  <SelectItem value="faturado_mensal">Faturado Mensal</SelectItem>
+                  <SelectItem value="faturado_quinzenal">Faturado Quinzenal</SelectItem>
+                  <SelectItem value="faturado_semanal">Faturado Semanal</SelectItem>
                 </SelectContent>
               </Select>
             </div>
