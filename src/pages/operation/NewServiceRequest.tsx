@@ -1082,9 +1082,27 @@ export default function NewServiceRequest() {
               </div>
               {needsTow === false && (
                 <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                  Será criado apenas o registro de colisão com fotos e documentos. O link público será gerado para compartilhamento.
+                  Será criado apenas o registro de colisão com fotos e documentos. O atendimento será finalizado automaticamente.
                 </div>
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ═══════════════ PERIFÉRICOS: INSTRUÇÕES ═══════════════ */}
+        {attendanceType === "periferico" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Car className="h-5 w-5" /> PERIFÉRICOS (TROCA DE VIDROS)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 space-y-2">
+                <p className="font-semibold">📸 Mídias obrigatórias: Foto + Áudio</p>
+                <p>Tire uma foto próxima do vidro quebrado e uma foto distante mostrando a placa do veículo.</p>
+                <p className="text-xs opacity-80">O atendimento será finalizado automaticamente após o envio das mídias.</p>
+              </div>
             </CardContent>
           </Card>
         )}
