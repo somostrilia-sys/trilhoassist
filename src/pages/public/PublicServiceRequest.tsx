@@ -340,10 +340,11 @@ export default function PublicServiceRequest() {
     if (!form.vehicle_plate.trim() || form.vehicle_plate.length < 7) errs.vehicle_plate = "Placa é obrigatória (7 caracteres)";
     if (!form.vehicle_model.trim()) errs.vehicle_model = "Modelo do veículo é obrigatório";
     if (!form.vehicle_year.trim()) errs.vehicle_year = "Ano do veículo é obrigatório";
-    if (!form.origin_address.trim()) errs.origin_address = attendanceType === "collision" ? "Local do ocorrido é obrigatório" : "Endereço de origem é obrigatório";
+    if (!form.origin_address.trim()) errs.origin_address = (attendanceType === "collision" || attendanceType === "periferico") ? "Local do ocorrido é obrigatório" : "Endereço de origem é obrigatório";
     if (!form.origin_number.trim()) errs.origin_number = "Número é obrigatório (ou S/N)";
     if (!form.origin_city.trim()) errs.origin_city = "Cidade de origem é obrigatória";
     if (!originCoords) errs.origin_geo = "Selecione o endereço nas sugestões ou use o GPS para geolocalização";
+    if (!paymentMethod) errs.payment_method = "Forma de pagamento é obrigatória";
 
     if (attendanceType === "pane") {
       const onSiteServices = ["locksmith", "tire_change", "battery", "fuel"];
@@ -353,7 +354,7 @@ export default function PublicServiceRequest() {
       if (!onSiteServices.includes(form.service_type) && !destinationCoords) errs.destination_geo = "Selecione o endereço de destino nas sugestões para geolocalização";
       const checklistError = validateChecklist();
       if (checklistError) errs.checklist = checklistError;
-    } else {
+    } else if (attendanceType === "collision") {
       if (needsTow === null) errs.needs_tow = "Informe se precisa de reboque";
       if (needsTow && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório para reboque";
       if (needsTow && !form.destination_number.trim()) errs.destination_number = "Número de destino é obrigatório (ou S/N)";
@@ -364,6 +365,7 @@ export default function PublicServiceRequest() {
         if (checklistError) errs.checklist = checklistError;
       }
     }
+    // periferico: no destination, no checklist
     return errs;
   };
 
