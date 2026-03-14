@@ -452,12 +452,12 @@ export default function PublicServiceRequest() {
     }
   };
 
-  // ═══ Collision media upload step ═══
-  if (createdRequestId && submitted && attendanceType === "collision") {
+  // ═══ Collision/Periferico media upload step ═══
+  if (createdRequestId && submitted && (attendanceType === "collision" || attendanceType === "periferico")) {
     const hasPhotos = collisionMediaFiles.some((f) => f.file_type === "photo");
     const hasAudio = collisionMediaFiles.some((f) => f.file_type === "audio");
     const hasDocs = collisionMediaFiles.some((f) => f.file_type === "document");
-    const allRequired = hasPhotos && hasAudio && hasDocs;
+    const allRequired = attendanceType === "periferico" ? (hasPhotos && hasAudio) : (hasPhotos && hasAudio && hasDocs);
 
     return (
       <div className="min-h-screen bg-muted/30">
