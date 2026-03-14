@@ -1364,7 +1364,7 @@ export default function NewServiceRequest() {
               Cancelar
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Salvando..." : isCollision ? "Criar Registro de Colisão" : "Criar Atendimento"}
+              {loading ? "Salvando..." : isCollision ? "Criar Registro de Colisão" : isPeriferico ? "Criar Registro de Periféricos" : "Criar Atendimento"}
             </Button>
           </div>
         )}
