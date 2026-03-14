@@ -1043,9 +1043,6 @@ export default function PublicServiceRequest() {
               <RouteDistanceDisplay originCoords={originCoords} destinationCoords={destinationCoords} />
             </CardContent>
           </Card>
-
-
-
           {/* ═══ Observações ═══ */}
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
