@@ -1107,7 +1107,7 @@ export default function NewServiceRequest() {
           </Card>
         )}
 
-        {/* ═══════════════ VERIFICAÇÃO DO VEÍCULO (pane com reboque OU colisão com reboque) ═══════════════ */}
+        {/* ═══════════════ VERIFICAÇÃO DO VEÍCULO (pane com reboque OU colisão com reboque — NÃO periféricos) ═══════════════ */}
         {((attendanceType === "pane" && !["locksmith", "tire_change", "battery", "fuel"].includes(form.service_type)) || (isCollision && needsTow)) && (
           <>
             <div className={vehicleCategory !== "car" ? "hidden" : ""}>
