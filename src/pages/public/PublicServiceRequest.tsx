@@ -1043,9 +1043,6 @@ export default function PublicServiceRequest() {
               <RouteDistanceDisplay originCoords={originCoords} destinationCoords={destinationCoords} />
             </CardContent>
           </Card>
-
-
-
           {/* ═══ Observações ═══ */}
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
@@ -1057,7 +1054,7 @@ export default function PublicServiceRequest() {
               <Textarea
                 value={form.notes}
                 onChange={(e) => update("notes", e.target.value)}
-                placeholder="Informações adicionais..."
+                placeholder="Descreva o problema do seu veículo..."
                 rows={3}
               />
             </CardContent>
