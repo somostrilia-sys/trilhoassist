@@ -1236,8 +1236,6 @@ export default function NewServiceRequest() {
           </CardContent>
         </Card>
 
-
-
         {/* Notes */}
         <Card>
           <CardContent className="pt-6">
