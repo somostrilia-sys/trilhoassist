@@ -101,12 +101,13 @@ export default function NewServiceRequest() {
   const paramServiceType = normalizeServiceType(searchParams.get("service_type"));
   const initialCategory: VehicleCategory = paramCategory || (paramServiceType === "tow_motorcycle" ? "motorcycle" : paramServiceType === "tow_heavy" ? "truck" : "car");
 
-  // ═══ Top-level: Pane vs Colisão ═══
+  // ═══ Top-level: Pane vs Colisão vs Periféricos ═══
   const [attendanceType, setAttendanceType] = useState<AttendanceType>(
     paramServiceType === "collision" ? "collision" : "pane"
   );
   const [vehicleCategory, setVehicleCategory] = useState<VehicleCategory>(initialCategory);
   const [needsTow, setNeedsTow] = useState<boolean | null>(null); // collision only
+  const [paymentMethod, setPaymentMethod] = useState<string>("");
 
   const [form, setForm] = useState({
     requester_name: searchParams.get("name") || "",
