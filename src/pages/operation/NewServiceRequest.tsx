@@ -425,9 +425,12 @@ export default function NewServiceRequest() {
     if (!form.vehicle_model.trim()) errs.vehicle_model = "Modelo do veículo é obrigatório";
     if (!form.vehicle_year.trim()) errs.vehicle_year = "Ano do veículo é obrigatório";
     if (!form.origin_address.trim())
-      errs.origin_address = attendanceType === "collision" ? "Local do ocorrido é obrigatório" : "Endereço de origem é obrigatório";
+      errs.origin_address = (attendanceType === "collision" || attendanceType === "periferico") ? "Local do ocorrido é obrigatório" : "Endereço de origem é obrigatório";
     if (!form.origin_city.trim()) errs.origin_city = "Cidade de origem é obrigatória";
     if (!geoCoords.origin) errs.origin_geo = "Selecione o endereço nas sugestões para obter geolocalização";
+
+    // Payment method is always required
+    if (!paymentMethod) errs.payment_method = "Forma de pagamento é obrigatória";
 
     if (attendanceType === "pane") {
       const selectedServiceType = getPaneServiceType();
@@ -444,7 +447,7 @@ export default function NewServiceRequest() {
         errs.destination_geo = "Selecione o endereço de destino nas sugestões para geolocalização";
       const checklistError = validateChecklist();
       if (checklistError) errs.checklist = checklistError;
-    } else {
+    } else if (attendanceType === "collision") {
       if (needsTow === null) errs.needs_tow = "Informe se precisa de reboque";
       if (needsTow && !form.destination_address.trim()) errs.destination_address = "Endereço de destino é obrigatório para reboque";
       if (needsTow && !form.destination_city.trim()) errs.destination_city = "Cidade de destino é obrigatória";
@@ -454,6 +457,7 @@ export default function NewServiceRequest() {
         if (checklistError) errs.checklist = checklistError;
       }
     }
+    // periferico: no destination, no checklist, no tow
 
     // Avulso (99) validation: require authorization when no beneficiary found
     if (!beneficiaryFound && form.vehicle_plate.replace(/[^A-Z0-9]/g, "").length >= 7 && !avulsoAuthorized) {
