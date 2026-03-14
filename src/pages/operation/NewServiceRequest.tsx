@@ -1297,7 +1297,6 @@ export default function NewServiceRequest() {
                   <span>Solicitante:</span><span className="font-medium text-foreground">{form.requester_name || "—"}</span>
                   <span>Veículo:</span><span className="font-medium text-foreground">{form.vehicle_plate || "—"} {form.vehicle_model}</span>
                   <span>Categoria:</span><span className="font-medium text-foreground">{vehicleCategory === "car" ? "Carro" : vehicleCategory === "motorcycle" ? "Moto" : "Caminhão"}</span>
-
                    {!isCollision && !isPeriferico && (
                     <>
                       <span>Serviço:</span><span className="font-medium text-foreground">{paneServiceOptions.find(o => o.value === form.service_type)?.label || "—"}</span>
