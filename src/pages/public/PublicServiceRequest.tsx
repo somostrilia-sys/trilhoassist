@@ -327,7 +327,9 @@ export default function PublicServiceRequest() {
     return null;
   };
 
-  const effectiveServiceType = attendanceType === "collision"
+  const effectiveServiceType = attendanceType === "periferico"
+    ? "other"
+    : attendanceType === "collision"
     ? (needsTow ? (vehicleCategory === "motorcycle" ? "tow_motorcycle" : vehicleCategory === "truck" ? "tow_heavy" : "tow_light") : "collision")
     : form.service_type;
 
