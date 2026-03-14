@@ -465,7 +465,7 @@ export default function PublicServiceRequest() {
           <div className="max-w-lg mx-auto px-4 py-5 flex items-center gap-3">
             <img src={logoTrilho} alt="Logo" className="h-10 w-auto rounded bg-white/90 p-1" />
             <div>
-              <h1 className="text-lg font-bold">Registro de Colisão</h1>
+              <h1 className="text-lg font-bold">{attendanceType === "periferico" ? "Periféricos - Troca de Vidros" : "Registro de Colisão"}</h1>
               <p className="text-xs opacity-80">Protocolo: {submitted.protocol}</p>
             </div>
           </div>
