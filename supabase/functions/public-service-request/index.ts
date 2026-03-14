@@ -119,14 +119,18 @@ Deno.serve(async (req) => {
     ];
     const validEventTypes = [
       "mechanical_failure", "accident", "theft", "flat_tire",
-      "locked_out", "battery_dead", "fuel_empty", "other",
+      "locked_out", "battery_dead", "fuel_empty", "other", "periferico",
     ];
+    const validPaymentMethods = ["a_vista_pix", "faturado_mensal", "faturado_quinzenal", "faturado_semanal"];
 
     if (service_type && !validServiceTypes.includes(service_type)) {
       throw new Error("Tipo de serviço inválido");
     }
     if (event_type && !validEventTypes.includes(event_type)) {
       throw new Error("Tipo de evento inválido");
+    }
+    if (body.payment_method && !validPaymentMethods.includes(body.payment_method)) {
+      throw new Error("Forma de pagamento inválida");
     }
 
     // Validate coordinates if provided
