@@ -406,6 +406,7 @@ export default function NewServiceRequest() {
   };
 
   const getEffectiveServiceType = () => {
+    if (attendanceType === "periferico") return "other";
     if (attendanceType === "collision") {
       return needsTow
         ? (vehicleCategory === "motorcycle" ? "tow_motorcycle" : vehicleCategory === "truck" ? "tow_heavy" : "tow_light")
