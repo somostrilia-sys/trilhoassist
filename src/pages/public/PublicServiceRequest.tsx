@@ -449,6 +449,66 @@ export default function PublicServiceRequest() {
     }
   };
 
+  // ═══ CRM Eventos integration for collision ═══
+  const sendToCrmEventos = async (protocol: string) => {
+    try {
+      const vehicleCategoryMap: Record<string, string> = {
+        car: "leve",
+        motorcycle: "moto",
+        truck: "pesado",
+      };
+      const mediaUrls = collisionMediaFiles.map((f: any) => f.file_url).filter(Boolean);
+      const descriptionParts = [
+        form.notes || "",
+        form.vehicle_model ? `Modelo: ${form.vehicle_model}` : "",
+        form.vehicle_year ? `Ano: ${form.vehicle_year}` : "",
+        `Precisa reboque: ${needsTow ? "sim" : "não"}`,
+      ].filter(Boolean).join(" | ");
+
+      const locationParts = [
+        form.origin_address,
+        form.origin_number ? `nº ${form.origin_number}` : "",
+        form.origin_city,
+        form.origin_uf,
+      ].filter(Boolean).join(", ");
+
+      await fetch("https://zplcfkesjwbklqariocx.supabase.co/functions/v1/external-intake", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer c20093cfb35160de83da42ccc72cf6c77c77e4fea1beab9f3537078b441ac8f9",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          event_type: "colisao",
+          plate: form.vehicle_plate,
+          associate_name: form.requester_name,
+          associate_phone: form.requester_phone.replace(/\D/g, ""),
+          vehicle_category: vehicleCategoryMap[vehicleCategory] || "leve",
+          location: locationParts,
+          description: descriptionParts,
+          external_reference: protocol,
+          files: mediaUrls,
+        }),
+      });
+    } catch (err) {
+      console.error("Erro ao enviar para CRM Eventos:", err);
+    }
+  };
+
+  const handleFinalizeConcluir = async () => {
+    if (attendanceType === "collision" && submitted) {
+      setFinalizingCrm(true);
+      try {
+        await sendToCrmEventos(submitted.protocol);
+      } catch (err) {
+        console.error("CRM error (non-blocking):", err);
+      } finally {
+        setFinalizingCrm(false);
+      }
+    }
+    setCreatedRequestId(null);
+  };
+
   // ═══ Collision/Periferico media upload step ═══
   if (createdRequestId && submitted && (attendanceType === "collision" || attendanceType === "periferico")) {
     const hasPhotos = collisionMediaFiles.some((f) => f.file_type === "photo");
