@@ -551,12 +551,15 @@ export default function PublicServiceRequest() {
           )}
 
           <Button
-            onClick={() => setCreatedRequestId(null)}
-            disabled={!allRequired}
+            onClick={handleFinalizeConcluir}
+            disabled={!allRequired || finalizingCrm}
             className="w-full h-14 text-lg font-bold shadow-lg bg-green-600 hover:bg-green-700 text-white"
           >
-            <CheckCircle2 className="h-6 w-6 mr-2" />
-            Concluir e Acompanhar Atendimento
+            {finalizingCrm ? (
+              <><Loader2 className="h-6 w-6 mr-2 animate-spin" /> Finalizando...</>
+            ) : (
+              <><CheckCircle2 className="h-6 w-6 mr-2" /> Concluir e Acompanhar Atendimento</>
+            )}
           </Button>
         </main>
       </div>
