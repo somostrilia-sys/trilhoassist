@@ -80,6 +80,8 @@ export default function PublicServiceRequest() {
   // Collision media state
   const [createdRequestId, setCreatedRequestId] = useState<string | null>(null);
   const [collisionMediaFiles, setCollisionMediaFiles] = useState<any[]>([]);
+  const [finalizingCrm, setFinalizingCrm] = useState(false);
+  const [savedProtocol, setSavedProtocol] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     requester_name: "",
