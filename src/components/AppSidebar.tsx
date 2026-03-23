@@ -80,7 +80,10 @@ const menuSections: MenuSection[] = [
     collapsible: true,
     module: "finance",
     items: [
-      { title: "Fechamento", url: "/finance/closing", icon: FileCheck },
+      { title: "Dashboard Fin.", url: "/finance/dashboard", icon: BarChart3 },
+      { title: "Fechamento Mensal", url: "/finance/fechamento", icon: FileCheck },
+      { title: "Custos Operacionais", url: "/finance/custos", icon: DollarSign },
+      { title: "Fechamento Legado", url: "/finance/closing", icon: FileCheck },
       { title: "Faturamento", url: "/finance/billing", icon: Receipt },
       { title: "Relatórios", url: "/finance/reports", icon: BarChart3 },
     ],
