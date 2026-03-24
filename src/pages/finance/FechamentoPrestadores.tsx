@@ -103,7 +103,7 @@ export default function FechamentoPrestadores() {
         .gte("created_at", appliedFrom.toISOString())
         .lte("created_at", appliedTo.toISOString())
         .not("provider_id", "is", null)
-        .in("status", ["completed", "accepted", "provider_arrived", "en_route"]);
+        .in("status", ["completed", "accepted"]);
 
       if (error) throw error;
       return (data || []) as unknown as DispatchWithDetails[];

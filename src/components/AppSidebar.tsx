@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Headphones, Briefcase, Users, DollarSign,
   FileText, Settings, Link2, BarChart3, ChevronDown, Plus, List,
-  Building2, UserCheck, Award, Network, Receipt, FileCheck, LogOut, Shield, MessageSquare, Zap, QrCode
+  Building2, UserCheck, Award, Network, Receipt, FileCheck, LogOut, Shield, MessageSquare, Zap, QrCode, Calculator
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
