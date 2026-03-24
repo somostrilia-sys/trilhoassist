@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Headphones, Briefcase, Users, DollarSign,
   FileText, Settings, Link2, BarChart3, ChevronDown, Plus, List,
-  Building2, UserCheck, Award, Network, Receipt, FileCheck, LogOut, Shield, MessageSquare, Zap, QrCode
+  Building2, UserCheck, Award, Network, Receipt, FileCheck, LogOut, Shield, MessageSquare, Zap, QrCode, Calculator
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -83,6 +83,7 @@ const menuSections: MenuSection[] = [
       { title: "Dashboard Fin.", url: "/finance/dashboard", icon: BarChart3 },
       { title: "Fechamento Mensal", url: "/finance/fechamento", icon: FileCheck },
       { title: "Custos Operacionais", url: "/finance/custos", icon: DollarSign },
+      { title: "Fechamento Prestadores", url: "/finance/fechamento-prestadores", icon: Calculator },
       { title: "Fechamento Legado", url: "/finance/closing", icon: FileCheck },
       { title: "Faturamento", url: "/finance/billing", icon: Receipt },
       { title: "Relatórios", url: "/finance/reports", icon: BarChart3 },
