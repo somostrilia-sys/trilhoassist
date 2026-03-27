@@ -99,11 +99,16 @@ serve(async (req) => {
 
     const { data: sr } = await supabaseAdmin
       .from("service_requests")
-      .select("id, service_type, share_token")
+      .select("id, service_type, event_type, share_token")
       .eq("id", serviceRequestId)
       .single();
 
-    if (!sr || sr.service_type !== "collision" || !sr.share_token) {
+    // Accept: collision (with share_token) OR periferico (event_type = 'periferico') OR other media-required service types
+    const isCollision = sr?.service_type === "collision" && sr?.share_token != null;
+    const isPeriferico = (sr as any)?.event_type === "periferico" || sr?.service_type === "other";
+    
+    if (!sr || (!isCollision && !isPeriferico)) {
+      console.error("Invalid service request check:", { sr, isCollision, isPeriferico });
       return json({ error: "Invalid service request" }, 403);
     }
 
