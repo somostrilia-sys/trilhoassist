@@ -241,7 +241,41 @@ export default function FinancialClosing() {
     return counts;
   }, [allCompletedDispatches]);
 
-  // Bulk closing mutation
+  // Unique providers from dispatches for tab filter
+  const tabProviders = useMemo(() => {
+    const map = new Map<string, string>();
+    allCompletedDispatches.forEach((d: any) => {
+      const pid = d.provider_id;
+      const pname = (d.providers as any)?.name || "Sem prestador";
+      if (pid && !map.has(pid)) map.set(pid, pname);
+    });
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [allCompletedDispatches]);
+
+  // Filtered dispatches for payment tabs (by provider + date range)
+  const filteredTabDispatches = useMemo(() => {
+    return allCompletedDispatches.filter((d: any) => {
+      const sr = d.service_requests;
+      if (tabProviderFilter !== "all" && d.provider_id !== tabProviderFilter) return false;
+      if (tabDateFrom && sr?.completed_at && new Date(sr.completed_at) < tabDateFrom) return false;
+      if (tabDateTo) {
+        const endOfDay = new Date(tabDateTo);
+        endOfDay.setHours(23, 59, 59, 999);
+        if (sr?.completed_at && new Date(sr.completed_at) > endOfDay) return false;
+      }
+      return true;
+    });
+  }, [allCompletedDispatches, tabProviderFilter, tabDateFrom, tabDateTo]);
+
+  // Filtered tab counts
+  const filteredTabCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    PAYMENT_TABS.forEach(tab => {
+      counts[tab.key] = filterByPaymentMethod(filteredTabDispatches, tab.key).length;
+    });
+    return counts;
+  }, [filteredTabDispatches]);
+
   const bulkClosingMutation = useMutation({
     mutationFn: async (providerIds: string[]) => {
       const targetGroups = pendingByProvider.filter((g) => providerIds.includes(g.provider_id));
