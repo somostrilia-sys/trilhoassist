@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { startOfMonth } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -162,6 +163,9 @@ export default function FinancialClosing() {
   const [selectedProviders, setSelectedProviders] = useState<Set<string>>(new Set());
   const [showConfirmBulk, setShowConfirmBulk] = useState(false);
   const [bulkTarget, setBulkTarget] = useState<"selected" | "all">("all");
+  const [tabProviderFilter, setTabProviderFilter] = useState<string>("all");
+  const [tabDateFrom, setTabDateFrom] = useState<Date | undefined>(startOfMonth(new Date()));
+  const [tabDateTo, setTabDateTo] = useState<Date | undefined>(new Date());
 
   const { data: tenantId } = useTenantId();
   const { data: closings = [], isLoading } = useFinancialClosings(tenantId);
@@ -237,7 +241,41 @@ export default function FinancialClosing() {
     return counts;
   }, [allCompletedDispatches]);
 
-  // Bulk closing mutation
+  // Unique providers from dispatches for tab filter
+  const tabProviders = useMemo(() => {
+    const map = new Map<string, string>();
+    allCompletedDispatches.forEach((d: any) => {
+      const pid = d.provider_id;
+      const pname = (d.providers as any)?.name || "Sem prestador";
+      if (pid && !map.has(pid)) map.set(pid, pname);
+    });
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [allCompletedDispatches]);
+
+  // Filtered dispatches for payment tabs (by provider + date range)
+  const filteredTabDispatches = useMemo(() => {
+    return allCompletedDispatches.filter((d: any) => {
+      const sr = d.service_requests;
+      if (tabProviderFilter !== "all" && d.provider_id !== tabProviderFilter) return false;
+      if (tabDateFrom && sr?.completed_at && new Date(sr.completed_at) < tabDateFrom) return false;
+      if (tabDateTo) {
+        const endOfDay = new Date(tabDateTo);
+        endOfDay.setHours(23, 59, 59, 999);
+        if (sr?.completed_at && new Date(sr.completed_at) > endOfDay) return false;
+      }
+      return true;
+    });
+  }, [allCompletedDispatches, tabProviderFilter, tabDateFrom, tabDateTo]);
+
+  // Filtered tab counts
+  const filteredTabCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    PAYMENT_TABS.forEach(tab => {
+      counts[tab.key] = filterByPaymentMethod(filteredTabDispatches, tab.key).length;
+    });
+    return counts;
+  }, [filteredTabDispatches]);
+
   const bulkClosingMutation = useMutation({
     mutationFn: async (providerIds: string[]) => {
       const targetGroups = pendingByProvider.filter((g) => providerIds.includes(g.provider_id));
@@ -376,7 +414,7 @@ export default function FinancialClosing() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Fechamento Financeiro</h1>
+          <h1 className="text-2xl font-bold">Fechamento de Prestadores</h1>
           <p className="text-sm text-muted-foreground">Controle de pagamentos a prestadores</p>
         </div>
       </div>
@@ -454,13 +492,47 @@ export default function FinancialClosing() {
             <TabsTrigger key={tab.key} value={tab.key} className="gap-1">
               <tab.icon className="h-4 w-4" />
               {tab.label}
-              {tabCounts[tab.key] > 0 && (
-                <Badge variant="secondary" className="ml-1 text-xs">{tabCounts[tab.key]}</Badge>
+              {filteredTabCounts[tab.key] > 0 && (
+                <Badge variant="secondary" className="ml-1 text-xs">{filteredTabCounts[tab.key]}</Badge>
               )}
             </TabsTrigger>
           ))}
           <TabsTrigger value="fechamentos">Fechamentos</TabsTrigger>
         </TabsList>
+
+        {/* ===== Filtros globais das abas de pagamento ===== */}
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Prestador</Label>
+            <Select value={tabProviderFilter} onValueChange={setTabProviderFilter}>
+              <SelectTrigger className="w-full sm:w-64"><SelectValue placeholder="Todos os prestadores" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os prestadores</SelectItem>
+                {tabProviders.map(([id, name]) => (
+                  <SelectItem key={id} value={id}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Data início</Label>
+            <Input
+              type="date"
+              value={tabDateFrom ? format(tabDateFrom, "yyyy-MM-dd") : ""}
+              onChange={(e) => setTabDateFrom(e.target.value ? new Date(e.target.value + "T00:00:00") : undefined)}
+              className="w-40"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Data fim</Label>
+            <Input
+              type="date"
+              value={tabDateTo ? format(tabDateTo, "yyyy-MM-dd") : ""}
+              onChange={(e) => setTabDateTo(e.target.value ? new Date(e.target.value + "T00:00:00") : undefined)}
+              className="w-40"
+            />
+          </div>
+        </div>
 
         {/* ===== PAYMENT METHOD TABS ===== */}
         {PAYMENT_TABS.map(tab => (
@@ -479,7 +551,7 @@ export default function FinancialClosing() {
                   </div>
                 ) : (
                   <PaymentMethodTable
-                    dispatches={filterByPaymentMethod(allCompletedDispatches, tab.key)}
+                    dispatches={filterByPaymentMethod(filteredTabDispatches, tab.key)}
                     showNfBadge={tab.key === "a_vista_pix"}
                   />
                 )}
