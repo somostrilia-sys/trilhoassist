@@ -501,7 +501,7 @@ export default function FinancialClosing() {
         </Card>
       </div>
 
-      <Tabs defaultValue="a_vista_pix" className="space-y-4">
+      <Tabs defaultValue="prestadores" className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
           {PAYMENT_TABS.map(tab => (
             <TabsTrigger key={tab.key} value={tab.key} className="gap-1">
