@@ -6,6 +6,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  rolesLoaded: boolean;
   roles: string[];
   clientId: string | null;
   hasRole: (role: string) => boolean;
