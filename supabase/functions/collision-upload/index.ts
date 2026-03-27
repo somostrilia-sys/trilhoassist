@@ -103,8 +103,8 @@ serve(async (req) => {
       .eq("id", serviceRequestId)
       .single();
 
-    // Accept: collision (with share_token) OR periferico (event_type = 'periferico') OR other media-required service types
-    const isCollision = sr?.service_type === "collision" && sr?.share_token != null;
+    // Accept: collision OR periferico (event_type = 'periferico') OR other media-required service types
+    const isCollision = sr?.service_type === "collision";
     const isPeriferico = (sr as any)?.event_type === "periferico" || sr?.service_type === "other";
     
     if (!sr || (!isCollision && !isPeriferico)) {

@@ -117,11 +117,11 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange }
     fileType: string,
     retryCount = 0
   ): Promise<UploadedFile | null> => {
-    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-    if (!projectId || !anonKey) {
-      console.error("[CollisionMedia] Missing env vars:", { projectId: !!projectId, anonKey: !!anonKey });
+    if (!supabaseUrl || !anonKey) {
+      console.error("[CollisionMedia] Missing env vars:", { supabaseUrl: !!supabaseUrl, anonKey: !!anonKey });
       toast({ title: "Configuração inválida do app", variant: "destructive" });
       return null;
     }
@@ -149,7 +149,7 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange }
 
     try {
       const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/collision-upload`,
+        `${supabaseUrl}/functions/v1/collision-upload`,
         {
           method: "POST",
           headers: { apikey: anonKey },

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -16,6 +16,23 @@ const serviceTypeMap: Record<string, string> = {
   tow_light: "Reboque Leve", tow_heavy: "Reboque Pesado", tow_motorcycle: "Reboque Moto", tow_utility: "Reboque Utilitário",
   locksmith: "Chaveiro", tire_change: "Troca de Pneu", battery: "Bateria",
   fuel: "Combustível", lodging: "Hospedagem", collision: "Colisão", other: "Outro",
+};
+
+const VERIFICATION_LABELS: Record<string, string> = {
+  wheel_locked: "Roda travada",
+  steering_locked: "Direção travada",
+  armored: "Blindado",
+  vehicle_lowered: "Rebaixado",
+  carrying_cargo: "Transportando carga",
+  easy_access: "Fácil acesso",
+  key_available: "Chave disponível",
+  documents_available: "Documentos no local",
+  has_passengers: "Passageiros no veículo",
+  had_collision: "Sofreu colisão",
+  risk_area: "Área de risco",
+  vehicle_starts: "Veículo liga",
+  docs_key_available: "Documentos e chave disponíveis",
+  wheel_locked_count: "Qtd. rodas travadas",
 };
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -470,6 +487,38 @@ export default function ProviderTracking() {
             )}
           </CardContent>
         </Card>
+
+        {/* Vehicle conditions from operator questionnaire */}
+        {request?.verification_answers && Object.keys(request.verification_answers).length > 0 && (
+          <Card className="border-orange-200 bg-orange-50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold text-orange-800 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4" />
+                Condições do Veículo para Remoção
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {Object.entries(request.verification_answers)
+                .filter(([key]) => key !== "category")
+                .map(([key, value]) => {
+                  const label = VERIFICATION_LABELS[key] || key;
+                  const isYes = value === "yes" || value === true;
+                  const isNo = value === "no" || value === false;
+                  const isNumber = typeof value === "number";
+                  const isCritical = ["wheel_locked", "armored", "risk_area", "vehicle_lowered"].includes(key);
+                  return (
+                    <div key={key} className={`flex items-center justify-between py-1 border-b border-orange-100 last:border-0 ${isCritical && isYes ? "text-red-700 font-semibold" : ""}`}>
+                      <span className="text-sm">{label}</span>
+                      <span className={`text-sm font-medium ${isYes ? (isCritical ? "text-red-600" : "text-green-600") : isNo ? "text-gray-500" : "text-foreground"}`}>
+                        {isNumber ? value : isYes ? "✅ Sim" : isNo ? "Não" : String(value)}
+                      </span>
+                    </div>
+                  );
+                })
+              }
+            </CardContent>
+          </Card>
+        )}
 
         {/* Step 1: GPS - Required before acceptance */}
         <Card className={tracking ? "border-green-500 border-2" : "border-amber-500 border-2"}>
