@@ -276,6 +276,21 @@ export default function FinancialClosing() {
     return counts;
   }, [filteredTabDispatches]);
 
+  // Group filtered dispatches by provider for "Prestadores" tab
+  const providerGroups = useMemo(() => {
+    const map = new Map<string, { provider_id: string; provider_name: string; dispatches: any[]; total: number }>();
+    filteredTabDispatches.forEach((d: any) => {
+      const pid = d.provider_id || "unknown";
+      const pname = (d.providers as any)?.name || "Sem prestador";
+      if (!map.has(pid)) map.set(pid, { provider_id: pid, provider_name: pname, dispatches: [], total: 0 });
+      const group = map.get(pid)!;
+      const amount = Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0);
+      group.dispatches.push(d);
+      group.total += amount;
+    });
+    return Array.from(map.values()).sort((a, b) => a.provider_name.localeCompare(b.provider_name));
+  }, [filteredTabDispatches]);
+
   const bulkClosingMutation = useMutation({
     mutationFn: async (providerIds: string[]) => {
       const targetGroups = pendingByProvider.filter((g) => providerIds.includes(g.provider_id));
@@ -486,7 +501,7 @@ export default function FinancialClosing() {
         </Card>
       </div>
 
-      <Tabs defaultValue="a_vista_pix" className="space-y-4">
+      <Tabs defaultValue="prestadores" className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
           {PAYMENT_TABS.map(tab => (
             <TabsTrigger key={tab.key} value={tab.key} className="gap-1">
@@ -497,6 +512,13 @@ export default function FinancialClosing() {
               )}
             </TabsTrigger>
           ))}
+          <TabsTrigger value="prestadores" className="gap-1">
+            <ListChecks className="h-4 w-4" />
+            Prestadores
+            {providerGroups.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-xs">{providerGroups.length}</Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="fechamentos">Fechamentos</TabsTrigger>
         </TabsList>
 
@@ -560,7 +582,98 @@ export default function FinancialClosing() {
           </TabsContent>
         ))}
 
-        {/* ===== FECHAMENTOS TAB ===== */}
+        {/* ===== PRESTADORES TAB ===== */}
+        <TabsContent value="prestadores">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ListChecks className="h-5 w-5" />
+                Prestadores com Serviços Realizados
+                <Badge variant="secondary" className="text-xs">{providerGroups.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {dispatchesLoading ? (
+                <div className="p-8 text-center text-muted-foreground flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
+                </div>
+              ) : providerGroups.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">Nenhum prestador encontrado no período.</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Prestador</TableHead>
+                      <TableHead className="text-center">Serviços</TableHead>
+                      <TableHead className="text-right">Valor Total</TableHead>
+                      <TableHead className="text-center">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {providerGroups.map((group) => (
+                      <TableRow key={group.provider_id}>
+                        <TableCell className="font-medium">{group.provider_name}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="outline">{group.dispatches.length}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">{formatCurrency(group.total)}</TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1"
+                            onClick={() => {
+                              const mappedItems = group.dispatches.map((d: any) => {
+                                const sr = d.service_requests;
+                                return {
+                                  protocol: sr?.protocol || "",
+                                  date: sr?.completed_at ? format(new Date(sr.completed_at), "dd/MM/yyyy") : "",
+                                  requesterName: sr?.requester_name || "",
+                                  vehiclePlate: sr?.vehicle_plate || "",
+                                  vehicleModel: sr?.vehicle_model || "",
+                                  serviceType: SERVICE_TYPE_LABELS[sr?.service_type] || sr?.service_type || "",
+                                  chargedAmount: Number(d.final_amount || d.quoted_amount || sr?.provider_cost || 0),
+                                  originAddress: sr?.origin_address || "",
+                                  destinationAddress: sr?.destination_address || "",
+                                  estimatedKm: sr?.estimated_km ?? null,
+                                  cooperativa: "",
+                                };
+                              });
+                              generateFinancialPdf({
+                                providerName: group.provider_name,
+                                periodStart: format(tabDateFrom || startOfMonth(new Date()), "yyyy-MM-dd"),
+                                periodEnd: format(tabDateTo || new Date(), "yyyy-MM-dd"),
+                                items: mappedItems,
+                                totalServices: group.dispatches.length,
+                                totalCharged: group.total,
+                                totalProviderCost: group.total,
+                                markupAmount: 0,
+                                clientName: group.provider_name,
+                                type: "closing",
+                              });
+                            }}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            PDF
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell className="font-bold">Total</TableCell>
+                      <TableCell className="text-center font-bold">{filteredTabDispatches.length}</TableCell>
+                      <TableCell className="text-right font-bold">{formatCurrency(providerGroups.reduce((s, g) => s + g.total, 0))}</TableCell>
+                      <TableCell />
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="fechamentos">
           <div className="space-y-4">
             {/* Pending section */}
