@@ -414,7 +414,7 @@ export default function FinancialClosing() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Fechamento Financeiro</h1>
+          <h1 className="text-2xl font-bold">Fechamento de Prestadores</h1>
           <p className="text-sm text-muted-foreground">Controle de pagamentos a prestadores</p>
         </div>
       </div>
