@@ -637,8 +637,46 @@ export default function FinancialClosing() {
                               <CardTitle className="text-base">{group.provider_name}</CardTitle>
                               <Badge variant="outline">{group.dispatches.length} atendimento{group.dispatches.length > 1 ? "s" : ""}</Badge>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
                               <span className="text-sm font-bold">{formatCurrency(group.total)}</span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1"
+                                onClick={() => {
+                                  const mappedItems = group.dispatches.map((d: any) => {
+                                    const sr = d.service_requests;
+                                    return {
+                                      protocol: sr?.protocol || "",
+                                      date: sr?.completed_at ? format(new Date(sr.completed_at), "dd/MM/yyyy") : "",
+                                      requesterName: sr?.requester_name || "",
+                                      vehiclePlate: sr?.vehicle_plate || "",
+                                      vehicleModel: sr?.vehicle_model || "",
+                                      serviceType: SERVICE_TYPE_LABELS[sr?.service_type] || sr?.service_type || "",
+                                      chargedAmount: Number(d.final_amount || d.quoted_amount || sr?.provider_cost || 0),
+                                      originAddress: sr?.origin_address || "",
+                                      destinationAddress: sr?.destination_address || "",
+                                      estimatedKm: sr?.estimated_km ?? null,
+                                      cooperativa: "",
+                                    };
+                                  });
+                                  generateFinancialPdf({
+                                    providerName: group.provider_name,
+                                    periodStart: format(tabDateFrom || startOfMonth(new Date()), "yyyy-MM-dd"),
+                                    periodEnd: format(tabDateTo || new Date(), "yyyy-MM-dd"),
+                                    items: mappedItems,
+                                    totalServices: group.dispatches.length,
+                                    totalCharged: group.total,
+                                    totalProviderCost: group.total,
+                                    markupAmount: 0,
+                                    clientName: group.provider_name,
+                                    type: "closing",
+                                  });
+                                }}
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                PDF
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
