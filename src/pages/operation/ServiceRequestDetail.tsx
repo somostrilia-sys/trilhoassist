@@ -234,6 +234,7 @@ export default function ServiceRequestDetail() {
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [labelText, setLabelText] = useState("");
   const [labelSending, setLabelSending] = useState(false);
+  const [labelLoading, setLabelLoading] = useState(false);
   const [labelType, setLabelType] = useState<"creation" | "dispatch">("creation");
   const [cancelProviderDialogOpen, setCancelProviderDialogOpen] = useState(false);
   const [cancelProviderReason, setCancelProviderReason] = useState("");
@@ -1034,53 +1035,60 @@ ${dispatchEtaStr ? `*PREVISÃO DE CHEGADA*: ${dispatchEtaStr}` : ""}
             <Button
               variant="outline"
               className="gap-2"
+              disabled={labelLoading}
               onClick={async () => {
-                const benName = beneficiary?.name || request.requester_name;
-                const clientName = (request as any).clients?.name || "";
-                const fmtDate = (d: string) => new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+                setLabelLoading(true);
+                try {
+                  const benName = beneficiary?.name || request.requester_name || "";
+                  const clientName = (request as any).clients?.name || "";
 
-                const baseTrackingUrl = "https://trilhoassist.com.br";
-                const trackingUrl = request.beneficiary_token
-                  ? `${baseTrackingUrl}/tracking/${request.beneficiary_token}`
-                  : "";
+                  const baseTrackingUrl = "https://trilhoassist.com.br";
+                  const trackingUrl = request.beneficiary_token
+                    ? `${baseTrackingUrl}/tracking/${request.beneficiary_token}`
+                    : "";
 
-                // Calculate route via OSRM
-                let routeSection = "";
-                const kmMargin = (request as any).clients?.km_margin || 10;
-                if (request.origin_lat && request.origin_lng && request.destination_lat && request.destination_lng) {
-                  try {
-                    const fetchDist = async (from: {lat:number,lng:number}, to: {lat:number,lng:number}) => {
-                      const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`;
-                      const res = await fetch(url);
-                      const data = await res.json();
-                      if (data.routes?.[0]) {
-                        return { km: Math.round(data.routes[0].distance / 1000 * 10) / 10, min: Math.round(data.routes[0].duration / 60) };
+                  // Calculate route via OSRM (with timeout to avoid hanging)
+                  let routeSection = "";
+                  const kmMargin = (request as any).clients?.km_margin || 10;
+                  if (request.origin_lat && request.origin_lng && request.destination_lat && request.destination_lng) {
+                    try {
+                      const fetchDist = async (from: {lat:number,lng:number}, to: {lat:number,lng:number}) => {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 5000);
+                        try {
+                          const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`;
+                          const res = await fetch(url, { signal: controller.signal });
+                          const data = await res.json();
+                          if (data.routes?.[0]) {
+                            return { km: Math.round(data.routes[0].distance / 1000 * 10) / 10, min: Math.round(data.routes[0].duration / 60) };
+                          }
+                          return null;
+                        } finally {
+                          clearTimeout(timeoutId);
+                        }
+                      };
+                      const leg1 = await fetchDist({lat: request.origin_lat, lng: request.origin_lng}, {lat: request.destination_lat, lng: request.destination_lng});
+                      const leg2 = await fetchDist({lat: request.destination_lat, lng: request.destination_lng}, {lat: request.origin_lat, lng: request.origin_lng});
+                      if (leg1 && leg2) {
+                        const totalKm = leg1.km + leg2.km + kmMargin;
+                        routeSection = `\n*ROTEIRIZAÇÃO ESTIMADA*: ${totalKm.toFixed(1)} km`;
                       }
-                      return null;
-                    };
-                    const fmtDur = (min: number) => min < 60 ? `${min} min` : `${Math.floor(min/60)}h${min%60 > 0 ? `${min%60}min` : ""}`;
-                    const leg1 = await fetchDist({lat: request.origin_lat, lng: request.origin_lng}, {lat: request.destination_lat, lng: request.destination_lng});
-                    const leg2 = await fetchDist({lat: request.destination_lat, lng: request.destination_lng}, {lat: request.origin_lat, lng: request.origin_lng});
-                    if (leg1 && leg2) {
-                      const totalKm = leg1.km + leg2.km + kmMargin;
-                      routeSection = `\n*ROTEIRIZAÇÃO ESTIMADA*: ${totalKm.toFixed(1)} km`;
+                    } catch (e) {
+                      console.error("Route calc error:", e);
                     }
-                  } catch (e) {
-                    console.error("Route calc error:", e);
                   }
-                }
-                if (!routeSection && request.estimated_km) {
-                  const kmMarginVal = (request as any).clients?.km_margin || 10;
-                  routeSection = `\n*ROTEIRIZAÇÃO ESTIMADA*: ${Math.round(request.estimated_km + kmMarginVal)} km`;
-                }
+                  if (!routeSection && request.estimated_km) {
+                    const kmMarginVal = (request as any).clients?.km_margin || 10;
+                    routeSection = `\n*ROTEIRIZAÇÃO ESTIMADA*: ${Math.round(request.estimated_km + kmMarginVal)} km`;
+                  }
 
-                const benPhone = request.requester_phone || beneficiary?.phone || "";
-                const label = `*ATENDIMENTO*
+                  const benPhone = request.requester_phone || beneficiary?.phone || "";
+                  const label = `*ATENDIMENTO*
 
 *BENEFICIÁRIO*: ${benName.toUpperCase()}
 *TELEFONE ASSOCIADO*: ${benPhone}
-*SOLICITANTE*: ${request.requester_name.toUpperCase()}
-*CONTATO SOLICITANTE*: ${request.requester_phone}${request.requester_phone_secondary ? `\n*CONTATO 2*: ${request.requester_phone_secondary}` : ""}
+*SOLICITANTE*: ${(request.requester_name || "").toUpperCase()}
+*CONTATO SOLICITANTE*: ${request.requester_phone || ""}${request.requester_phone_secondary ? `\n*CONTATO 2*: ${request.requester_phone_secondary}` : ""}
 *VEÍCULO*: ${(request.vehicle_model || "").toUpperCase()} (${(request.vehicle_plate || "").toUpperCase()})
 *COR DO VEÍCULO*: ${(beneficiary?.vehicle_color || "—").toUpperCase()}
 *CLIENTE*: ${clientName.toUpperCase() || "—"}
@@ -1102,13 +1110,19 @@ ${dispatchEtaStr ? `*PREVISÃO DE CHEGADA*: ${dispatchEtaStr}` : ""}
 ${routeSection}
 ${trackingUrl ? `\n📍 Olá, segue o link com as informações do serviço: ${trackingUrl}` : ""}`.trim();
 
-                setLabelText(label);
-                setLabelType("creation");
-                setLabelDialogOpen(true);
+                  setLabelText(label);
+                  setLabelType("creation");
+                  setLabelDialogOpen(true);
+                } catch (err) {
+                  console.error("Label generation error:", err);
+                  toast.error("Erro ao gerar etiqueta. Tente novamente.");
+                } finally {
+                  setLabelLoading(false);
+                }
               }}
             >
-              <ClipboardCopy className="h-4 w-4" />
-              Gerar Etiqueta
+              {labelLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCopy className="h-4 w-4" />}
+              {labelLoading ? "Gerando..." : "Gerar Etiqueta"}
             </Button>
             {currentDispatch && provider && (
               <Button
