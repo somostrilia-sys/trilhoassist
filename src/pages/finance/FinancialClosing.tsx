@@ -492,13 +492,47 @@ export default function FinancialClosing() {
             <TabsTrigger key={tab.key} value={tab.key} className="gap-1">
               <tab.icon className="h-4 w-4" />
               {tab.label}
-              {tabCounts[tab.key] > 0 && (
-                <Badge variant="secondary" className="ml-1 text-xs">{tabCounts[tab.key]}</Badge>
+              {filteredTabCounts[tab.key] > 0 && (
+                <Badge variant="secondary" className="ml-1 text-xs">{filteredTabCounts[tab.key]}</Badge>
               )}
             </TabsTrigger>
           ))}
           <TabsTrigger value="fechamentos">Fechamentos</TabsTrigger>
         </TabsList>
+
+        {/* ===== Filtros globais das abas de pagamento ===== */}
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Prestador</Label>
+            <Select value={tabProviderFilter} onValueChange={setTabProviderFilter}>
+              <SelectTrigger className="w-full sm:w-64"><SelectValue placeholder="Todos os prestadores" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os prestadores</SelectItem>
+                {tabProviders.map(([id, name]) => (
+                  <SelectItem key={id} value={id}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Data início</Label>
+            <Input
+              type="date"
+              value={tabDateFrom ? format(tabDateFrom, "yyyy-MM-dd") : ""}
+              onChange={(e) => setTabDateFrom(e.target.value ? new Date(e.target.value + "T00:00:00") : undefined)}
+              className="w-40"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Data fim</Label>
+            <Input
+              type="date"
+              value={tabDateTo ? format(tabDateTo, "yyyy-MM-dd") : ""}
+              onChange={(e) => setTabDateTo(e.target.value ? new Date(e.target.value + "T00:00:00") : undefined)}
+              className="w-40"
+            />
+          </div>
+        </div>
 
         {/* ===== PAYMENT METHOD TABS ===== */}
         {PAYMENT_TABS.map(tab => (
@@ -517,7 +551,7 @@ export default function FinancialClosing() {
                   </div>
                 ) : (
                   <PaymentMethodTable
-                    dispatches={filterByPaymentMethod(allCompletedDispatches, tab.key)}
+                    dispatches={filterByPaymentMethod(filteredTabDispatches, tab.key)}
                     showNfBadge={tab.key === "a_vista_pix"}
                   />
                 )}
