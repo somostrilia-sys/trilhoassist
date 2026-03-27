@@ -512,6 +512,13 @@ export default function FinancialClosing() {
               )}
             </TabsTrigger>
           ))}
+          <TabsTrigger value="prestadores" className="gap-1">
+            <ListChecks className="h-4 w-4" />
+            Prestadores
+            {providerGroups.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-xs">{providerGroups.length}</Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="fechamentos">Fechamentos</TabsTrigger>
         </TabsList>
 
