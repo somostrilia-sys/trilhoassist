@@ -16,10 +16,10 @@ import {
 import { useNavigate } from "react-router-dom";
 
 export function AppLayout() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, rolesLoaded, hasRole, signOut } = useAuth();
   const navigate = useNavigate();
 
-  if (loading) {
+  if (loading || !rolesLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-3">
@@ -32,6 +32,16 @@ export function AppLayout() {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Client (association) users must NEVER see admin dashboard
+  if (hasRole("client") && !hasRole("admin") && !hasRole("operator") && !hasRole("super_admin")) {
+    return <Navigate to="/client/dashboard" replace />;
+  }
+
+  // Provider users must go to provider portal
+  if (hasRole("provider") && !hasRole("admin") && !hasRole("operator") && !hasRole("super_admin")) {
+    return <Navigate to="/provider/dashboard" replace />;
   }
 
   const initials = user.email?.substring(0, 2).toUpperCase() || "U";
