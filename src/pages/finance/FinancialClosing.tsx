@@ -163,6 +163,9 @@ export default function FinancialClosing() {
   const [selectedProviders, setSelectedProviders] = useState<Set<string>>(new Set());
   const [showConfirmBulk, setShowConfirmBulk] = useState(false);
   const [bulkTarget, setBulkTarget] = useState<"selected" | "all">("all");
+  const [tabProviderFilter, setTabProviderFilter] = useState<string>("all");
+  const [tabDateFrom, setTabDateFrom] = useState<Date | undefined>(startOfMonth(new Date()));
+  const [tabDateTo, setTabDateTo] = useState<Date | undefined>(new Date());
 
   const { data: tenantId } = useTenantId();
   const { data: closings = [], isLoading } = useFinancialClosings(tenantId);
