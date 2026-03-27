@@ -33,6 +33,17 @@ const VERIFICATION_LABELS: Record<string, string> = {
   vehicle_starts: "Veículo liga",
   docs_key_available: "Documentos e chave disponíveis",
   wheel_locked_count: "Qtd. rodas travadas",
+  cargo_photo_url: "Foto da carga",
+  passenger_count: "Qtd. passageiros",
+  vehicle_location: "Local do veículo",
+  vehicle_location_other: "Local do veículo (outro)",
+  cargo_description: "Descrição da carga",
+  height_restriction: "Restrição de altura",
+  height_restriction_value: "Altura máxima (metros)",
+  truck_type: "Tipo de caminhão",
+  loaded: "Carregado",
+  moves: "Se movimenta",
+  difficult_access: "Acesso difícil",
 };
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
