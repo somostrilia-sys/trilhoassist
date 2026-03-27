@@ -276,6 +276,21 @@ export default function FinancialClosing() {
     return counts;
   }, [filteredTabDispatches]);
 
+  // Group filtered dispatches by provider for "Prestadores" tab
+  const providerGroups = useMemo(() => {
+    const map = new Map<string, { provider_id: string; provider_name: string; dispatches: any[]; total: number }>();
+    filteredTabDispatches.forEach((d: any) => {
+      const pid = d.provider_id || "unknown";
+      const pname = (d.providers as any)?.name || "Sem prestador";
+      if (!map.has(pid)) map.set(pid, { provider_id: pid, provider_name: pname, dispatches: [], total: 0 });
+      const group = map.get(pid)!;
+      const amount = Number(d.final_amount || d.quoted_amount || d.service_requests?.provider_cost || 0);
+      group.dispatches.push(d);
+      group.total += amount;
+    });
+    return Array.from(map.values()).sort((a, b) => a.provider_name.localeCompare(b.provider_name));
+  }, [filteredTabDispatches]);
+
   const bulkClosingMutation = useMutation({
     mutationFn: async (providerIds: string[]) => {
       const targetGroups = pendingByProvider.filter((g) => providerIds.includes(g.provider_id));
