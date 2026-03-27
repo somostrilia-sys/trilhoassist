@@ -552,8 +552,11 @@ export default function FechamentoPrestadores() {
               </div>
 
               {/* Tabs: À Vista / Faturado */}
-              <Tabs defaultValue="avista">
+              <Tabs defaultValue="todos">
                 <TabsList className="w-full mb-4">
+                  <TabsTrigger value="todos" className="flex-1">
+                    Serviços Realizados ({selectedProvider.dispatches.length})
+                  </TabsTrigger>
                   <TabsTrigger value="avista" className="flex-1">
                     À Vista ({selectedProvider.dispatches.filter((d) => classifyPayment(d) === "avista").length})
                   </TabsTrigger>
@@ -561,6 +564,12 @@ export default function FechamentoPrestadores() {
                     Faturado ({selectedProvider.dispatches.filter((d) => classifyPayment(d) === "faturado").length})
                   </TabsTrigger>
                 </TabsList>
+                <TabsContent value="todos">
+                  {renderServiceTable(
+                    selectedProvider.dispatches,
+                    selectedProvider.totalValor
+                  )}
+                </TabsContent>
                 <TabsContent value="avista">
                   {renderServiceTable(
                     selectedProvider.dispatches.filter((d) => classifyPayment(d) === "avista"),
