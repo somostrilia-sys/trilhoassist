@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
 import { ProviderLayout } from "@/components/ProviderLayout";
 import { ClientLayout } from "@/components/ClientLayout";
@@ -77,7 +77,15 @@ function SpaRedirectHandler() {
 // Prevents "/" from redirecting to /dashboard when a spa-redirect is pending
 const HomeRedirect = () => {
   const redirectPath = sessionStorage.getItem('spa-redirect');
-  if (redirectPath) return null; // SpaRedirectHandler will handle navigation
+  if (redirectPath) return null;
+  const { hasRole, rolesLoaded, loading } = useAuth();
+  if (loading || !rolesLoaded) return null;
+  if (hasRole("client") && !hasRole("admin") && !hasRole("operator") && !hasRole("super_admin")) {
+    return <Navigate to="/client/dashboard" replace />;
+  }
+  if (hasRole("provider") && !hasRole("admin") && !hasRole("operator") && !hasRole("super_admin")) {
+    return <Navigate to="/provider/dashboard" replace />;
+  }
   return <Navigate to="/dashboard" replace />;
 };
 

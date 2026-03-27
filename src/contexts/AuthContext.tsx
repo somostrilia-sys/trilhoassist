@@ -6,6 +6,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  rolesLoaded: boolean;
   roles: string[];
   clientId: string | null;
   hasRole: (role: string) => boolean;
@@ -90,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, roles, clientId, hasRole, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, rolesLoaded, roles, clientId, hasRole, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
