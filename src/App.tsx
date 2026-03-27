@@ -147,7 +147,7 @@ const App = () => (
               <Route path="/finance/dashboard" element={<FinanceiroDashboard />} />
               <Route path="/finance/fechamento" element={<FechamentoMensal />} />
               <Route path="/finance/custos" element={<CustosOperacionais />} />
-              <Route path="/finance/fechamento-prestadores" element={<FechamentoPrestadores />} />
+              
               <Route path="/settings/users" element={<UsersManagement />} />
               <Route path="/settings/permissions" element={<PermissionsManagement />} />
               <Route path="/settings/ajustes" element={<AjustesSettings />} />
