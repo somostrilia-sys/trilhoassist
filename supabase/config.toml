@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.plate-lookup]
 verify_jwt = false
+
+[functions.trilho-financeiro]
+verify_jwt = false
