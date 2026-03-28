@@ -25,7 +25,7 @@ import Billing from "./pages/finance/Billing";
 import FinancialReports from "./pages/finance/FinancialReports";
 import FinanceiroDashboard from "./pages/finance/FinanceiroDashboard";
 import FechamentoMensal from "./pages/finance/FechamentoMensal";
-import CustosOperacionais from "./pages/finance/CustosOperacionais";
+
 
 import NotFound from "./pages/NotFound";
 import RegisterProvider from "./pages/RegisterProvider";
@@ -154,7 +154,7 @@ const App = () => (
               <Route path="/finance/reports" element={<FinancialReports />} />
               <Route path="/finance/dashboard" element={<FinanceiroDashboard />} />
               <Route path="/finance/fechamento" element={<FechamentoMensal />} />
-              <Route path="/finance/custos" element={<CustosOperacionais />} />
+              
               
               <Route path="/settings/users" element={<UsersManagement />} />
               <Route path="/settings/permissions" element={<PermissionsManagement />} />

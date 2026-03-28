@@ -82,7 +82,6 @@ const menuSections: MenuSection[] = [
     items: [
       { title: "Dashboard Fin.", url: "/finance/dashboard", icon: BarChart3 },
       { title: "Fechamento Mensal", url: "/finance/fechamento", icon: FileCheck },
-      { title: "Custos Operacionais", url: "/finance/custos", icon: DollarSign },
       { title: "Fechamento Prestadores", url: "/finance/closing", icon: Calculator },
       { title: "Faturamento", url: "/finance/billing", icon: Receipt },
       { title: "Relatórios", url: "/finance/reports", icon: BarChart3 },
