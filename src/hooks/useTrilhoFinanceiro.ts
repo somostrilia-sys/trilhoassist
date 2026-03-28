@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-const API_URL = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/trilho-financeiro";
+const API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trilho-financeiro`;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 async function callApi(body: Record<string, unknown>) {
