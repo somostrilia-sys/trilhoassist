@@ -25,7 +25,7 @@ import Billing from "./pages/finance/Billing";
 import FinancialReports from "./pages/finance/FinancialReports";
 import FinanceiroDashboard from "./pages/finance/FinanceiroDashboard";
 import FechamentoMensal from "./pages/finance/FechamentoMensal";
-import CustosOperacionais from "./pages/finance/CustosOperacionais";
+
 
 import NotFound from "./pages/NotFound";
 import RegisterProvider from "./pages/RegisterProvider";
