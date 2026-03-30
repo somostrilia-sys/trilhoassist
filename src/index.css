@@ -116,15 +116,25 @@
     background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)), hsl(var(--primary)));
   }
 
-  /* Page header styling */
+  /* Page header styling — with bottom border separator */
   .page-header {
-    @apply pb-2;
+    @apply pb-4 mb-2 border-b border-border;
   }
   .page-header h1 {
     @apply text-2xl font-bold text-foreground leading-tight;
   }
   .page-header p {
-    @apply text-sm text-muted-foreground mt-0.5;
+    @apply text-sm text-muted-foreground mt-1;
+  }
+
+  /* Section divider — horizontal rule between content blocks */
+  .section-divider {
+    @apply border-t border-border my-6;
+  }
+
+  /* Content section — adds top border and padding for grouped areas */
+  .content-section {
+    @apply pt-5 border-t border-border;
   }
 
   /* Smooth scrollbar */
@@ -143,7 +153,7 @@
 
   /* KPI card refinement */
   .kpi-card {
-    @apply relative overflow-hidden transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
+    @apply relative overflow-hidden transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 border border-border;
   }
   .kpi-card::after {
     content: '';
@@ -156,12 +166,22 @@
 
   /* Glass header */
   .glass-header {
-    @apply bg-card/70 backdrop-blur-md border-b shadow-sm;
+    @apply bg-card/70 backdrop-blur-md border-b border-border shadow-sm;
   }
 
   /* Professional table rows */
   .table-row-hover {
     @apply transition-colors duration-100 hover:bg-muted/50;
+  }
+
+  /* Filter bar — visually grouped filters area */
+  .filter-bar {
+    @apply p-4 rounded-xl border border-border bg-card/50;
+  }
+
+  /* Stats grid — bordered cards for KPI grids */
+  .stats-card {
+    @apply border border-border rounded-xl bg-card p-4 transition-all duration-200 hover:shadow-sm;
   }
 }
 
