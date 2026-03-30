@@ -118,7 +118,7 @@
 
   /* Page header styling — with bottom border separator */
   .page-header {
-    @apply pb-4 mb-2 border-b border-border;
+    @apply pb-4 mb-2 border-b-2 border-border;
   }
   .page-header h1 {
     @apply text-2xl font-bold text-foreground leading-tight;
