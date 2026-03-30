@@ -130,10 +130,10 @@ export function AppSidebar() {
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-white/10 p-1.5 ring-1 ring-white/10 shadow-lg">
-            <img src={logoTrilho} alt="Trilho Soluções" className="h-full w-full rounded-lg object-contain" />
+            <img src={logoTrilho} alt="ASSIST AI" className="h-full w-full rounded-lg object-contain" />
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-sm font-bold text-sidebar-primary tracking-tight">Trilho Soluções</span>
+            <span className="text-sm font-bold text-sidebar-primary tracking-tight">ASSIST AI</span>
             <span className="text-[11px] text-sidebar-foreground/50 font-medium">Gestão de Operações</span>
           </div>
         </div>

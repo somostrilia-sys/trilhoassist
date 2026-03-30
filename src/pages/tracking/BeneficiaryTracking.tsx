@@ -650,7 +650,7 @@ export default function BeneficiaryTracking() {
   if (beneficiaryInactive) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4 p-4">
-        <img src={logoTrilho} alt="Trilho Assist" className="h-12 mb-4" />
+        <img src={logoTrilho} alt="ASSIST AI" className="h-12 mb-4" />
         <Card className="max-w-md w-full border-destructive bg-destructive/10">
           <CardContent className="p-6 text-center space-y-3">
             <AlertCircle className="h-12 w-12 text-destructive mx-auto" />

@@ -165,6 +165,10 @@ export default function NewServiceRequest() {
   } | null>(null);
   const [plateSearching, setPlateSearching] = useState(false);
   const [fipeSearching, setFipeSearching] = useState(false);
+  const [giaData, setGiaData] = useState<{
+    plano?: string; mensalidade?: number; eventos?: { data: string; tipo: string }[];
+  } | null>(null);
+  const [giaSearching, setGiaSearching] = useState(false);
 
   // Geo coords from AddressAutocomplete
   const [geoCoords, setGeoCoords] = useState<{ origin: { lat: number; lng: number } | null; destination: { lat: number; lng: number } | null }>({
@@ -193,10 +197,10 @@ export default function NewServiceRequest() {
 
   const update = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
-  // ═══ Plate search: beneficiary then FIPE ═══
+  // ═══ Plate search: beneficiary then FIPE + GIA ═══
   const searchBeneficiaryByPlate = useCallback(async (plate: string) => {
     const cleanPlate = plate.replace(/[^A-Z0-9]/g, "");
-    if (cleanPlate.length < 7) { setBeneficiaryFound(null); setAvulsoAuthorized(false); setAvulsoAuthorizer(""); setAvulsoJustification(""); return; }
+    if (cleanPlate.length < 7) { setBeneficiaryFound(null); setGiaData(null); setAvulsoAuthorized(false); setAvulsoAuthorizer(""); setAvulsoJustification(""); return; }
     setPlateSearching(true);
     const { data } = await supabase
       .from("beneficiaries")
@@ -229,6 +233,7 @@ export default function NewServiceRequest() {
       if (!data.vehicle_model || !data.vehicle_year) {
         searchFipe(cleanPlate);
       }
+      searchGia(cleanPlate, data.cpf || undefined);
     } else {
       setBeneficiaryFound(null);
       setAvulsoAuthorized(false);
@@ -236,6 +241,7 @@ export default function NewServiceRequest() {
       setAvulsoJustification("");
       // Always try FIPE lookup for non-registered plates
       searchFipe(cleanPlate);
+      searchGia(cleanPlate);
     }
   }, []);
 
@@ -263,6 +269,43 @@ export default function NewServiceRequest() {
       // FIPE lookup failed silently - user fills manually
     } finally {
       setFipeSearching(false);
+    }
+  };
+
+  const searchGia = async (plate?: string, cpf?: string) => {
+    if (!plate && !cpf) return;
+    setGiaSearching(true);
+    setGiaData(null);
+    try {
+      const body: Record<string, string> = {};
+      if (plate) body.placa = plate;
+      if (cpf) body.cpf_cnpj = cpf.replace(/\D/g, "");
+      const res = await fetch(
+        "https://yrjiegtqfngdliwclpzo.supabase.co/functions/v1/gia-associado-buscar",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization:
+              "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyamllZ3RxZm5nZGxpd2NscHpvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUyNTUyODIsImV4cCI6MjA2MDgzMTI4Mn0.1yWTPl3PYoV6NVMvfZCfI5K9P8L-RA8MFbnBaLBaQ2U",
+          },
+          body: JSON.stringify(body),
+        }
+      );
+      if (res.ok) {
+        const json = await res.json();
+        if (json && (json.plano || json.mensalidade || json.eventos)) {
+          setGiaData({
+            plano: json.plano,
+            mensalidade: json.mensalidade,
+            eventos: json.eventos,
+          });
+        }
+      }
+    } catch {
+      // GIA lookup failed silently
+    } finally {
+      setGiaSearching(false);
     }
   };
 
@@ -781,6 +824,34 @@ export default function NewServiceRequest() {
                             {PLAN_VEHICLE_CATEGORY_LABELS[classifyVehicle(form.vehicle_model, vehicleCategory)] || "Automóvel"}
                           </Badge>
                         )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* GIA data */}
+                {giaSearching && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Consultando GIA…
+                  </div>
+                )}
+                {!giaSearching && giaData && (
+                  <div className="rounded-md border border-purple-200 bg-purple-50 p-3 text-sm space-y-1">
+                    <div className="flex items-center gap-2 font-medium text-purple-800">
+                      <Badge className="text-xs bg-purple-600 text-white">GIA ✅</Badge>
+                    </div>
+                    {giaData.plano && <p className="text-purple-700 text-xs">Plano: <strong>{giaData.plano}</strong></p>}
+                    {giaData.mensalidade != null && (
+                      <p className="text-purple-700 text-xs">Mensalidade: <strong>R$ {Number(giaData.mensalidade).toFixed(2)}</strong></p>
+                    )}
+                    {giaData.eventos && giaData.eventos.length > 0 && (
+                      <div className="text-xs text-purple-700">
+                        <p className="font-medium">Últimos eventos:</p>
+                        <ul className="mt-0.5 space-y-0.5">
+                          {giaData.eventos.slice(0, 3).map((ev, i) => (
+                            <li key={i}>{ev.data} — {ev.tipo}</li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                   </div>
