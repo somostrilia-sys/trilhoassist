@@ -54,6 +54,7 @@ import PlansList from "./pages/business/PlansList";
 import PlanForm from "./pages/business/PlanForm";
 import BeneficiariesList from "./pages/business/BeneficiariesList";
 import BeneficiaryForm from "./pages/business/BeneficiaryForm";
+import GiaCotacao from "./pages/business/GiaCotacao";
 import QuickRepliesSettings from "./pages/settings/QuickRepliesSettings";
 import TemplatesSettings from "./pages/settings/TemplatesSettings";
 import AjustesSettings from "./pages/settings/AjustesSettings";
@@ -145,6 +146,7 @@ const App = () => (
               <Route path="/business/beneficiaries" element={<BeneficiariesList />} />
               <Route path="/business/beneficiaries/new" element={<BeneficiaryForm />} />
               <Route path="/business/beneficiaries/:id" element={<BeneficiaryForm />} />
+              <Route path="/gia-cotacao" element={<GiaCotacao />} />
               <Route path="/network/providers" element={<ProvidersList />} />
               <Route path="/network/providers/new" element={<ProviderForm />} />
               <Route path="/network/providers/:id" element={<ProviderForm />} />

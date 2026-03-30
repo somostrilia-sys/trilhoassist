@@ -62,6 +62,7 @@ const menuSections: MenuSection[] = [
     items: [
       { title: "Clientes", url: "/business/clients", icon: Building2 },
       { title: "Beneficiários", url: "/business/beneficiaries", icon: UserCheck },
+      { title: "Cotação GIA", url: "/gia-cotacao", icon: Calculator },
     ],
   },
   {
