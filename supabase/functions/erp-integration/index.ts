@@ -301,6 +301,27 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Cliente não encontrado" }, 404);
     }
 
+    // GIA clients: redirect to gia-sync function (no api_endpoint/api_key needed)
+    if (client.api_type === 'gia') {
+      try {
+        const giaRes = await fetch(
+          `${Deno.env.get("SUPABASE_URL")}/functions/v1/gia-sync`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            },
+            body: JSON.stringify({ client_id, tenant_id }),
+          }
+        );
+        const giaResult = await giaRes.json();
+        return jsonResponse(giaResult, giaRes.ok ? 200 : 500);
+      } catch (err: any) {
+        return jsonResponse({ error: `GIA sync failed: ${err.message}` }, 500);
+      }
+    }
+
     if (!client.api_endpoint || !client.api_key) {
       return jsonResponse({ error: "API endpoint ou chave não configurados para este cliente" }, 400);
     }
