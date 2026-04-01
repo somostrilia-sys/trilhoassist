@@ -226,6 +226,27 @@ Deno.serve(async (req) => {
 
       const results = [];
       for (const client of clients) {
+        if (client.api_type === 'gia') {
+          // GIA sync: credentials are in server secrets, no api_endpoint/api_key needed
+          try {
+            const giaRes = await fetch(
+              `${Deno.env.get("SUPABASE_URL")}/functions/v1/gia-sync`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                },
+                body: JSON.stringify({ client_id: client.id, tenant_id: client.tenant_id }),
+              }
+            );
+            const giaResult = await giaRes.json();
+            results.push({ client: client.name, mode: "gia", ...giaResult });
+          } catch (err: any) {
+            results.push({ client: client.name, mode: "gia", error: err.message });
+          }
+          continue;
+        }
         if (!client.api_endpoint || !client.api_key) continue;
         try {
           if (isSincronismo(client)) {
