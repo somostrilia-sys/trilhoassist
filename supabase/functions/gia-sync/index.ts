@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
       const veiculos = await fetchAllFromGia(
         giaClient,
         "veiculos",
-        "associado_id, marca, modelo, placa, ano_modelo, chassi, cor"
+        "associado_id, marca, modelo, placa, chassi, cor"
       );
       console.log(`GIA: ${veiculos.length} veiculos found`);
 
