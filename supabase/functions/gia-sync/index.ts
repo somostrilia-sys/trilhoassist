@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
               active: isActive,
               vehicle_plate: plate || null,
               vehicle_model: vehicleModel || null,
-              vehicle_year: v.ano_modelo ? parseInt(v.ano_modelo) : null,
+              vehicle_year: null,
               vehicle_chassis: v.chassi || null,
               vehicle_color: v.cor || null,
             };
