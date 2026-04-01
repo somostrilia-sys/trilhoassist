@@ -167,69 +167,48 @@ Deno.serve(async (req) => {
 
       console.log(`GIA: ${withPlate.length} records with plate, ${withoutPlate.length} records without plate (CPF only)`);
 
-      let created = 0;
-      let updated = 0;
+      const allRecords = [...withPlate, ...withoutPlate];
+      let processed = 0;
+      let errors = 0;
 
-      // Batch upsert records with plate (conflict on client_id + vehicle_plate)
-      if (withPlate.length > 0) {
-        const batchSize = 500;
-        for (let i = 0; i < withPlate.length; i += batchSize) {
-          const batch = withPlate.slice(i, i + batchSize);
-          const { data: upsertData, error: upsertError } = await localClient
-            .from("beneficiaries")
-            .upsert(batch, {
-              onConflict: "client_id,vehicle_plate",
-              ignoreDuplicates: false,
-            })
-            .select("id");
+      // Use RPC function for proper partial index upsert
+      for (const record of allRecords) {
+        const { error: rpcError } = await localClient.rpc("upsert_beneficiary_gia", {
+          _client_id: record.client_id,
+          _name: record.name || "",
+          _cpf: record.cpf || "",
+          _phone: record.phone || "",
+          _active: record.active,
+          _vehicle_plate: record.vehicle_plate || "",
+          _vehicle_model: record.vehicle_model || "",
+          _vehicle_year: record.vehicle_year,
+          _vehicle_chassis: record.vehicle_chassis || "",
+          _vehicle_color: record.vehicle_color || "",
+        });
 
-          if (upsertError) {
-            console.error(`GIA upsert (plate) batch error:`, upsertError.message);
-            throw new Error(`Upsert (placa) falhou: ${upsertError.message}`);
+        if (rpcError) {
+          errors++;
+          if (errors <= 5) {
+            console.error(`GIA upsert error for ${record.vehicle_plate || record.cpf}:`, rpcError.message);
           }
-
-          const count = upsertData?.length || 0;
-          created += count;
+        } else {
+          processed++;
         }
       }
-
-      // Batch upsert records without plate (conflict on cpf + client_id)
-      if (withoutPlate.length > 0) {
-        const batchSize = 500;
-        for (let i = 0; i < withoutPlate.length; i += batchSize) {
-          const batch = withoutPlate.slice(i, i + batchSize);
-          const { data: upsertData, error: upsertError } = await localClient
-            .from("beneficiaries")
-            .upsert(batch, {
-              onConflict: "cpf,client_id",
-              ignoreDuplicates: false,
-            })
-            .select("id");
-
-          if (upsertError) {
-            console.error(`GIA upsert (cpf) batch error:`, upsertError.message);
-            throw new Error(`Upsert (CPF) falhou: ${upsertError.message}`);
-          }
-
-          const count = upsertData?.length || 0;
-          updated += count;
-        }
-      }
-
-      const totalProcessed = created + updated;
 
       // Update sync log
       if (logId) {
         await localClient.from("erp_sync_logs").update({
-          status: "completed",
+          status: errors > 0 && processed === 0 ? "error" : "completed",
           completed_at: new Date().toISOString(),
           records_found: associados.length,
           records_created: withPlate.length,
           records_updated: withoutPlate.length,
+          error_message: errors > 0 ? `${errors} registros com erro` : null,
         }).eq("id", logId);
       }
 
-      console.log(`GIA sync completed: ${totalProcessed} records processed`);
+      console.log(`GIA sync completed: ${processed} processed, ${errors} errors`);
 
       return jsonResponse({
         success: true,
@@ -237,7 +216,8 @@ Deno.serve(async (req) => {
         veiculos_found: veiculos.length,
         records_with_plate: withPlate.length,
         records_cpf_only: withoutPlate.length,
-        total_processed: totalProcessed,
+        total_processed: processed,
+        errors,
       });
 
     } catch (syncError: any) {
