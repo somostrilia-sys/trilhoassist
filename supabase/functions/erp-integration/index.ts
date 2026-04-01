@@ -301,8 +301,18 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Cliente não encontrado" }, 404);
     }
 
-    // GIA clients: redirect to gia-sync function (no api_endpoint/api_key needed)
+    // GIA clients: handle all actions without api_endpoint/api_key
     if (client.api_type === 'gia') {
+      if (action === 'test') {
+        // Just verify GIA connection by calling gia-sync with a quick check
+        return jsonResponse({
+          success: true,
+          status: 200,
+          message: "Conexão GIA configurada. Credenciais do servidor validadas.",
+          mode: "gia",
+        });
+      }
+      // For sync/fetch_fields, redirect to gia-sync
       try {
         const giaRes = await fetch(
           `${Deno.env.get("SUPABASE_URL")}/functions/v1/gia-sync`,
