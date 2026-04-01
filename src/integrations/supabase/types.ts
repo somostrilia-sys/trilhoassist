@@ -2279,6 +2279,21 @@ export type Database = {
         Args: { _service_request_id: string }
         Returns: boolean
       }
+      upsert_beneficiary_gia: {
+        Args: {
+          _active: boolean
+          _client_id: string
+          _cpf: string
+          _name: string
+          _phone: string
+          _vehicle_chassis: string
+          _vehicle_color: string
+          _vehicle_model: string
+          _vehicle_plate: string
+          _vehicle_year: number
+        }
+        Returns: undefined
+      }
       user_belongs_to_tenant: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean

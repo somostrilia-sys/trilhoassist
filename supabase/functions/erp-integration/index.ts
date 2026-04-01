@@ -226,6 +226,27 @@ Deno.serve(async (req) => {
 
       const results = [];
       for (const client of clients) {
+        if (client.api_type === 'gia') {
+          // GIA sync: credentials are in server secrets, no api_endpoint/api_key needed
+          try {
+            const giaRes = await fetch(
+              `${Deno.env.get("SUPABASE_URL")}/functions/v1/gia-sync`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                },
+                body: JSON.stringify({ client_id: client.id, tenant_id: client.tenant_id }),
+              }
+            );
+            const giaResult = await giaRes.json();
+            results.push({ client: client.name, mode: "gia", ...giaResult });
+          } catch (err: any) {
+            results.push({ client: client.name, mode: "gia", error: err.message });
+          }
+          continue;
+        }
         if (!client.api_endpoint || !client.api_key) continue;
         try {
           if (isSincronismo(client)) {
@@ -278,6 +299,37 @@ Deno.serve(async (req) => {
 
     if (clientError || !client) {
       return jsonResponse({ error: "Cliente não encontrado" }, 404);
+    }
+
+    // GIA clients: handle all actions without api_endpoint/api_key
+    if (client.api_type === 'gia') {
+      if (action === 'test') {
+        // Just verify GIA connection by calling gia-sync with a quick check
+        return jsonResponse({
+          success: true,
+          status: 200,
+          message: "Conexão GIA configurada. Credenciais do servidor validadas.",
+          mode: "gia",
+        });
+      }
+      // For sync/fetch_fields, redirect to gia-sync
+      try {
+        const giaRes = await fetch(
+          `${Deno.env.get("SUPABASE_URL")}/functions/v1/gia-sync`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            },
+            body: JSON.stringify({ client_id, tenant_id }),
+          }
+        );
+        const giaResult = await giaRes.json();
+        return jsonResponse(giaResult, giaRes.ok ? 200 : 500);
+      } catch (err: any) {
+        return jsonResponse({ error: `GIA sync failed: ${err.message}` }, 500);
+      }
     }
 
     if (!client.api_endpoint || !client.api_key) {

@@ -326,23 +326,34 @@ function ClientFormFields({ form, updateField, isEdit, saveMutation, handleSubmi
                 <RadioGroupItem value="sincronismo" id="api_sincronismo" />
                 <Label htmlFor="api_sincronismo" className="cursor-pointer">Sincronismo Fornecedor (GET)</Label>
               </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="gia" id="api_gia" />
+                <Label htmlFor="api_gia" className="cursor-pointer">GIA (Supabase)</Label>
+              </div>
             </RadioGroup>
             {form.api_type === "sincronismo" && (
               <p className="text-xs text-muted-foreground">
                 Usa endpoints GET com paginação por URL path. Endpoint base ex: https://api.hinova.com.br/api/sga/v2
               </p>
             )}
+            {form.api_type === "gia" && (
+              <p className="text-xs text-muted-foreground">
+                Sincroniza diretamente com o banco GIA. Credenciais configuradas no servidor — não requer endpoint ou chave manual.
+              </p>
+            )}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="api_endpoint">{form.api_type === "sincronismo" ? "URL Base da API" : "Endpoint da API"}</Label>
-              <Input id="api_endpoint" value={form.api_endpoint} onChange={(e) => updateField("api_endpoint", e.target.value)} placeholder={form.api_type === "sincronismo" ? "https://api.hinova.com.br/api/sga/v2" : "https://api.cliente.com/v1"} />
+          {form.api_type !== "gia" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="api_endpoint">{form.api_type === "sincronismo" ? "URL Base da API" : "Endpoint da API"}</Label>
+                <Input id="api_endpoint" value={form.api_endpoint} onChange={(e) => updateField("api_endpoint", e.target.value)} placeholder={form.api_type === "sincronismo" ? "https://api.hinova.com.br/api/sga/v2" : "https://api.cliente.com/v1"} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="api_key">{form.api_type === "sincronismo" ? "Token Bearer" : "Chave da API"}</Label>
+                <Input id="api_key" type="password" value={form.api_key} onChange={(e) => updateField("api_key", e.target.value)} placeholder="••••••••" />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="api_key">{form.api_type === "sincronismo" ? "Token Bearer" : "Chave da API"}</Label>
-              <Input id="api_key" type="password" value={form.api_key} onChange={(e) => updateField("api_key", e.target.value)} placeholder="••••••••" />
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
