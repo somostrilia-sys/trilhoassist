@@ -32,8 +32,9 @@ export function useProviderData() {
             id, protocol, requester_name, requester_phone, 
             vehicle_model, vehicle_plate, origin_address, destination_address,
             service_type, event_type, status, created_at, completed_at,
-            vehicle_category, verification_answers,
-            client_id, clients (id, name)
+            vehicle_category, verification_answers, estimated_km,
+            client_id, clients (id, name),
+            beneficiary_id, beneficiaries (id, name)
           )
         `)
         .eq("provider_id", provider!.id)
