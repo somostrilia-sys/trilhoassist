@@ -82,8 +82,8 @@ const menuSections: MenuSection[] = [
     module: "finance",
     items: [
       { title: "Dashboard Fin.", url: "/finance/dashboard", icon: BarChart3 },
-      
-      { title: "Fechamento Prestadores", url: "/finance/closing", icon: Calculator },
+      { title: "Fechamento Prestadores", url: "/finance/prestadores", icon: Calculator },
+      { title: "Fechamento Financeiro", url: "/finance/closing", icon: FileCheck },
       { title: "Faturamento", url: "/finance/billing", icon: Receipt },
       { title: "Relatórios", url: "/finance/reports", icon: BarChart3 },
     ],
