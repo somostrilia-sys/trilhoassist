@@ -284,8 +284,6 @@ export default function FechamentoPrestadores() {
     toast({ title: "Excel exportado com sucesso!" });
   };
 
-  const getDispatchValue = (d: DispatchWithDetails) =>
-    Number(d.final_amount ?? d.quoted_amount ?? d.service_requests?.provider_cost ?? 0);
 
   const buildRow = (d: DispatchWithDetails) => ({
     Data: format(new Date(d.service_requests?.created_at || d.created_at), "dd/MM/yyyy"),
