@@ -503,6 +503,34 @@ export default function FechamentoPrestadores() {
               </Popover>
             </div>
             <Button onClick={handleFilter}>Filtrar</Button>
+            <Button variant="outline" className="gap-2" onClick={exportGlobalExcel}>
+              <Download className="h-4 w-4" /> Exportar Excel
+            </Button>
+          </div>
+
+          {/* Search + NF filter */}
+          <div className="flex flex-wrap items-end gap-3 mt-3">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por prestador, placa, protocolo, serviço..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <div className="w-48">
+              <Select value={nfFilter} onValueChange={setNfFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Status NF" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="pending_nf">Pendente de NF</SelectItem>
+                  <SelectItem value="has_nf">Com NF</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
