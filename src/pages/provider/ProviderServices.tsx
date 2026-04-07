@@ -390,7 +390,7 @@ export default function ProviderServices() {
                         </tr>
                         {isExpanded && hasVerification && (
                           <tr key={`${dispatch.id}-detail`} className="bg-amber-50/30 border-b">
-                            <td colSpan={11} className="p-0">
+                            <td colSpan={12} className="p-0">
                               <div className="px-4 py-3">
                                 <VehicleConditionsSection sr={sr} />
                               </div>
