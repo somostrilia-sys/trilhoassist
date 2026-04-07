@@ -112,6 +112,8 @@ export default function FechamentoPrestadores() {
   const [appliedFrom, setAppliedFrom] = useState<Date>(startOfMonth(new Date()));
   const [appliedTo, setAppliedTo] = useState<Date>(new Date());
   const [selectedProvider, setSelectedProvider] = useState<ProviderGroup | null>(null);
+  const [search, setSearch] = useState("");
+  const [nfFilter, setNfFilter] = useState("all");
 
   const { data: dispatches, isLoading } = useQuery({
     queryKey: ["fechamento-prestadores", appliedFrom.toISOString(), appliedTo.toISOString()],
