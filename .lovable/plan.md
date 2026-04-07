@@ -1,86 +1,99 @@
 
+# Análise: Relatório Técnico – Módulo Financeiro / Prestadores
 
-# Plano: Sincronismo GIA
-
-## O que será feito
-
-Adicionar integração com o sistema GIA (banco Supabase externo) para sincronizar associados e veículos, em paralelo ao SGA existente. Nenhum código existente será removido ou alterado.
+## Comparação: O que JÁ EXISTE vs. O que FALTA
 
 ---
 
-## Etapas
-
-### 1. Armazenar credenciais GIA como secrets
-
-Dois secrets novos:
-- `GIA_SUPABASE_URL` → `https://dxuoppekxgvdqnytftho.supabase.co`
-- `GIA_SERVICE_ROLE_KEY` → a service role key fornecida
-
-### 2. Criar edge function `gia-sync/index.ts` (arquivo novo)
-
-- Recebe `{ client_id, tenant_id }` no body
-- Conecta no Supabase do GIA usando os secrets acima
-- Lê tabela `associados` (id, nome, cpf, telefone, status, plano_id) com paginação via `.range()`
-- Lê tabela `veiculos` (associado_id, marca, modelo, placa, ano_modelo, chassi, cor)
-- Faz JOIN local por `associado_id`
-- Mapeia para `beneficiaries`:
-  - `name` ← `nome`, `cpf` ← `cpf`, `phone` ← `telefone`
-  - `active` ← `status === 'ativo'`
-  - `vehicle_plate` ← `placa`, `vehicle_model` ← `marca + ' ' + modelo`
-  - `vehicle_year` ← `ano_modelo`, `vehicle_chassis` ← `chassi`, `vehicle_color` ← `cor`
-- Upsert em dois batches:
-  - Registros com placa: `ON CONFLICT (client_id, vehicle_plate)` (usa índice `idx_beneficiaries_client_plate_unique`)
-  - Registros sem placa (só CPF): `ON CONFLICT (cpf, client_id)` (usa índice `idx_beneficiaries_cpf_client`)
-- Grava log em `erp_sync_logs` usando service_role (padrão existente)
-- CORS headers padrão, `verify_jwt = false` (igual às demais)
-
-### 3. Adicionar bloco condicional na `erp-integration/index.ts` (aditivo)
-
-**No bloco `auto_sync` (linha ~228-241)**: Dentro do `for (const client of clients)`, após o `else` do standard (linha 236), adicionar:
-
-```
-} else if (client.api_type === 'gia') {
-  // GIA não precisa de api_endpoint/api_key — credenciais nos secrets
-  const giaRes = await fetch(
-    `${Deno.env.get("SUPABASE_URL")}/functions/v1/gia-sync`,
-    { method: "POST", headers: {...}, body: JSON.stringify({ client_id: client.id, tenant_id: client.tenant_id }) }
-  );
-  const giaResult = await giaRes.json();
-  results.push({ client: client.name, mode: "gia", ...giaResult });
-}
-```
-
-**No bloco de sync manual (linha ~283)**: Antes da validação de `api_endpoint/api_key`, adicionar early return para GIA que redireciona para `gia-sync` sem exigir endpoint/api_key.
-
-**Na linha 229**: Ajustar o `continue` para não pular clientes GIA (que não têm api_endpoint/api_key).
-
-### 4. Adicionar "GIA" no frontend (`ClientForm.tsx`)
-
-No RadioGroup de "Tipo de API" (linha ~316-329), adicionar terceira opção:
-
-```
-<RadioGroupItem value="gia" id="api_gia" />
-<Label>GIA (Supabase)</Label>
-```
-
-Quando `api_type === 'gia'`, esconder os campos de endpoint/api_key e mostrar texto: "Sincroniza diretamente com o banco GIA. Credenciais configuradas no servidor."
-
-### 5. Configurar `supabase/config.toml`
-
-Adicionar:
-```toml
-[functions.gia-sync]
-verify_jwt = false
-```
+### 1. FILTRO "PENDENTE DE NOTA FISCAL" (Fechamento Prestadores)
+- **Rota:** `FechamentoPrestadores.tsx`
+- **Status: ⚠️ PARCIAL**
+- ✅ Já existe a aba "À Vista (Pendente NF)" no `FinancialClosing.tsx` com destaque visual para NFs pendentes
+- ❌ **Falta** no `FechamentoPrestadores.tsx`: não existe filtro por "Pendente de Nota Fiscal". A página lista prestadores sem filtro de status de NF
+- **Impacto:** Baixo — adicionar um filtro dropdown no `FechamentoPrestadores.tsx` que cruze `provider_invoices` com os dispatches do período
 
 ---
 
-## Arquivos
+### 2. EXPORTAÇÃO EXCEL – FECHAMENTO DE PRESTADORES
+- **Rota:** `FechamentoPrestadores.tsx`
+- **Status: ✅ JÁ EXISTE (parcial)**
+- ✅ Função `exportExcel()` já implementada (linha 213) — exporta por prestador individual com abas "À Vista" e "Faturado"
+- ❌ **Falta:** Exportação GERAL (todos os prestadores de uma vez) com layout conforme imagem 1 (colunas: Nome prestador, Período, Qtd atendimentos, Valor total, Status NF)
+- **Impacto:** Médio — criar botão "Exportar Excel" global no cabeçalho da página
 
-| Arquivo | Ação |
-|---|---|
-| `supabase/functions/gia-sync/index.ts` | **Novo** |
-| `supabase/functions/erp-integration/index.ts` | Adição de blocos condicionais (sem remover nada) |
-| `src/pages/business/ClientForm.tsx` | Adicionar opção "GIA" no RadioGroup |
-| `supabase/config.toml` | Adicionar `[functions.gia-sync]` |
+---
 
+### 3. BUSCA (LUPA) NOS MÓDULOS FINANCEIROS
+- **Status por rota:**
+  - `Billing.tsx` (Faturamento): ✅ **JÁ TEM** busca por cliente (linha 293-294)
+  - `FechamentoMensal.tsx`: ✅ **JÁ TEM** campo de busca (linha 35, search state)
+  - `FinancialClosing.tsx` (Fechamento): ✅ **JÁ TEM** campo de busca (linha 19, Search importado)
+  - `FechamentoPrestadores.tsx`: ❌ **NÃO TEM** campo de busca — apenas filtro de período
+- **Falta:** Busca no `FechamentoPrestadores.tsx` que pesquise por nome do prestador, placa, protocolo, tipo de serviço
+- **Campos pesquisáveis que faltam em TODOS:** busca por placa, protocolo e tipo de serviço (a maioria filtra só por nome)
+- **Impacto:** Médio — ampliar os filtros de busca existentes e adicionar busca no FechamentoPrestadores
+
+---
+
+### 4. EXPORTAÇÃO DE SERVIÇOS POR PERÍODO – PRESTADORES
+- **Rota:** `FechamentoPrestadores.tsx`
+- **Status: ✅ PARCIAL**
+- ✅ Já exporta Excel e PDF por prestador individual (funções `exportExcel` e `exportPDF`)
+- ❌ **Falta:** Exportação conforme layout da imagem 2 (Data, Protocolo, Placa, Valor) com filtro de período e VALOR TOTAL no final
+- **Impacto:** Baixo — ajustar layout do Excel existente
+
+---
+
+### 5. PORTAL DO PRESTADOR – LISTAGEM DE SERVIÇOS
+- **Rota:** `ProviderServices.tsx`
+- **Status: ✅ JÁ EXISTE (quase completo)**
+- ✅ Protocolo, Data, Serviço, Placa, Origem, Destino, KM, Status, V. Cotado, V. Final
+- ✅ Busca por protocolo, nome, placa, origem
+- ✅ Filtro por status e período
+- ❌ **Falta:** Nome do associado (beneficiário) na tabela — atualmente mostra `requester_name` mas não o nome do beneficiário
+- ❌ **Falta:** O campo de busca não pesquisa por nome do beneficiário
+- **Impacto:** Baixo
+
+---
+
+### 6. PORTAL DO PRESTADOR – VALORES
+- **Rota:** `ProviderServices.tsx` e `ProviderFinancial.tsx`
+- **Status: ⚠️ VERIFICAR REGRA CRÍTICA**
+- ✅ Exibe `quoted_amount` (V. Cotado) e `final_amount` (V. Final) do dispatch
+- ⚠️ **Regra do prompt:** "O valor exibido deve ser exatamente o valor parametrizado para o prestador" — os valores atuais vêm do dispatch (`quoted_amount` / `final_amount`), que são definidos durante o despacho. Isso **já está correto** se o valor do dispatch reflete o valor negociado com o prestador
+- ✅ Não usa valor do plano nem valor cobrado do associado (`charged_amount` não aparece no portal do prestador)
+- **Impacto:** Nenhum — já funciona corretamente
+
+---
+
+### 7. BUSCA INTELIGENTE – CAMPOS PESQUISÁVEIS
+- **Status: ⚠️ PARCIAL em todas as rotas**
+- O prompt exige que TODOS os campos visíveis sejam pesquisáveis (nome prestador, associado, placa, protocolo, tipo serviço)
+- Atualmente cada página busca apenas por 1-2 campos
+- **Impacto:** Médio — ampliar filtro de busca em todas as páginas financeiras
+
+---
+
+## RESUMO DAS ALTERAÇÕES NECESSÁRIAS
+
+| # | Alteração | Arquivo | Risco |
+|---|-----------|---------|-------|
+| 1 | Adicionar campo de busca (lupa) no FechamentoPrestadores | `FechamentoPrestadores.tsx` | 🟢 Baixo |
+| 2 | Ampliar busca para incluir placa/protocolo/serviço em TODAS as páginas financeiras | `FechamentoPrestadores.tsx`, `Billing.tsx`, `FinancialClosing.tsx`, `FechamentoMensal.tsx` | 🟢 Baixo |
+| 3 | Adicionar filtro "Pendente de NF" no FechamentoPrestadores | `FechamentoPrestadores.tsx` | 🟢 Baixo |
+| 4 | Exportação Excel geral (todos prestadores) no FechamentoPrestadores | `FechamentoPrestadores.tsx` | 🟢 Baixo |
+| 5 | Ajustar layout do Excel individual conforme imagem 2 | `FechamentoPrestadores.tsx` | 🟢 Baixo |
+| 6 | Adicionar coluna "Beneficiário" no ProviderServices | `ProviderServices.tsx` | 🟢 Baixo |
+
+**Todas as alterações são aditivas (não removem funcionalidade existente) e de baixo risco.**
+
+---
+
+## O QUE NÃO PRECISA ALTERAR (já funciona)
+
+- ✅ Faturamento (`Billing.tsx`) — já tem busca
+- ✅ FechamentoMensal — já tem busca e filtros
+- ✅ FinancialClosing — já tem abas por método de pagamento e busca
+- ✅ Portal do Prestador — valores corretos (usa `quoted_amount`/`final_amount` do dispatch)
+- ✅ Fluxo de dados Operação → Financeiro → Portal já integrado
+- ✅ Exportação PDF por prestador individual
