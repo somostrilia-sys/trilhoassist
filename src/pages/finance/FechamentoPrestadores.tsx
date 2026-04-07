@@ -1,7 +1,9 @@
 import { useState, useMemo } from "react";
 import { format, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon, Calculator, Download, FileText, X, Loader2 } from "lucide-react";
+import { CalendarIcon, Calculator, Download, FileText, X, Loader2, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -110,6 +112,8 @@ export default function FechamentoPrestadores() {
   const [appliedFrom, setAppliedFrom] = useState<Date>(startOfMonth(new Date()));
   const [appliedTo, setAppliedTo] = useState<Date>(new Date());
   const [selectedProvider, setSelectedProvider] = useState<ProviderGroup | null>(null);
+  const [search, setSearch] = useState("");
+  const [nfFilter, setNfFilter] = useState("all");
 
   const { data: dispatches, isLoading } = useQuery({
     queryKey: ["fechamento-prestadores", appliedFrom.toISOString(), appliedTo.toISOString()],
@@ -132,6 +136,32 @@ export default function FechamentoPrestadores() {
       return (data || []) as unknown as DispatchWithDetails[];
     },
   });
+
+  // Fetch provider invoices for NF filter
+  const dispatchIds = useMemo(() => (dispatches || []).map(d => d.id), [dispatches]);
+  const { data: providerInvoices } = useQuery({
+    queryKey: ["provider-invoices-nf-check", dispatchIds],
+    queryFn: async () => {
+      if (dispatchIds.length === 0) return [];
+      // Fetch in batches of 100
+      const allInvoices: { dispatch_id: string }[] = [];
+      for (let i = 0; i < dispatchIds.length; i += 100) {
+        const batch = dispatchIds.slice(i, i + 100);
+        const { data } = await supabase
+          .from("provider_invoices")
+          .select("dispatch_id")
+          .in("dispatch_id", batch);
+        if (data) allInvoices.push(...data);
+      }
+      return allInvoices;
+    },
+    enabled: dispatchIds.length > 0,
+  });
+
+  const dispatchesWithNf = useMemo(() => {
+    const set = new Set((providerInvoices || []).map(i => i.dispatch_id));
+    return set;
+  }, [providerInvoices]);
 
   const providerGroups = useMemo(() => {
     if (!dispatches) return [];
@@ -170,13 +200,49 @@ export default function FechamentoPrestadores() {
     return Array.from(map.values()).sort((a, b) => b.totalValor - a.totalValor);
   }, [dispatches]);
 
+  // Apply search + NF filter
+  const filteredGroups = useMemo(() => {
+    let groups = providerGroups;
+
+    // Search filter
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      groups = groups.filter((g) => {
+        // Match provider name
+        if (g.name.toLowerCase().includes(q)) return true;
+        // Match dispatches: placa, protocolo, beneficiário, tipo serviço
+        return g.dispatches.some((d) => {
+          const sr = d.service_requests;
+          const plate = (sr?.beneficiaries?.vehicle_plate || sr?.vehicle_plate || "").toLowerCase();
+          const protocol = (sr?.protocol || "").toLowerCase();
+          const beneficiary = (sr?.beneficiaries?.name || sr?.requester_name || "").toLowerCase();
+          const serviceType = (SERVICE_TYPE_LABELS[sr?.service_type || ""] || sr?.service_type || "").toLowerCase();
+          return plate.includes(q) || protocol.includes(q) || beneficiary.includes(q) || serviceType.includes(q);
+        });
+      });
+    }
+
+    // NF filter
+    if (nfFilter === "pending_nf") {
+      groups = groups.filter((g) =>
+        g.dispatches.some((d) => !dispatchesWithNf.has(d.id))
+      );
+    } else if (nfFilter === "has_nf") {
+      groups = groups.filter((g) =>
+        g.dispatches.every((d) => dispatchesWithNf.has(d.id))
+      );
+    }
+
+    return groups;
+  }, [providerGroups, search, nfFilter, dispatchesWithNf]);
+
   const summary = useMemo(() => {
     const byType: Record<string, number> = {};
     let total = 0;
     let count = 0;
     let totalAVista = 0;
     let totalFaturado = 0;
-    for (const g of providerGroups) {
+    for (const g of filteredGroups) {
       total += g.totalValor;
       totalAVista += g.totalAVista;
       totalFaturado += g.totalFaturado;
@@ -188,7 +254,7 @@ export default function FechamentoPrestadores() {
       }
     }
     return { total, count, byType, totalAVista, totalFaturado };
-  }, [providerGroups]);
+  }, [filteredGroups]);
 
   const handleFilter = () => {
     setAppliedFrom(dateFrom);
@@ -197,6 +263,27 @@ export default function FechamentoPrestadores() {
 
   const getDispatchValue = (d: DispatchWithDetails) =>
     Number(d.final_amount ?? d.quoted_amount ?? d.service_requests?.provider_cost ?? 0);
+
+  // Global Excel export (all providers)
+  const exportGlobalExcel = () => {
+    const rows = filteredGroups.map((g) => ({
+      "Prestador": g.name,
+      "Cidade": g.city || "-",
+      "Telefone": g.phone || "-",
+      "Qtd Atendimentos": g.totalAtendimentos,
+      "Total À Vista (R$)": g.totalAVista,
+      "Total Faturado (R$)": g.totalFaturado,
+      "Valor Total (R$)": g.totalValor,
+      "Status NF": g.dispatches.every((d) => dispatchesWithNf.has(d.id)) ? "OK" : "Pendente",
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Prestadores");
+    XLSX.writeFile(wb, `fechamento_geral_${format(appliedFrom, "yyyyMMdd")}_${format(appliedTo, "yyyyMMdd")}.xlsx`);
+    toast({ title: "Excel exportado com sucesso!" });
+  };
+
 
   const buildRow = (d: DispatchWithDetails) => ({
     Data: format(new Date(d.service_requests?.created_at || d.created_at), "dd/MM/yyyy"),
@@ -416,6 +503,34 @@ export default function FechamentoPrestadores() {
               </Popover>
             </div>
             <Button onClick={handleFilter}>Filtrar</Button>
+            <Button variant="outline" className="gap-2" onClick={exportGlobalExcel}>
+              <Download className="h-4 w-4" /> Exportar Excel
+            </Button>
+          </div>
+
+          {/* Search + NF filter */}
+          <div className="flex flex-wrap items-end gap-3 mt-3">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por prestador, placa, protocolo, serviço..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <div className="w-48">
+              <Select value={nfFilter} onValueChange={setNfFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Status NF" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="pending_nf">Pendente de NF</SelectItem>
+                  <SelectItem value="has_nf">Com NF</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -461,15 +576,15 @@ export default function FechamentoPrestadores() {
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : providerGroups.length === 0 ? (
+      ) : filteredGroups.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            Nenhum atendimento encontrado no período selecionado.
+            Nenhum atendimento encontrado{search ? " para a busca" : ""}.
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {providerGroups.map((g) => (
+          {filteredGroups.map((g) => (
             <Card key={g.id} className="hover:shadow-md transition-shadow">
               <CardContent className="pt-4 pb-4 space-y-3">
                 <div className="flex items-start justify-between">

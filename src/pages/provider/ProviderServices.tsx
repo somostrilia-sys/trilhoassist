@@ -185,11 +185,13 @@ export default function ProviderServices() {
       // Text search
       if (search) {
         const q = search.toLowerCase();
+        const beneficiaryName = (sr?.beneficiaries?.name || "").toLowerCase();
         return (
           sr?.protocol?.toLowerCase().includes(q) ||
           sr?.requester_name?.toLowerCase().includes(q) ||
           sr?.vehicle_plate?.toLowerCase().includes(q) ||
-          sr?.origin_address?.toLowerCase().includes(q)
+          sr?.origin_address?.toLowerCase().includes(q) ||
+          beneficiaryName.includes(q)
         );
       }
       return true;
@@ -315,24 +317,25 @@ export default function ProviderServices() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="text-left p-3 font-medium">Protocolo</th>
-                  <th className="text-left p-3 font-medium">Data</th>
-                  <th className="text-left p-3 font-medium">Serviço</th>
-                  <th className="text-left p-3 font-medium">Placa</th>
-                  <th className="text-left p-3 font-medium hidden md:table-cell">Origem</th>
-                  <th className="text-left p-3 font-medium hidden lg:table-cell">Destino</th>
-                  <th className="text-left p-3 font-medium hidden lg:table-cell">KM</th>
-                  <th className="text-left p-3 font-medium">Status</th>
-                  <th className="text-left p-3 font-medium">V. Cotado</th>
-                  <th className="text-left p-3 font-medium">V. Final</th>
-                  <th className="text-left p-3 font-medium">Detalhes</th>
-                </tr>
+                 <tr className="border-b bg-muted/50">
+                   <th className="text-left p-3 font-medium">Protocolo</th>
+                   <th className="text-left p-3 font-medium">Data</th>
+                   <th className="text-left p-3 font-medium">Serviço</th>
+                   <th className="text-left p-3 font-medium">Beneficiário</th>
+                   <th className="text-left p-3 font-medium">Placa</th>
+                   <th className="text-left p-3 font-medium hidden md:table-cell">Origem</th>
+                   <th className="text-left p-3 font-medium hidden lg:table-cell">Destino</th>
+                   <th className="text-left p-3 font-medium hidden lg:table-cell">KM</th>
+                   <th className="text-left p-3 font-medium">Status</th>
+                   <th className="text-left p-3 font-medium">V. Cotado</th>
+                   <th className="text-left p-3 font-medium">V. Final</th>
+                   <th className="text-left p-3 font-medium">Detalhes</th>
+                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={12} className="p-6 text-center text-muted-foreground">
                       Nenhum serviço encontrado.
                     </td>
                   </tr>
@@ -351,6 +354,7 @@ export default function ProviderServices() {
                             {new Date(dispatch.created_at).toLocaleDateString("pt-BR")}
                           </td>
                           <td className="p-3">{SERVICE_LABELS[sr?.service_type] || sr?.service_type}</td>
+                          <td className="p-3 text-xs">{sr?.beneficiaries?.name || sr?.requester_name || "-"}</td>
                           <td className="p-3 font-mono">{sr?.vehicle_plate || "-"}</td>
                           <td className="p-3 hidden md:table-cell text-xs text-muted-foreground max-w-[200px] truncate">
                             {sr?.origin_address || "-"}
@@ -386,7 +390,7 @@ export default function ProviderServices() {
                         </tr>
                         {isExpanded && hasVerification && (
                           <tr key={`${dispatch.id}-detail`} className="bg-amber-50/30 border-b">
-                            <td colSpan={11} className="p-0">
+                            <td colSpan={12} className="p-0">
                               <div className="px-4 py-3">
                                 <VehicleConditionsSection sr={sr} />
                               </div>
