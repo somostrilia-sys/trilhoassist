@@ -317,19 +317,20 @@ export default function ProviderServices() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="text-left p-3 font-medium">Protocolo</th>
-                  <th className="text-left p-3 font-medium">Data</th>
-                  <th className="text-left p-3 font-medium">Serviço</th>
-                  <th className="text-left p-3 font-medium">Placa</th>
-                  <th className="text-left p-3 font-medium hidden md:table-cell">Origem</th>
-                  <th className="text-left p-3 font-medium hidden lg:table-cell">Destino</th>
-                  <th className="text-left p-3 font-medium hidden lg:table-cell">KM</th>
-                  <th className="text-left p-3 font-medium">Status</th>
-                  <th className="text-left p-3 font-medium">V. Cotado</th>
-                  <th className="text-left p-3 font-medium">V. Final</th>
-                  <th className="text-left p-3 font-medium">Detalhes</th>
-                </tr>
+                 <tr className="border-b bg-muted/50">
+                   <th className="text-left p-3 font-medium">Protocolo</th>
+                   <th className="text-left p-3 font-medium">Data</th>
+                   <th className="text-left p-3 font-medium">Serviço</th>
+                   <th className="text-left p-3 font-medium">Beneficiário</th>
+                   <th className="text-left p-3 font-medium">Placa</th>
+                   <th className="text-left p-3 font-medium hidden md:table-cell">Origem</th>
+                   <th className="text-left p-3 font-medium hidden lg:table-cell">Destino</th>
+                   <th className="text-left p-3 font-medium hidden lg:table-cell">KM</th>
+                   <th className="text-left p-3 font-medium">Status</th>
+                   <th className="text-left p-3 font-medium">V. Cotado</th>
+                   <th className="text-left p-3 font-medium">V. Final</th>
+                   <th className="text-left p-3 font-medium">Detalhes</th>
+                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
