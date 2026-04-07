@@ -576,15 +576,15 @@ export default function FechamentoPrestadores() {
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : providerGroups.length === 0 ? (
+      ) : filteredGroups.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            Nenhum atendimento encontrado no período selecionado.
+            Nenhum atendimento encontrado{search ? " para a busca" : ""}.
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {providerGroups.map((g) => (
+          {filteredGroups.map((g) => (
             <Card key={g.id} className="hover:shadow-md transition-shadow">
               <CardContent className="pt-4 pb-4 space-y-3">
                 <div className="flex items-start justify-between">
