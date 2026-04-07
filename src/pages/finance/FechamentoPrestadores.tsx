@@ -137,6 +137,32 @@ export default function FechamentoPrestadores() {
     },
   });
 
+  // Fetch provider invoices for NF filter
+  const dispatchIds = useMemo(() => (dispatches || []).map(d => d.id), [dispatches]);
+  const { data: providerInvoices } = useQuery({
+    queryKey: ["provider-invoices-nf-check", dispatchIds],
+    queryFn: async () => {
+      if (dispatchIds.length === 0) return [];
+      // Fetch in batches of 100
+      const allInvoices: { dispatch_id: string }[] = [];
+      for (let i = 0; i < dispatchIds.length; i += 100) {
+        const batch = dispatchIds.slice(i, i + 100);
+        const { data } = await supabase
+          .from("provider_invoices")
+          .select("dispatch_id")
+          .in("dispatch_id", batch);
+        if (data) allInvoices.push(...data);
+      }
+      return allInvoices;
+    },
+    enabled: dispatchIds.length > 0,
+  });
+
+  const dispatchesWithNf = useMemo(() => {
+    const set = new Set((providerInvoices || []).map(i => i.dispatch_id));
+    return set;
+  }, [providerInvoices]);
+
   const providerGroups = useMemo(() => {
     if (!dispatches) return [];
     const map = new Map<string, ProviderGroup>();
