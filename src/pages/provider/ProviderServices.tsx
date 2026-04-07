@@ -185,11 +185,13 @@ export default function ProviderServices() {
       // Text search
       if (search) {
         const q = search.toLowerCase();
+        const beneficiaryName = (sr?.beneficiaries?.name || "").toLowerCase();
         return (
           sr?.protocol?.toLowerCase().includes(q) ||
           sr?.requester_name?.toLowerCase().includes(q) ||
           sr?.vehicle_plate?.toLowerCase().includes(q) ||
-          sr?.origin_address?.toLowerCase().includes(q)
+          sr?.origin_address?.toLowerCase().includes(q) ||
+          beneficiaryName.includes(q)
         );
       }
       return true;
