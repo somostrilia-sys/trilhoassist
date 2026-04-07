@@ -214,7 +214,8 @@ export default function Billing() {
 
   const filtered = invoices.filter((inv: any) => {
     const q = search.toLowerCase();
-    return (inv.clients?.name ?? "").toLowerCase().includes(q);
+    const clientName = (inv.clients?.name ?? "").toLowerCase();
+    return !q || clientName.includes(q) || String(inv.total_charged).includes(q) || (inv.status || "").toLowerCase().includes(q);
   });
 
   const draftCount = invoices.filter((i: any) => i.status === "draft").length;

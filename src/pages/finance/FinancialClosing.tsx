@@ -375,6 +375,7 @@ export default function FinancialClosing() {
     const providerName = (c.providers?.name ?? "").toLowerCase();
     // Search by provider name, or by dispatches (protocol, plate, beneficiary, service type)
     const matchesSearch = !q || providerName.includes(q);
+    if (!matchesSearch) return false;
     if (statusFilter !== "all" && c.status !== statusFilter) return false;
     if (providerFilter !== "all" && c.providers?.id !== providerFilter) return false;
     if (dueDateFilter === "overdue") {
