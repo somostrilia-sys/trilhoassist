@@ -200,13 +200,49 @@ export default function FechamentoPrestadores() {
     return Array.from(map.values()).sort((a, b) => b.totalValor - a.totalValor);
   }, [dispatches]);
 
+  // Apply search + NF filter
+  const filteredGroups = useMemo(() => {
+    let groups = providerGroups;
+
+    // Search filter
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      groups = groups.filter((g) => {
+        // Match provider name
+        if (g.name.toLowerCase().includes(q)) return true;
+        // Match dispatches: placa, protocolo, beneficiário, tipo serviço
+        return g.dispatches.some((d) => {
+          const sr = d.service_requests;
+          const plate = (sr?.beneficiaries?.vehicle_plate || sr?.vehicle_plate || "").toLowerCase();
+          const protocol = (sr?.protocol || "").toLowerCase();
+          const beneficiary = (sr?.beneficiaries?.name || sr?.requester_name || "").toLowerCase();
+          const serviceType = (SERVICE_TYPE_LABELS[sr?.service_type || ""] || sr?.service_type || "").toLowerCase();
+          return plate.includes(q) || protocol.includes(q) || beneficiary.includes(q) || serviceType.includes(q);
+        });
+      });
+    }
+
+    // NF filter
+    if (nfFilter === "pending_nf") {
+      groups = groups.filter((g) =>
+        g.dispatches.some((d) => !dispatchesWithNf.has(d.id))
+      );
+    } else if (nfFilter === "has_nf") {
+      groups = groups.filter((g) =>
+        g.dispatches.every((d) => dispatchesWithNf.has(d.id))
+      );
+    }
+
+    return groups;
+  }, [providerGroups, search, nfFilter, dispatchesWithNf]);
+
   const summary = useMemo(() => {
     const byType: Record<string, number> = {};
     let total = 0;
     let count = 0;
     let totalAVista = 0;
     let totalFaturado = 0;
-    for (const g of providerGroups) {
+    for (const g of filteredGroups) {
       total += g.totalValor;
       totalAVista += g.totalAVista;
       totalFaturado += g.totalFaturado;
@@ -218,11 +254,34 @@ export default function FechamentoPrestadores() {
       }
     }
     return { total, count, byType, totalAVista, totalFaturado };
-  }, [providerGroups]);
+  }, [filteredGroups]);
 
   const handleFilter = () => {
     setAppliedFrom(dateFrom);
     setAppliedTo(dateTo);
+  };
+
+  const getDispatchValue = (d: DispatchWithDetails) =>
+    Number(d.final_amount ?? d.quoted_amount ?? d.service_requests?.provider_cost ?? 0);
+
+  // Global Excel export (all providers)
+  const exportGlobalExcel = () => {
+    const rows = filteredGroups.map((g) => ({
+      "Prestador": g.name,
+      "Cidade": g.city || "-",
+      "Telefone": g.phone || "-",
+      "Qtd Atendimentos": g.totalAtendimentos,
+      "Total À Vista (R$)": g.totalAVista,
+      "Total Faturado (R$)": g.totalFaturado,
+      "Valor Total (R$)": g.totalValor,
+      "Status NF": g.dispatches.every((d) => dispatchesWithNf.has(d.id)) ? "OK" : "Pendente",
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Prestadores");
+    XLSX.writeFile(wb, `fechamento_geral_${format(appliedFrom, "yyyyMMdd")}_${format(appliedTo, "yyyyMMdd")}.xlsx`);
+    toast({ title: "Excel exportado com sucesso!" });
   };
 
   const getDispatchValue = (d: DispatchWithDetails) =>
