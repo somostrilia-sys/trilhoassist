@@ -335,7 +335,7 @@ export default function ProviderServices() {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={12} className="p-6 text-center text-muted-foreground">
                       Nenhum serviço encontrado.
                     </td>
                   </tr>
@@ -354,6 +354,7 @@ export default function ProviderServices() {
                             {new Date(dispatch.created_at).toLocaleDateString("pt-BR")}
                           </td>
                           <td className="p-3">{SERVICE_LABELS[sr?.service_type] || sr?.service_type}</td>
+                          <td className="p-3 text-xs">{sr?.beneficiaries?.name || sr?.requester_name || "-"}</td>
                           <td className="p-3 font-mono">{sr?.vehicle_plate || "-"}</td>
                           <td className="p-3 hidden md:table-cell text-xs text-muted-foreground max-w-[200px] truncate">
                             {sr?.origin_address || "-"}
