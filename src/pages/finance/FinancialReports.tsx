@@ -2,9 +2,9 @@ import React, { useState, useMemo } from "react";
 import { format, subMonths, startOfMonth, endOfMonth, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  BarChart3, TrendingUp, DollarSign, FileText, Calendar, Car, Phone,
+  BarChart3, TrendingUp, DollarSign, FileText, Calendar as CalendarIcon, Car, Phone,
   User, Search, Download, Filter, Users, Building2, CheckCircle2, Clock,
-  Banknote, Receipt, AlertTriangle,
+  Banknote, Receipt, AlertTriangle, ChevronsUpDown, Check, X,
 } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -19,10 +19,14 @@ import { Button } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useTenantId, formatCurrency, SERVICE_TYPE_LABELS } from "@/hooks/useFinancialData";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { maskCPF, maskPhone } from "@/lib/masks";
+import { cn } from "@/lib/utils";
 
 const CHART_COLORS = [
   "hsl(218, 58%, 26%)",
@@ -61,12 +65,20 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   invoiced: "Faturado",
 };
 
-function usePeriodRange(months: number) {
+function usePeriodRange(months: number, customFrom?: Date, customTo?: Date) {
   return useMemo(() => {
+    if (customFrom && customTo) {
+      return {
+        start: customFrom,
+        end: customTo,
+        startStr: format(customFrom, "yyyy-MM-dd"),
+        endStr: format(customTo, "yyyy-MM-dd"),
+      };
+    }
     const end = endOfMonth(new Date());
     const start = startOfMonth(subMonths(new Date(), months - 1));
     return { start, end, startStr: format(start, "yyyy-MM-dd"), endStr: format(end, "yyyy-MM-dd") };
-  }, [months]);
+  }, [months, customFrom, customTo]);
 }
 
 function exportToCsv(filename: string, headers: string[], rows: string[][]) {
@@ -187,12 +199,40 @@ export default function FinancialReports() {
   const [searchBeneficiaries, setSearchBeneficiaries] = useState("");
   const [clientFilter, setClientFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [customDateFrom, setCustomDateFrom] = useState<Date | undefined>();
+  const [customDateTo, setCustomDateTo] = useState<Date | undefined>();
+  const [clientComboOpen, setClientComboOpen] = useState(false);
 
   const { data: tenantId } = useTenantId();
-  const period = usePeriodRange(periodMonths);
+  const period = usePeriodRange(periodMonths, customDateFrom, customDateTo);
   const { data: requests = [], isLoading: loadingReq } = useDetailedRequests(tenantId, period);
   const { data: benData, isLoading: loadingBen } = useBeneficiaryReport(tenantId);
 
+  // Fetch dispatches to get provider info for each request
+  const requestIds = useMemo(() => requests.map((r) => r.id), [requests]);
+  const { data: dispatchProviderMap = {} } = useQuery({
+    queryKey: ["dispatch-providers-for-reports", requestIds],
+    queryFn: async () => {
+      if (!requestIds.length) return {};
+      const map: Record<string, string> = {};
+      const batchSize = 200;
+      for (let i = 0; i < requestIds.length; i += batchSize) {
+        const batch = requestIds.slice(i, i + batchSize);
+        const { data } = await supabase
+          .from("dispatches")
+          .select("service_request_id, providers (name)")
+          .in("service_request_id", batch)
+          .eq("status", "completed");
+        (data ?? []).forEach((d: any) => {
+          if (d.providers?.name) {
+            map[d.service_request_id] = d.providers.name;
+          }
+        });
+      }
+      return map;
+    },
+    enabled: requestIds.length > 0,
+  });
   const beneficiaries = benData?.beneficiaries ?? [];
   const clients = benData?.clients ?? [];
   const clientMap = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
@@ -343,9 +383,9 @@ export default function FinancialReports() {
             Atendimentos, beneficiários, placas e dados financeiros
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-          <Select value={String(periodMonths)} onValueChange={(v) => setPeriodMonths(Number(v))}>
+        <div className="flex flex-wrap items-center gap-2">
+          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+          <Select value={String(periodMonths)} onValueChange={(v) => { setPeriodMonths(Number(v)); setCustomDateFrom(undefined); setCustomDateTo(undefined); }}>
             <SelectTrigger className="w-[180px]">
               <SelectValue />
             </SelectTrigger>
@@ -355,6 +395,33 @@ export default function FinancialReports() {
               <SelectItem value="12">Últimos 12 meses</SelectItem>
             </SelectContent>
           </Select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={cn("w-[140px] justify-start text-left font-normal", !customDateFrom && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {customDateFrom ? format(customDateFrom, "dd/MM/yyyy") : "De"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={customDateFrom} onSelect={setCustomDateFrom} initialFocus locale={ptBR} className={cn("p-3 pointer-events-auto")} />
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={cn("w-[140px] justify-start text-left font-normal", !customDateTo && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {customDateTo ? format(customDateTo, "dd/MM/yyyy") : "Até"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={customDateTo} onSelect={setCustomDateTo} initialFocus locale={ptBR} className={cn("p-3 pointer-events-auto")} />
+            </PopoverContent>
+          </Popover>
+          {(customDateFrom || customDateTo) && (
+            <Button variant="ghost" size="sm" onClick={() => { setCustomDateFrom(undefined); setCustomDateTo(undefined); }} className="gap-1">
+              <X className="h-4 w-4" /> Limpar
+            </Button>
+          )}
         </div>
       </div>
 
@@ -558,15 +625,34 @@ export default function FinancialReports() {
               <Input placeholder="Protocolo, nome, placa, telefone..." value={searchRequests}
                 onChange={(e) => setSearchRequests(e.target.value)} className="pl-9" />
             </div>
-            <Select value={clientFilter} onValueChange={setClientFilter}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Todos os clientes" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os clientes</SelectItem>
-                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Popover open={clientComboOpen} onOpenChange={setClientComboOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" aria-expanded={clientComboOpen} className="w-[240px] justify-between">
+                  {clientFilter === "all" ? "Todos os clientes" : clients.find((c) => c.id === clientFilter)?.name || "Selecionar..."}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[280px] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Buscar cliente..." />
+                  <CommandList>
+                    <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem value="all" onSelect={() => { setClientFilter("all"); setClientComboOpen(false); }}>
+                        <Check className={cn("mr-2 h-4 w-4", clientFilter === "all" ? "opacity-100" : "opacity-0")} />
+                        Todos os clientes
+                      </CommandItem>
+                      {clients.map((c) => (
+                        <CommandItem key={c.id} value={c.name} onSelect={() => { setClientFilter(c.id); setClientComboOpen(false); }}>
+                          <Check className={cn("mr-2 h-4 w-4", clientFilter === c.id ? "opacity-100" : "opacity-0")} />
+                          {c.name}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Todos os status" />
@@ -578,17 +664,18 @@ export default function FinancialReports() {
             </Select>
             <Badge variant="outline" className="text-xs">{filteredRequests.length} registros</Badge>
             <Button variant="outline" size="sm" className="gap-2" onClick={() => {
-              const headers = ["Protocolo","Data","Solicitante","Telefone","Beneficiário","CPF","Placa","Veículo","Serviço","Evento","Cliente","Origem","Custo","Cobrado","Status","Dados"];
+              const headers = ["Protocolo","Data","Solicitante","Telefone","Beneficiário","CPF","Placa","Veículo","Serviço","Evento","Cliente","Prestador","Origem","Custo","Cobrado","Status","Dados"];
               const rows = filteredRequests.map((r) => {
                 const ben = r.beneficiaries as any;
                 const client = r.clients as any;
+                const providerName = dispatchProviderMap[r.id] || "";
                 return [
                   r.protocol, format(parseISO(r.created_at), "dd/MM/yyyy HH:mm"),
                   r.requester_name, r.requester_phone || "", ben?.name || "", ben?.cpf || "",
                   r.vehicle_plate || "", `${r.vehicle_model || ""}${r.vehicle_year ? ` ${r.vehicle_year}` : ""}`,
                   SERVICE_TYPE_LABELS[r.service_type] || r.service_type,
                   EVENT_TYPE_LABELS[r.event_type] || r.event_type,
-                  client?.name || "", r.origin_address || "",
+                  client?.name || "", providerName, r.origin_address || "",
                   String(Number(r.provider_cost) || 0), String(Number(r.charged_amount) || 0),
                   STATUS_LABELS[r.status] || r.status, getDataOrigin(r.client_id || "") === "erp" ? "ERP" : "Manual",
                 ];
@@ -620,6 +707,7 @@ export default function FinancialReports() {
                         <TableHead>Serviço</TableHead>
                         <TableHead>Evento</TableHead>
                         <TableHead>Cliente</TableHead>
+                        <TableHead>Prestador</TableHead>
                         <TableHead>Origem</TableHead>
                         <TableHead className="text-right">Custo</TableHead>
                         <TableHead className="text-right">Cobrado</TableHead>
@@ -666,6 +754,7 @@ export default function FinancialReports() {
                               {EVENT_TYPE_LABELS[r.event_type] || r.event_type}
                             </TableCell>
                             <TableCell className="text-sm whitespace-nowrap">{client?.name || "—"}</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{dispatchProviderMap[r.id] || "—"}</TableCell>
                             <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate" title={r.origin_address || ""}>
                               {r.origin_address || "—"}
                             </TableCell>
@@ -694,7 +783,7 @@ export default function FinancialReports() {
                     </TableBody>
                     <tfoot>
                       <TableRow className="bg-muted/50 font-bold border-t-2">
-                        <TableCell colSpan={11} className="text-right text-sm">TOTAIS ({filteredRequests.length} atendimentos)</TableCell>
+                        <TableCell colSpan={12} className="text-right text-sm">TOTAIS ({filteredRequests.length} atendimentos)</TableCell>
                         <TableCell className="text-right font-mono text-xs text-destructive whitespace-nowrap">
                           {formatCurrency(filteredRequests.reduce((s, r) => s + (Number(r.provider_cost) || 0), 0))}
                         </TableCell>
@@ -722,15 +811,34 @@ export default function FinancialReports() {
               <Input placeholder="Nome, CPF, placa, telefone, cooperativa..." value={searchBeneficiaries}
                 onChange={(e) => setSearchBeneficiaries(e.target.value)} className="pl-9" />
             </div>
-            <Select value={clientFilter} onValueChange={setClientFilter}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Todos os clientes" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os clientes</SelectItem>
-                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" className="w-[240px] justify-between">
+                  {clientFilter === "all" ? "Todos os clientes" : clients.find((c) => c.id === clientFilter)?.name || "Selecionar..."}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[280px] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Buscar cliente..." />
+                  <CommandList>
+                    <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem value="all" onSelect={() => setClientFilter("all")}>
+                        <Check className={cn("mr-2 h-4 w-4", clientFilter === "all" ? "opacity-100" : "opacity-0")} />
+                        Todos os clientes
+                      </CommandItem>
+                      {clients.map((c) => (
+                        <CommandItem key={c.id} value={c.name} onSelect={() => setClientFilter(c.id)}>
+                          <Check className={cn("mr-2 h-4 w-4", clientFilter === c.id ? "opacity-100" : "opacity-0")} />
+                          {c.name}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
             <Badge variant="outline" className="text-xs">{filteredBeneficiaries.length} beneficiários</Badge>
             <Button variant="outline" size="sm" className="gap-2" onClick={() => {
               const headers = ["Nome","CPF","Telefone","Placa","Veículo","Ano","Chassi","Cooperativa","Cliente","Plano","Valor/Placa","Status","Origem","Cadastro"];
