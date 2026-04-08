@@ -96,6 +96,24 @@ function exportToCsv(filename: string, headers: string[], rows: string[][]) {
   URL.revokeObjectURL(url);
 }
 
+// Independent client query for Combobox (not dependent on beneficiaries)
+function useClients(tenantId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["report-clients-list", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name, billing_model, api_endpoint")
+        .eq("tenant_id", tenantId!)
+        .eq("active", true)
+        .order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!tenantId,
+  });
+}
+
 // Full service request data with beneficiary + client relations
 function useDetailedRequests(tenantId: string | null | undefined, period: { startStr: string; endStr: string }) {
   return useQuery({
