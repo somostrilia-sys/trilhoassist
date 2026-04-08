@@ -167,6 +167,7 @@ export default function FinancialClosing() {
   const [tabProviderFilter, setTabProviderFilter] = useState<string>("all");
   const [tabDateFrom, setTabDateFrom] = useState<Date | undefined>(startOfMonth(new Date()));
   const [tabDateTo, setTabDateTo] = useState<Date | undefined>(new Date());
+  const [tabSearch, setTabSearch] = useState("");
 
   const { data: tenantId } = useTenantId();
   const { data: closings = [], isLoading } = useFinancialClosings(tenantId);
