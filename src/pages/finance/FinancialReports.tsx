@@ -220,6 +220,7 @@ export default function FinancialReports() {
   const [customDateFrom, setCustomDateFrom] = useState<Date | undefined>();
   const [customDateTo, setCustomDateTo] = useState<Date | undefined>();
   const [clientComboOpen, setClientComboOpen] = useState(false);
+  const [clientComboOpenBen, setClientComboOpenBen] = useState(false);
 
   const { data: tenantId } = useTenantId();
   const period = usePeriodRange(periodMonths, customDateFrom, customDateTo);
