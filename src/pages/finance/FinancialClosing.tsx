@@ -749,6 +749,19 @@ export default function FinancialClosing() {
                             <Download className="h-3.5 w-3.5" />
                             PDF
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1"
+                            onClick={() => exportDispatchesExcel(
+                              group.dispatches,
+                              `${group.provider_name.replace(/\s+/g, "_")}_${format(new Date(), "yyyy-MM-dd")}.xlsx`,
+                              group.provider_name
+                            )}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            Excel
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
