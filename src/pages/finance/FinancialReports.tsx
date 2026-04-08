@@ -754,6 +754,7 @@ export default function FinancialReports() {
                               {EVENT_TYPE_LABELS[r.event_type] || r.event_type}
                             </TableCell>
                             <TableCell className="text-sm whitespace-nowrap">{client?.name || "—"}</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{dispatchProviderMap[r.id] || "—"}</TableCell>
                             <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate" title={r.origin_address || ""}>
                               {r.origin_address || "—"}
                             </TableCell>
