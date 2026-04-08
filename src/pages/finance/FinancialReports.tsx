@@ -783,7 +783,7 @@ export default function FinancialReports() {
                     </TableBody>
                     <tfoot>
                       <TableRow className="bg-muted/50 font-bold border-t-2">
-                        <TableCell colSpan={11} className="text-right text-sm">TOTAIS ({filteredRequests.length} atendimentos)</TableCell>
+                        <TableCell colSpan={12} className="text-right text-sm">TOTAIS ({filteredRequests.length} atendimentos)</TableCell>
                         <TableCell className="text-right font-mono text-xs text-destructive whitespace-nowrap">
                           {formatCurrency(filteredRequests.reduce((s, r) => s + (Number(r.provider_cost) || 0), 0))}
                         </TableCell>
