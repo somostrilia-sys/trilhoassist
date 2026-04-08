@@ -588,7 +588,19 @@ export default function FinancialClosing() {
         </TabsList>
 
         {/* ===== Filtros globais das abas de pagamento ===== */}
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end flex-wrap">
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Busca</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Prestador, placa, protocolo..."
+                value={tabSearch}
+                onChange={(e) => setTabSearch(e.target.value)}
+                className="pl-9 w-full sm:w-64"
+              />
+            </div>
+          </div>
           <div className="flex flex-col gap-1">
             <Label className="text-xs text-muted-foreground">Prestador</Label>
             <Select value={tabProviderFilter} onValueChange={setTabProviderFilter}>
