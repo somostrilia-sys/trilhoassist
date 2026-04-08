@@ -226,8 +226,9 @@ export default function FinancialReports() {
   const period = usePeriodRange(periodMonths, customDateFrom, customDateTo);
   const { data: requests = [], isLoading: loadingReq } = useDetailedRequests(tenantId, period);
   const { data: benData, isLoading: loadingBen } = useBeneficiaryReport(tenantId);
+  const { data: clientsList = [] } = useClients(tenantId);
 
-  // Fetch dispatches to get provider info for each request
+  // Fetch dispatches to get provider info for each request (any dispatch with provider, not just completed)
   const requestIds = useMemo(() => requests.map((r) => r.id), [requests]);
   const { data: dispatchProviderMap = {} } = useQuery({
     queryKey: ["dispatch-providers-for-reports", requestIds],
@@ -239,12 +240,16 @@ export default function FinancialReports() {
         const batch = requestIds.slice(i, i + batchSize);
         const { data } = await supabase
           .from("dispatches")
-          .select("service_request_id, providers (name)")
+          .select("service_request_id, status, providers (name)")
           .in("service_request_id", batch)
-          .eq("status", "completed");
+          .not("provider_id", "is", null);
+        // Prefer completed dispatches, but accept any with a provider
         (data ?? []).forEach((d: any) => {
           if (d.providers?.name) {
-            map[d.service_request_id] = d.providers.name;
+            // Only overwrite if we don't have one yet, or if this one is completed
+            if (!map[d.service_request_id] || d.status === "completed") {
+              map[d.service_request_id] = d.providers.name;
+            }
           }
         });
       }
@@ -253,7 +258,8 @@ export default function FinancialReports() {
     enabled: requestIds.length > 0,
   });
   const beneficiaries = benData?.beneficiaries ?? [];
-  const clients = benData?.clients ?? [];
+  // Use independent clients list for Combobox (more reliable)
+  const clients = clientsList.length > 0 ? clientsList : (benData?.clients ?? []);
   const clientMap = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
 
   // === Charts data ===
