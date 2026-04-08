@@ -212,6 +212,25 @@ export default function ServiceRequests() {
       query = query.or(`protocol.ilike.%${search}%,requester_name.ilike.%${search}%,vehicle_plate.ilike.%${search}%`);
     }
     const { data } = await query;
+    const srIds = (data || []).map((r) => r.id);
+
+    // Fetch provider names for each request via dispatches
+    const providerMap: Record<string, string> = {};
+    if (srIds.length > 0) {
+      const batchSize = 200;
+      for (let i = 0; i < srIds.length; i += batchSize) {
+        const batch = srIds.slice(i, i + batchSize);
+        const { data: dispatches } = await supabase
+          .from("dispatches")
+          .select("service_request_id, providers (name)")
+          .in("service_request_id", batch)
+          .eq("status", "completed");
+        (dispatches ?? []).forEach((d: any) => {
+          if (d.providers?.name) providerMap[d.service_request_id] = d.providers.name;
+        });
+      }
+    }
+
     return (data || []).map((r) => ({
       Protocolo: r.protocol,
       Status: statusMap[r.status]?.label || r.status,
@@ -220,6 +239,7 @@ export default function ServiceRequests() {
       Telefone: r.requester_phone,
       Placa: r.vehicle_plate || "",
       Veículo: r.vehicle_model || "",
+      Prestador: providerMap[r.id] || "",
       Origem: r.origin_address || "",
       Destino: r.destination_address || "",
       "Valor Cobrado": r.charged_amount ?? 0,
