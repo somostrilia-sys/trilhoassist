@@ -152,7 +152,7 @@ const App = () => (
               <Route path="/network/providers/:id" element={<ProviderForm />} />
               <Route path="/network/blacklist" element={<ProviderBlacklist />} />
               <Route path="/finance/closing" element={<FinancialClosing />} />
-              <Route path="/finance/prestadores" element={<FechamentoPrestadores />} />
+              
               <Route path="/finance/billing" element={<Billing />} />
               <Route path="/finance/reports" element={<FinancialReports />} />
               <Route path="/finance/dashboard" element={<FinanceiroDashboard />} />
