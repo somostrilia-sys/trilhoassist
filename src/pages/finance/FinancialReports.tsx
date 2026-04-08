@@ -199,12 +199,40 @@ export default function FinancialReports() {
   const [searchBeneficiaries, setSearchBeneficiaries] = useState("");
   const [clientFilter, setClientFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [customDateFrom, setCustomDateFrom] = useState<Date | undefined>();
+  const [customDateTo, setCustomDateTo] = useState<Date | undefined>();
+  const [clientComboOpen, setClientComboOpen] = useState(false);
 
   const { data: tenantId } = useTenantId();
-  const period = usePeriodRange(periodMonths);
+  const period = usePeriodRange(periodMonths, customDateFrom, customDateTo);
   const { data: requests = [], isLoading: loadingReq } = useDetailedRequests(tenantId, period);
   const { data: benData, isLoading: loadingBen } = useBeneficiaryReport(tenantId);
 
+  // Fetch dispatches to get provider info for each request
+  const requestIds = useMemo(() => requests.map((r) => r.id), [requests]);
+  const { data: dispatchProviderMap = {} } = useQuery({
+    queryKey: ["dispatch-providers-for-reports", requestIds],
+    queryFn: async () => {
+      if (!requestIds.length) return {};
+      const map: Record<string, string> = {};
+      const batchSize = 200;
+      for (let i = 0; i < requestIds.length; i += batchSize) {
+        const batch = requestIds.slice(i, i + batchSize);
+        const { data } = await supabase
+          .from("dispatches")
+          .select("service_request_id, providers (name)")
+          .in("service_request_id", batch)
+          .eq("status", "completed");
+        (data ?? []).forEach((d: any) => {
+          if (d.providers?.name) {
+            map[d.service_request_id] = d.providers.name;
+          }
+        });
+      }
+      return map;
+    },
+    enabled: requestIds.length > 0,
+  });
   const beneficiaries = benData?.beneficiaries ?? [];
   const clients = benData?.clients ?? [];
   const clientMap = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
