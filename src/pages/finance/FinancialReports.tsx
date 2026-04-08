@@ -811,15 +811,34 @@ export default function FinancialReports() {
               <Input placeholder="Nome, CPF, placa, telefone, cooperativa..." value={searchBeneficiaries}
                 onChange={(e) => setSearchBeneficiaries(e.target.value)} className="pl-9" />
             </div>
-            <Select value={clientFilter} onValueChange={setClientFilter}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Todos os clientes" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os clientes</SelectItem>
-                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" className="w-[240px] justify-between">
+                  {clientFilter === "all" ? "Todos os clientes" : clients.find((c) => c.id === clientFilter)?.name || "Selecionar..."}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[280px] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Buscar cliente..." />
+                  <CommandList>
+                    <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem value="all" onSelect={() => setClientFilter("all")}>
+                        <Check className={cn("mr-2 h-4 w-4", clientFilter === "all" ? "opacity-100" : "opacity-0")} />
+                        Todos os clientes
+                      </CommandItem>
+                      {clients.map((c) => (
+                        <CommandItem key={c.id} value={c.name} onSelect={() => setClientFilter(c.id)}>
+                          <Check className={cn("mr-2 h-4 w-4", clientFilter === c.id ? "opacity-100" : "opacity-0")} />
+                          {c.name}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
             <Badge variant="outline" className="text-xs">{filteredBeneficiaries.length} beneficiários</Badge>
             <Button variant="outline" size="sm" className="gap-2" onClick={() => {
               const headers = ["Nome","CPF","Telefone","Placa","Veículo","Ano","Chassi","Cooperativa","Cliente","Plano","Valor/Placa","Status","Origem","Cadastro"];
