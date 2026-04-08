@@ -1,78 +1,39 @@
 
-## Análise: O que JÁ EXISTE vs. O que FALTA
+## Problema 1: Lupa de clientes (Combobox) não mostra dados
 
-### 1. Fechamento Financeiro — Aba "À Vista (Pendente NF)"
+**Causa raiz:** A lista de `clients` usada no Combobox vem do hook `useBeneficiaryReport()`, que busca clientes com `active: true`. Porém, o Combobox da aba **Atendimentos** (linha 628-655) usa o estado `clientComboOpen` corretamente, mas os Comboboxes das **outras abas** (Beneficiários, linha 814-841) **não controlam estado de abertura/fechamento** — faltam `open` e `onOpenChange` no `<Popover>`. Isso faz o dropdown não fechar ao selecionar.
 
-**Já existe:**
-- ✅ Botão "Excel Pendente NF" que exporta todos os prestadores à vista
-- ✅ Filtro por prestador e período (data início/fim)
+Além disso, se a query de `useBeneficiaryReport` falhar ou retornar vazio (ex: sem tenant_id), `clients` fica `[]` e o Combobox aparece vazio.
 
-**Falta:**
-- ❌ O botão atual exporta TODOS os à vista, não apenas os pendentes de NF. Precisa separar em **duas opções**: "Excel Pendente NF" (apenas sem NF) e "Excel Todos À Vista" (todos pagos à vista no período, com ou sem NF)
-
-**Arquivo:** `src/pages/finance/FinancialClosing.tsx`
-**Risco:** 🟢 Baixo
+**Correção:**
+- Criar uma query **independente** para buscar clientes (não depender de `useBeneficiaryReport`)
+- Adicionar controle de `open/onOpenChange` em TODOS os Comboboxes
+- Garantir que a busca no `CommandInput` funciona corretamente com o `value` do `CommandItem`
 
 ---
 
-### 2. Relatórios — Filtro por período com datas específicas
+## Problema 2: Relatório não extrai todos os prestadores
 
-**Já existe:**
-- ✅ Dropdown com "Últimos 3/6/12 meses" (linhas 348-357)
-- ✅ A query `useDetailedRequests` já usa `startStr` e `endStr` do período
+**Causa raiz:** O `dispatchProviderMap` (linha 213-235) busca dispatches filtrados por `status: "completed"`. Muitos atendimentos podem ter dispatches com status `accepted` ou outro status — esses ficam **sem prestador** no relatório e no CSV.
 
-**Falta:**
-- ❌ Não há seletor de data inicial e final específicas (datepicker). O filtro atual só permite meses pré-definidos (3, 6, 12 meses). Precisa adicionar **dois datepickers** (De/Até) que substituam o período automático quando preenchidos.
-
-**Arquivo:** `src/pages/finance/FinancialReports.tsx`
-**Risco:** 🟡 Médio (afeta a query principal que alimenta todas as abas)
+**Correção:**
+- Remover o filtro `.eq("status", "completed")` da query de dispatches para o mapa de prestadores
+- Usar qualquer dispatch que tenha `provider_id` preenchido (priorizar o mais recente ou o completado)
+- Garantir que o CSV e a tabela mostram o prestador corretamente
 
 ---
 
-### 3. Relatórios — Dropdown "Todos os clientes" com lentidão e busca
+## Problema 3 (bônus): Excel "Pendente NF" exporta TODOS, não só pendentes
 
-**Já existe:**
-- ✅ Select com lista de clientes (linhas 561-568)
-- ✅ Filtro `clientFilter` funciona no código
+**Causa raiz:** `exportPendingNfExcel` recebe `tabDispatches` (todos os à vista filtrados), sem verificar se realmente falta NF. Deveria filtrar apenas dispatches sem registro em `provider_invoices`.
 
-**Problema:**
-- ❌ O componente `Select` do shadcn não tem busca nativa — em listas grandes causa lentidão e dificuldade de seleção
-- ❌ Falta campo de busca/lupa para localizar clientes pelo nome rapidamente
-
-**Solução:**
-- Substituir o `Select` por um **Combobox** (Command + Popover do shadcn) com busca integrada, em todas as abas que usam o filtro de clientes (Atendimentos, Beneficiários, Recebimentos)
-
-**Arquivo:** `src/pages/finance/FinancialReports.tsx`
-**Risco:** 🟢 Baixo
+**Correção:**
+- Buscar IDs dos dispatches que JÁ têm invoice
+- Filtrar para exportar apenas os que NÃO têm
 
 ---
 
-### 4. Relatórios — Exportação de Atendimentos sem prestador
+## Arquivos alterados
+- `src/pages/finance/FinancialReports.tsx`
 
-**Já existe:**
-- ✅ Botão "Exportar CSV" na aba Atendimentos (linha 580)
-- ✅ Tabela mostra dados do atendimento
-
-**Falta:**
-- ❌ A coluna "Prestador" **NÃO existe** na tabela nem no CSV. A query `useDetailedRequests` não busca dados de dispatches/providers
-- ❌ Precisa fazer JOIN com `dispatches → providers` para obter o nome do prestador vinculado
-
-**Solução:**
-- Adicionar query de dispatches para os requests ou fazer sub-query
-- Adicionar coluna "Prestador" na tabela e no CSV exportado
-
-**Arquivo:** `src/pages/finance/FinancialReports.tsx`
-**Risco:** 🟡 Médio (precisa de query adicional)
-
----
-
-## RESUMO
-
-| # | Alteração | Arquivo | Risco |
-|---|-----------|---------|-------|
-| 1 | Separar export Excel: "Pendente NF" vs "Todos À Vista" | FinancialClosing.tsx | 🟢 Baixo |
-| 2 | Datepickers (De/Até) no módulo de Relatórios | FinancialReports.tsx | 🟡 Médio |
-| 3 | Combobox com busca no filtro de clientes | FinancialReports.tsx | 🟢 Baixo |
-| 4 | Coluna "Prestador" na aba Atendimentos + CSV | FinancialReports.tsx | 🟡 Médio |
-
-**Nenhuma alteração de banco de dados necessária.** Todas as mudanças são no frontend.
+## Risco: 🟡 Médio

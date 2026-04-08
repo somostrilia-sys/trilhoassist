@@ -96,6 +96,24 @@ function exportToCsv(filename: string, headers: string[], rows: string[][]) {
   URL.revokeObjectURL(url);
 }
 
+// Independent client query for Combobox (not dependent on beneficiaries)
+function useClients(tenantId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["report-clients-list", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name, billing_model, api_endpoint")
+        .eq("tenant_id", tenantId!)
+        .eq("active", true)
+        .order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!tenantId,
+  });
+}
+
 // Full service request data with beneficiary + client relations
 function useDetailedRequests(tenantId: string | null | undefined, period: { startStr: string; endStr: string }) {
   return useQuery({
@@ -202,13 +220,15 @@ export default function FinancialReports() {
   const [customDateFrom, setCustomDateFrom] = useState<Date | undefined>();
   const [customDateTo, setCustomDateTo] = useState<Date | undefined>();
   const [clientComboOpen, setClientComboOpen] = useState(false);
+  const [clientComboOpenBen, setClientComboOpenBen] = useState(false);
 
   const { data: tenantId } = useTenantId();
   const period = usePeriodRange(periodMonths, customDateFrom, customDateTo);
   const { data: requests = [], isLoading: loadingReq } = useDetailedRequests(tenantId, period);
   const { data: benData, isLoading: loadingBen } = useBeneficiaryReport(tenantId);
+  const { data: clientsList = [] } = useClients(tenantId);
 
-  // Fetch dispatches to get provider info for each request
+  // Fetch dispatches to get provider info for each request (any dispatch with provider, not just completed)
   const requestIds = useMemo(() => requests.map((r) => r.id), [requests]);
   const { data: dispatchProviderMap = {} } = useQuery({
     queryKey: ["dispatch-providers-for-reports", requestIds],
@@ -220,12 +240,16 @@ export default function FinancialReports() {
         const batch = requestIds.slice(i, i + batchSize);
         const { data } = await supabase
           .from("dispatches")
-          .select("service_request_id, providers (name)")
+          .select("service_request_id, status, providers (name)")
           .in("service_request_id", batch)
-          .eq("status", "completed");
+          .not("provider_id", "is", null);
+        // Prefer completed dispatches, but accept any with a provider
         (data ?? []).forEach((d: any) => {
           if (d.providers?.name) {
-            map[d.service_request_id] = d.providers.name;
+            // Only overwrite if we don't have one yet, or if this one is completed
+            if (!map[d.service_request_id] || d.status === "completed") {
+              map[d.service_request_id] = d.providers.name;
+            }
           }
         });
       }
@@ -234,7 +258,8 @@ export default function FinancialReports() {
     enabled: requestIds.length > 0,
   });
   const beneficiaries = benData?.beneficiaries ?? [];
-  const clients = benData?.clients ?? [];
+  // Use independent clients list for Combobox (more reliable)
+  const clients = clientsList.length > 0 ? clientsList : (benData?.clients ?? []);
   const clientMap = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
 
   // === Charts data ===
@@ -811,9 +836,9 @@ export default function FinancialReports() {
               <Input placeholder="Nome, CPF, placa, telefone, cooperativa..." value={searchBeneficiaries}
                 onChange={(e) => setSearchBeneficiaries(e.target.value)} className="pl-9" />
             </div>
-            <Popover>
+            <Popover open={clientComboOpenBen} onOpenChange={setClientComboOpenBen}>
               <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" className="w-[240px] justify-between">
+                <Button variant="outline" role="combobox" aria-expanded={clientComboOpenBen} className="w-[240px] justify-between">
                   {clientFilter === "all" ? "Todos os clientes" : clients.find((c) => c.id === clientFilter)?.name || "Selecionar..."}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -824,12 +849,12 @@ export default function FinancialReports() {
                   <CommandList>
                     <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
                     <CommandGroup>
-                      <CommandItem value="all" onSelect={() => setClientFilter("all")}>
+                      <CommandItem value="all" onSelect={() => { setClientFilter("all"); setClientComboOpenBen(false); }}>
                         <Check className={cn("mr-2 h-4 w-4", clientFilter === "all" ? "opacity-100" : "opacity-0")} />
                         Todos os clientes
                       </CommandItem>
                       {clients.map((c) => (
-                        <CommandItem key={c.id} value={c.name} onSelect={() => setClientFilter(c.id)}>
+                        <CommandItem key={c.id} value={c.name} onSelect={() => { setClientFilter(c.id); setClientComboOpenBen(false); }}>
                           <Check className={cn("mr-2 h-4 w-4", clientFilter === c.id ? "opacity-100" : "opacity-0")} />
                           {c.name}
                         </CommandItem>
