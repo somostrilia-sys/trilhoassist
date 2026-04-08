@@ -836,9 +836,9 @@ export default function FinancialReports() {
               <Input placeholder="Nome, CPF, placa, telefone, cooperativa..." value={searchBeneficiaries}
                 onChange={(e) => setSearchBeneficiaries(e.target.value)} className="pl-9" />
             </div>
-            <Popover>
+            <Popover open={clientComboOpenBen} onOpenChange={setClientComboOpenBen}>
               <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" className="w-[240px] justify-between">
+                <Button variant="outline" role="combobox" aria-expanded={clientComboOpenBen} className="w-[240px] justify-between">
                   {clientFilter === "all" ? "Todos os clientes" : clients.find((c) => c.id === clientFilter)?.name || "Selecionar..."}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -849,12 +849,12 @@ export default function FinancialReports() {
                   <CommandList>
                     <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
                     <CommandGroup>
-                      <CommandItem value="all" onSelect={() => setClientFilter("all")}>
+                      <CommandItem value="all" onSelect={() => { setClientFilter("all"); setClientComboOpenBen(false); }}>
                         <Check className={cn("mr-2 h-4 w-4", clientFilter === "all" ? "opacity-100" : "opacity-0")} />
                         Todos os clientes
                       </CommandItem>
                       {clients.map((c) => (
-                        <CommandItem key={c.id} value={c.name} onSelect={() => setClientFilter(c.id)}>
+                        <CommandItem key={c.id} value={c.name} onSelect={() => { setClientFilter(c.id); setClientComboOpenBen(false); }}>
                           <Check className={cn("mr-2 h-4 w-4", clientFilter === c.id ? "opacity-100" : "opacity-0")} />
                           {c.name}
                         </CommandItem>
