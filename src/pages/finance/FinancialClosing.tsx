@@ -254,8 +254,9 @@ export default function FinancialClosing() {
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [allCompletedDispatches]);
 
-  // Filtered dispatches for payment tabs (by provider + date range)
+  // Filtered dispatches for payment tabs (by provider + date range + search)
   const filteredTabDispatches = useMemo(() => {
+    const q = tabSearch.toLowerCase().trim();
     return allCompletedDispatches.filter((d: any) => {
       const sr = d.service_requests;
       if (tabProviderFilter !== "all" && d.provider_id !== tabProviderFilter) return false;
@@ -265,9 +266,69 @@ export default function FinancialClosing() {
         endOfDay.setHours(23, 59, 59, 999);
         if (sr?.completed_at && new Date(sr.completed_at) > endOfDay) return false;
       }
+      if (q) {
+        const providerName = ((d.providers as any)?.name || "").toLowerCase();
+        const protocol = (sr?.protocol || "").toLowerCase();
+        const plate = (sr?.vehicle_plate || "").toLowerCase();
+        const beneficiary = (sr?.requester_name || "").toLowerCase();
+        const serviceType = (SERVICE_TYPE_LABELS[sr?.service_type] || sr?.service_type || "").toLowerCase();
+        if (!providerName.includes(q) && !protocol.includes(q) && !plate.includes(q) && !beneficiary.includes(q) && !serviceType.includes(q)) return false;
+      }
       return true;
     });
-  }, [allCompletedDispatches, tabProviderFilter, tabDateFrom, tabDateTo]);
+  }, [allCompletedDispatches, tabProviderFilter, tabDateFrom, tabDateTo, tabSearch]);
+
+  // Excel export helper for dispatches
+  const exportDispatchesExcel = useCallback((dispatches: any[], filename: string, providerName?: string) => {
+    const rows = dispatches.map((d: any) => {
+      const sr = d.service_requests;
+      return {
+        "Data": sr?.completed_at ? format(new Date(sr.completed_at), "dd/MM/yyyy") : "",
+        "Protocolo": sr?.protocol || "",
+        "Placa": sr?.vehicle_plate || "",
+        "Valor": Number(d.final_amount || d.quoted_amount || sr?.provider_cost || 0),
+      };
+    });
+    const total = rows.reduce((s, r) => s + r.Valor, 0);
+    rows.push({ "Data": "", "Protocolo": "", "Placa": "VALOR TOTAL:", "Valor": total });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    // Format valor column as currency
+    const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+    for (let r = 1; r <= range.e.r; r++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c: 3 })];
+      if (cell && typeof cell.v === "number") {
+        cell.z = '#,##0.00';
+      }
+    }
+    ws["!cols"] = [{ wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, providerName ? providerName.substring(0, 31) : "Relatório");
+    XLSX.writeFile(wb, filename);
+  }, []);
+
+  // Excel export for À Vista pending NF
+  const exportPendingNfExcel = useCallback((dispatches: any[]) => {
+    const rows = dispatches.map((d: any) => {
+      const sr = d.service_requests;
+      return {
+        "Prestador": (d.providers as any)?.name || "",
+        "Data": sr?.completed_at ? format(new Date(sr.completed_at), "dd/MM/yyyy") : "",
+        "Protocolo": sr?.protocol || "",
+        "Placa": sr?.vehicle_plate || "",
+        "Tipo Serviço": SERVICE_TYPE_LABELS[sr?.service_type] || sr?.service_type || "",
+        "Valor": Number(d.final_amount || d.quoted_amount || sr?.provider_cost || 0),
+      };
+    });
+    const total = rows.reduce((s, r) => s + r.Valor, 0);
+    rows.push({ "Prestador": "", "Data": "", "Protocolo": "", "Placa": "", "Tipo Serviço": "VALOR TOTAL:", "Valor": total });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 18 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Pendente NF");
+    XLSX.writeFile(wb, `pendente_nf_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+  }, []);
 
   // Filtered tab counts
   const filteredTabCounts = useMemo(() => {
