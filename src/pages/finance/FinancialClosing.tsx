@@ -646,15 +646,45 @@ export default function FinancialClosing() {
                     {tab.label}
                   </CardTitle>
                   {tab.key === "a_vista_pix" && tabDispatches.length > 0 && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1"
-                      onClick={() => exportPendingNfExcel(tabDispatches)}
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      Excel Pendente NF
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1"
+                        onClick={() => exportPendingNfExcel(tabDispatches)}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Excel Pendente NF
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1"
+                        onClick={() => {
+                          const rows = tabDispatches.map((d: any) => {
+                            const sr = d.service_requests;
+                            return {
+                              "Prestador": (d.providers as any)?.name || "",
+                              "Data": sr?.completed_at ? format(new Date(sr.completed_at), "dd/MM/yyyy") : "",
+                              "Protocolo": sr?.protocol || "",
+                              "Placa": sr?.vehicle_plate || "",
+                              "Tipo Serviço": SERVICE_TYPE_LABELS[sr?.service_type] || sr?.service_type || "",
+                              "Valor": Number(d.final_amount || d.quoted_amount || sr?.provider_cost || 0),
+                            };
+                          });
+                          const total = rows.reduce((s, r) => s + r.Valor, 0);
+                          rows.push({ "Prestador": "", "Data": "", "Protocolo": "", "Placa": "", "Tipo Serviço": "VALOR TOTAL:", "Valor": total });
+                          const ws = XLSX.utils.json_to_sheet(rows);
+                          ws["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 18 }, { wch: 16 }];
+                          const wb = XLSX.utils.book_new();
+                          XLSX.utils.book_append_sheet(wb, ws, "Todos À Vista");
+                          XLSX.writeFile(wb, `todos_a_vista_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+                        }}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Excel Todos À Vista
+                      </Button>
+                    </div>
                   )}
                 </div>
               </CardHeader>
