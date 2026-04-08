@@ -1,51 +1,78 @@
 
 ## Análise: O que JÁ EXISTE vs. O que FALTA
 
-### Situação Atual
-O `FinancialClosing.tsx` (Fechamento Financeiro) já possui:
-- ✅ 6 abas: À Vista (Pendente NF), Faturado Mensal, Faturado Quinzenal, Faturado Semanal, Prestadores, Fechamentos
-- ✅ Filtro por prestador (dropdown "Todos os prestadores") + filtro por período
-- ✅ Busca (lupa) na aba "Fechamentos" (busca por nome do prestador)
-- ✅ Exportação PDF por prestador individual (abas Prestadores e Fechamentos)
-- ❌ Menu duplicado "Fechamento Prestadores" no sidebar + rota `/finance/prestadores`
+### 1. Fechamento Financeiro — Aba "À Vista (Pendente NF)"
+
+**Já existe:**
+- ✅ Botão "Excel Pendente NF" que exporta todos os prestadores à vista
+- ✅ Filtro por prestador e período (data início/fim)
+
+**Falta:**
+- ❌ O botão atual exporta TODOS os à vista, não apenas os pendentes de NF. Precisa separar em **duas opções**: "Excel Pendente NF" (apenas sem NF) e "Excel Todos À Vista" (todos pagos à vista no período, com ou sem NF)
+
+**Arquivo:** `src/pages/finance/FinancialClosing.tsx`
+**Risco:** 🟢 Baixo
 
 ---
 
-## PLANO DE ALTERAÇÕES
+### 2. Relatórios — Filtro por período com datas específicas
 
-### 1. Remover menu duplicado e rota
-- **Arquivo:** `AppSidebar.tsx` — remover item "Fechamento Prestadores" (`/finance/prestadores`)
-- **Arquivo:** `App.tsx` — remover rota `/finance/prestadores` e import do `FechamentoPrestadores`
-- **Risco:** 🟢 Baixo
+**Já existe:**
+- ✅ Dropdown com "Últimos 3/6/12 meses" (linhas 348-357)
+- ✅ A query `useDetailedRequests` já usa `startStr` e `endStr` do período
 
-### 2. Adicionar campo de busca (lupa) global para TODAS as abas
-- **Arquivo:** `FinancialClosing.tsx`
-- **O que faz:** Adicionar um campo de busca ao lado dos filtros existentes (prestador + datas). A busca filtra por: **nome do prestador, placa, protocolo, beneficiário, tipo de serviço**
-- **Abas afetadas:** À Vista, Faturado Mensal, Faturado Quinzenal, Faturado Semanal, Prestadores
-- **Obs:** A aba "Fechamentos" já tem busca própria, será mantida
-- **Risco:** 🟢 Baixo
+**Falta:**
+- ❌ Não há seletor de data inicial e final específicas (datepicker). O filtro atual só permite meses pré-definidos (3, 6, 12 meses). Precisa adicionar **dois datepickers** (De/Até) que substituam o período automático quando preenchidos.
 
-### 3. Exportação Excel na aba "À Vista (Pendente NF)"
-- **Arquivo:** `FinancialClosing.tsx`
-- **O que faz:** Botão "Exportar Excel" que gera planilha .xlsx com TODOS os prestadores com NF pendente, contendo: **Protocolo, Placa, Tipo de Serviço, Prestador, Data, Valor**
-- **Layout:** Conforme imagem de referência (image-27.png) — colunas: Data, Protocolo, Placa, Valor + VALOR TOTAL no final
-- **Risco:** 🟢 Baixo
+**Arquivo:** `src/pages/finance/FinancialReports.tsx`
+**Risco:** 🟡 Médio (afeta a query principal que alimenta todas as abas)
 
-### 4. Exportação Excel na aba "Prestadores"
-- **Arquivo:** `FinancialClosing.tsx`
-- **O que faz:** Botão "Excel" ao lado do botão "PDF" existente em cada prestador, gerando planilha individual com: **Data, Protocolo, Placa, Valor** + linha de VALOR TOTAL
-- **Layout:** Conforme imagem de referência (image-27.png)
-- **Risco:** 🟢 Baixo
+---
+
+### 3. Relatórios — Dropdown "Todos os clientes" com lentidão e busca
+
+**Já existe:**
+- ✅ Select com lista de clientes (linhas 561-568)
+- ✅ Filtro `clientFilter` funciona no código
+
+**Problema:**
+- ❌ O componente `Select` do shadcn não tem busca nativa — em listas grandes causa lentidão e dificuldade de seleção
+- ❌ Falta campo de busca/lupa para localizar clientes pelo nome rapidamente
+
+**Solução:**
+- Substituir o `Select` por um **Combobox** (Command + Popover do shadcn) com busca integrada, em todas as abas que usam o filtro de clientes (Atendimentos, Beneficiários, Recebimentos)
+
+**Arquivo:** `src/pages/finance/FinancialReports.tsx`
+**Risco:** 🟢 Baixo
+
+---
+
+### 4. Relatórios — Exportação de Atendimentos sem prestador
+
+**Já existe:**
+- ✅ Botão "Exportar CSV" na aba Atendimentos (linha 580)
+- ✅ Tabela mostra dados do atendimento
+
+**Falta:**
+- ❌ A coluna "Prestador" **NÃO existe** na tabela nem no CSV. A query `useDetailedRequests` não busca dados de dispatches/providers
+- ❌ Precisa fazer JOIN com `dispatches → providers` para obter o nome do prestador vinculado
+
+**Solução:**
+- Adicionar query de dispatches para os requests ou fazer sub-query
+- Adicionar coluna "Prestador" na tabela e no CSV exportado
+
+**Arquivo:** `src/pages/finance/FinancialReports.tsx`
+**Risco:** 🟡 Médio (precisa de query adicional)
 
 ---
 
 ## RESUMO
 
-| # | Alteração | Risco |
-|---|-----------|-------|
-| 1 | Remover menu/rota duplicados | 🟢 Baixo |
-| 2 | Busca (lupa) global nas abas de pagamento e prestadores | 🟢 Baixo |
-| 3 | Excel na aba "À Vista (Pendente NF)" | 🟢 Baixo |
-| 4 | Excel por prestador na aba "Prestadores" | 🟢 Baixo |
+| # | Alteração | Arquivo | Risco |
+|---|-----------|---------|-------|
+| 1 | Separar export Excel: "Pendente NF" vs "Todos À Vista" | FinancialClosing.tsx | 🟢 Baixo |
+| 2 | Datepickers (De/Até) no módulo de Relatórios | FinancialReports.tsx | 🟡 Médio |
+| 3 | Combobox com busca no filtro de clientes | FinancialReports.tsx | 🟢 Baixo |
+| 4 | Coluna "Prestador" na aba Atendimentos + CSV | FinancialReports.tsx | 🟡 Médio |
 
-**Todas as alterações são aditivas e dentro do Fechamento Financeiro existente.**
+**Nenhuma alteração de banco de dados necessária.** Todas as mudanças são no frontend.
