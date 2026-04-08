@@ -383,9 +383,9 @@ export default function FinancialReports() {
             Atendimentos, beneficiários, placas e dados financeiros
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-          <Select value={String(periodMonths)} onValueChange={(v) => setPeriodMonths(Number(v))}>
+        <div className="flex flex-wrap items-center gap-2">
+          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+          <Select value={String(periodMonths)} onValueChange={(v) => { setPeriodMonths(Number(v)); setCustomDateFrom(undefined); setCustomDateTo(undefined); }}>
             <SelectTrigger className="w-[180px]">
               <SelectValue />
             </SelectTrigger>
@@ -395,6 +395,33 @@ export default function FinancialReports() {
               <SelectItem value="12">Últimos 12 meses</SelectItem>
             </SelectContent>
           </Select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={cn("w-[140px] justify-start text-left font-normal", !customDateFrom && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {customDateFrom ? format(customDateFrom, "dd/MM/yyyy") : "De"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={customDateFrom} onSelect={setCustomDateFrom} initialFocus locale={ptBR} className={cn("p-3 pointer-events-auto")} />
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={cn("w-[140px] justify-start text-left font-normal", !customDateTo && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {customDateTo ? format(customDateTo, "dd/MM/yyyy") : "Até"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={customDateTo} onSelect={setCustomDateTo} initialFocus locale={ptBR} className={cn("p-3 pointer-events-auto")} />
+            </PopoverContent>
+          </Popover>
+          {(customDateFrom || customDateTo) && (
+            <Button variant="ghost" size="sm" onClick={() => { setCustomDateFrom(undefined); setCustomDateTo(undefined); }} className="gap-1">
+              <X className="h-4 w-4" /> Limpar
+            </Button>
+          )}
         </div>
       </div>
 
