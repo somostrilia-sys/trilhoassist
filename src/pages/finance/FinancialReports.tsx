@@ -2,9 +2,9 @@ import React, { useState, useMemo } from "react";
 import { format, subMonths, startOfMonth, endOfMonth, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  BarChart3, TrendingUp, DollarSign, FileText, Calendar, Car, Phone,
+  BarChart3, TrendingUp, DollarSign, FileText, Calendar as CalendarIcon, Car, Phone,
   User, Search, Download, Filter, Users, Building2, CheckCircle2, Clock,
-  Banknote, Receipt, AlertTriangle,
+  Banknote, Receipt, AlertTriangle, ChevronsUpDown, Check, X,
 } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -19,10 +19,14 @@ import { Button } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useTenantId, formatCurrency, SERVICE_TYPE_LABELS } from "@/hooks/useFinancialData";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { maskCPF, maskPhone } from "@/lib/masks";
+import { cn } from "@/lib/utils";
 
 const CHART_COLORS = [
   "hsl(218, 58%, 26%)",
