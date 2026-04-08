@@ -634,14 +634,29 @@ export default function FinancialClosing() {
         </div>
 
         {/* ===== PAYMENT METHOD TABS ===== */}
-        {PAYMENT_TABS.map(tab => (
+        {PAYMENT_TABS.map(tab => {
+          const tabDispatches = filterByPaymentMethod(filteredTabDispatches, tab.key);
+          return (
           <TabsContent key={tab.key} value={tab.key}>
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <tab.icon className="h-5 w-5" />
-                  {tab.label}
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <tab.icon className="h-5 w-5" />
+                    {tab.label}
+                  </CardTitle>
+                  {tab.key === "a_vista_pix" && tabDispatches.length > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1"
+                      onClick={() => exportPendingNfExcel(tabDispatches)}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Excel Pendente NF
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 {dispatchesLoading ? (
@@ -650,14 +665,15 @@ export default function FinancialClosing() {
                   </div>
                 ) : (
                   <PaymentMethodTable
-                    dispatches={filterByPaymentMethod(filteredTabDispatches, tab.key)}
+                    dispatches={tabDispatches}
                     showNfBadge={tab.key === "a_vista_pix"}
                   />
                 )}
               </CardContent>
             </Card>
           </TabsContent>
-        ))}
+          );
+        })}
 
         {/* ===== PRESTADORES TAB ===== */}
         <TabsContent value="prestadores">
