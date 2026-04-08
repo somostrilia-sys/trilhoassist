@@ -707,6 +707,7 @@ export default function FinancialReports() {
                         <TableHead>Serviço</TableHead>
                         <TableHead>Evento</TableHead>
                         <TableHead>Cliente</TableHead>
+                        <TableHead>Prestador</TableHead>
                         <TableHead>Origem</TableHead>
                         <TableHead className="text-right">Custo</TableHead>
                         <TableHead className="text-right">Cobrado</TableHead>
