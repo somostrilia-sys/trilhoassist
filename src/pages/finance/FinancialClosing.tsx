@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { startOfMonth } from "date-fns";
+import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -166,6 +167,7 @@ export default function FinancialClosing() {
   const [tabProviderFilter, setTabProviderFilter] = useState<string>("all");
   const [tabDateFrom, setTabDateFrom] = useState<Date | undefined>(startOfMonth(new Date()));
   const [tabDateTo, setTabDateTo] = useState<Date | undefined>(new Date());
+  const [tabSearch, setTabSearch] = useState("");
 
   const { data: tenantId } = useTenantId();
   const { data: closings = [], isLoading } = useFinancialClosings(tenantId);
@@ -252,8 +254,9 @@ export default function FinancialClosing() {
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [allCompletedDispatches]);
 
-  // Filtered dispatches for payment tabs (by provider + date range)
+  // Filtered dispatches for payment tabs (by provider + date range + search)
   const filteredTabDispatches = useMemo(() => {
+    const q = tabSearch.toLowerCase().trim();
     return allCompletedDispatches.filter((d: any) => {
       const sr = d.service_requests;
       if (tabProviderFilter !== "all" && d.provider_id !== tabProviderFilter) return false;
@@ -263,9 +266,69 @@ export default function FinancialClosing() {
         endOfDay.setHours(23, 59, 59, 999);
         if (sr?.completed_at && new Date(sr.completed_at) > endOfDay) return false;
       }
+      if (q) {
+        const providerName = ((d.providers as any)?.name || "").toLowerCase();
+        const protocol = (sr?.protocol || "").toLowerCase();
+        const plate = (sr?.vehicle_plate || "").toLowerCase();
+        const beneficiary = (sr?.requester_name || "").toLowerCase();
+        const serviceType = (SERVICE_TYPE_LABELS[sr?.service_type] || sr?.service_type || "").toLowerCase();
+        if (!providerName.includes(q) && !protocol.includes(q) && !plate.includes(q) && !beneficiary.includes(q) && !serviceType.includes(q)) return false;
+      }
       return true;
     });
-  }, [allCompletedDispatches, tabProviderFilter, tabDateFrom, tabDateTo]);
+  }, [allCompletedDispatches, tabProviderFilter, tabDateFrom, tabDateTo, tabSearch]);
+
+  // Excel export helper for dispatches
+  const exportDispatchesExcel = useCallback((dispatches: any[], filename: string, providerName?: string) => {
+    const rows = dispatches.map((d: any) => {
+      const sr = d.service_requests;
+      return {
+        "Data": sr?.completed_at ? format(new Date(sr.completed_at), "dd/MM/yyyy") : "",
+        "Protocolo": sr?.protocol || "",
+        "Placa": sr?.vehicle_plate || "",
+        "Valor": Number(d.final_amount || d.quoted_amount || sr?.provider_cost || 0),
+      };
+    });
+    const total = rows.reduce((s, r) => s + r.Valor, 0);
+    rows.push({ "Data": "", "Protocolo": "", "Placa": "VALOR TOTAL:", "Valor": total });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    // Format valor column as currency
+    const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+    for (let r = 1; r <= range.e.r; r++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c: 3 })];
+      if (cell && typeof cell.v === "number") {
+        cell.z = '#,##0.00';
+      }
+    }
+    ws["!cols"] = [{ wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, providerName ? providerName.substring(0, 31) : "Relatório");
+    XLSX.writeFile(wb, filename);
+  }, []);
+
+  // Excel export for À Vista pending NF
+  const exportPendingNfExcel = useCallback((dispatches: any[]) => {
+    const rows = dispatches.map((d: any) => {
+      const sr = d.service_requests;
+      return {
+        "Prestador": (d.providers as any)?.name || "",
+        "Data": sr?.completed_at ? format(new Date(sr.completed_at), "dd/MM/yyyy") : "",
+        "Protocolo": sr?.protocol || "",
+        "Placa": sr?.vehicle_plate || "",
+        "Tipo Serviço": SERVICE_TYPE_LABELS[sr?.service_type] || sr?.service_type || "",
+        "Valor": Number(d.final_amount || d.quoted_amount || sr?.provider_cost || 0),
+      };
+    });
+    const total = rows.reduce((s, r) => s + r.Valor, 0);
+    rows.push({ "Prestador": "", "Data": "", "Protocolo": "", "Placa": "", "Tipo Serviço": "VALOR TOTAL:", "Valor": total });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 18 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Pendente NF");
+    XLSX.writeFile(wb, `pendente_nf_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+  }, []);
 
   // Filtered tab counts
   const filteredTabCounts = useMemo(() => {
@@ -525,7 +588,19 @@ export default function FinancialClosing() {
         </TabsList>
 
         {/* ===== Filtros globais das abas de pagamento ===== */}
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end flex-wrap">
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Busca</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Prestador, placa, protocolo..."
+                value={tabSearch}
+                onChange={(e) => setTabSearch(e.target.value)}
+                className="pl-9 w-full sm:w-64"
+              />
+            </div>
+          </div>
           <div className="flex flex-col gap-1">
             <Label className="text-xs text-muted-foreground">Prestador</Label>
             <Select value={tabProviderFilter} onValueChange={setTabProviderFilter}>
@@ -559,14 +634,29 @@ export default function FinancialClosing() {
         </div>
 
         {/* ===== PAYMENT METHOD TABS ===== */}
-        {PAYMENT_TABS.map(tab => (
+        {PAYMENT_TABS.map(tab => {
+          const tabDispatches = filterByPaymentMethod(filteredTabDispatches, tab.key);
+          return (
           <TabsContent key={tab.key} value={tab.key}>
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <tab.icon className="h-5 w-5" />
-                  {tab.label}
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <tab.icon className="h-5 w-5" />
+                    {tab.label}
+                  </CardTitle>
+                  {tab.key === "a_vista_pix" && tabDispatches.length > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1"
+                      onClick={() => exportPendingNfExcel(tabDispatches)}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Excel Pendente NF
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 {dispatchesLoading ? (
@@ -575,14 +665,15 @@ export default function FinancialClosing() {
                   </div>
                 ) : (
                   <PaymentMethodTable
-                    dispatches={filterByPaymentMethod(filteredTabDispatches, tab.key)}
+                    dispatches={tabDispatches}
                     showNfBadge={tab.key === "a_vista_pix"}
                   />
                 )}
               </CardContent>
             </Card>
           </TabsContent>
-        ))}
+          );
+        })}
 
         {/* ===== PRESTADORES TAB ===== */}
         <TabsContent value="prestadores">
@@ -657,6 +748,19 @@ export default function FinancialClosing() {
                           >
                             <Download className="h-3.5 w-3.5" />
                             PDF
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1"
+                            onClick={() => exportDispatchesExcel(
+                              group.dispatches,
+                              `${group.provider_name.replace(/\s+/g, "_")}_${format(new Date(), "yyyy-MM-dd")}.xlsx`,
+                              group.provider_name
+                            )}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            Excel
                           </Button>
                         </TableCell>
                       </TableRow>

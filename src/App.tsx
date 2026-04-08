@@ -25,7 +25,7 @@ import Billing from "./pages/finance/Billing";
 import FinancialReports from "./pages/finance/FinancialReports";
 import FinanceiroDashboard from "./pages/finance/FinanceiroDashboard";
 import FechamentoMensal from "./pages/finance/FechamentoMensal";
-import FechamentoPrestadores from "./pages/finance/FechamentoPrestadores";
+
 
 import NotFound from "./pages/NotFound";
 import RegisterProvider from "./pages/RegisterProvider";
@@ -152,7 +152,7 @@ const App = () => (
               <Route path="/network/providers/:id" element={<ProviderForm />} />
               <Route path="/network/blacklist" element={<ProviderBlacklist />} />
               <Route path="/finance/closing" element={<FinancialClosing />} />
-              <Route path="/finance/prestadores" element={<FechamentoPrestadores />} />
+              
               <Route path="/finance/billing" element={<Billing />} />
               <Route path="/finance/reports" element={<FinancialReports />} />
               <Route path="/finance/dashboard" element={<FinanceiroDashboard />} />
