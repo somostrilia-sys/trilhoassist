@@ -65,12 +65,20 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   invoiced: "Faturado",
 };
 
-function usePeriodRange(months: number) {
+function usePeriodRange(months: number, customFrom?: Date, customTo?: Date) {
   return useMemo(() => {
+    if (customFrom && customTo) {
+      return {
+        start: customFrom,
+        end: customTo,
+        startStr: format(customFrom, "yyyy-MM-dd"),
+        endStr: format(customTo, "yyyy-MM-dd"),
+      };
+    }
     const end = endOfMonth(new Date());
     const start = startOfMonth(subMonths(new Date(), months - 1));
     return { start, end, startStr: format(start, "yyyy-MM-dd"), endStr: format(end, "yyyy-MM-dd") };
-  }, [months]);
+  }, [months, customFrom, customTo]);
 }
 
 function exportToCsv(filename: string, headers: string[], rows: string[][]) {
