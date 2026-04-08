@@ -664,17 +664,18 @@ export default function FinancialReports() {
             </Select>
             <Badge variant="outline" className="text-xs">{filteredRequests.length} registros</Badge>
             <Button variant="outline" size="sm" className="gap-2" onClick={() => {
-              const headers = ["Protocolo","Data","Solicitante","Telefone","Beneficiário","CPF","Placa","Veículo","Serviço","Evento","Cliente","Origem","Custo","Cobrado","Status","Dados"];
+              const headers = ["Protocolo","Data","Solicitante","Telefone","Beneficiário","CPF","Placa","Veículo","Serviço","Evento","Cliente","Prestador","Origem","Custo","Cobrado","Status","Dados"];
               const rows = filteredRequests.map((r) => {
                 const ben = r.beneficiaries as any;
                 const client = r.clients as any;
+                const providerName = dispatchProviderMap[r.id] || "";
                 return [
                   r.protocol, format(parseISO(r.created_at), "dd/MM/yyyy HH:mm"),
                   r.requester_name, r.requester_phone || "", ben?.name || "", ben?.cpf || "",
                   r.vehicle_plate || "", `${r.vehicle_model || ""}${r.vehicle_year ? ` ${r.vehicle_year}` : ""}`,
                   SERVICE_TYPE_LABELS[r.service_type] || r.service_type,
                   EVENT_TYPE_LABELS[r.event_type] || r.event_type,
-                  client?.name || "", r.origin_address || "",
+                  client?.name || "", providerName, r.origin_address || "",
                   String(Number(r.provider_cost) || 0), String(Number(r.charged_amount) || 0),
                   STATUS_LABELS[r.status] || r.status, getDataOrigin(r.client_id || "") === "erp" ? "ERP" : "Manual",
                 ];
