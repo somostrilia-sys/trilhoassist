@@ -472,26 +472,46 @@ export default function PublicServiceRequest() {
         form.origin_uf,
       ].filter(Boolean).join(", ");
 
-      await fetch("https://zplcfkesjwbklqariocx.supabase.co/functions/v1/external-intake", {
-        method: "POST",
-        headers: {
-          "Authorization": "Bearer c20093cfb35160de83da42ccc72cf6c77c77e4fea1beab9f3537078b441ac8f9",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          event_type: "colisao",
-          plate: form.vehicle_plate,
-          associate_name: form.requester_name,
-          associate_phone: form.requester_phone.replace(/\D/g, ""),
-          vehicle_category: vehicleCategoryMap[vehicleCategory] || "leve",
-          location: locationParts,
-          description: descriptionParts,
-          external_reference: protocol,
-          files: mediaUrls,
-        }),
-      });
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/crm-eventos`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({
+            event_type: "colisao",
+            plate: form.vehicle_plate,
+            associate_name: form.requester_name,
+            associate_phone: form.requester_phone.replace(/\D/g, ""),
+            vehicle_category: vehicleCategoryMap[vehicleCategory] || "leve",
+            location: locationParts,
+            description: descriptionParts,
+            external_reference: protocol,
+            files: mediaUrls,
+          }),
+        }
+      );
+
+      const result = await res.json();
+      if (!result.success) {
+        console.warn("CRM Eventos warning:", result.error, result.details);
+        toast({
+          title: "⚠️ Aviso CRM",
+          description: "Evento criado mas houve um problema ao sincronizar com o CRM. A equipe será notificada.",
+          variant: "destructive",
+        });
+      } else {
+        console.log("CRM Eventos enviado com sucesso:", result.crm);
+      }
     } catch (err) {
       console.error("Erro ao enviar para CRM Eventos:", err);
+      toast({
+        title: "⚠️ Aviso CRM",
+        description: "Não foi possível enviar ao CRM. O atendimento foi criado normalmente.",
+      });
     }
   };
 
