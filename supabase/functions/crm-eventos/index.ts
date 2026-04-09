@@ -11,21 +11,33 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const {
+      action,
       event_type,
       plate,
       associate_name,
       associate_phone,
+      associate_cpf,
+      driver_name,
+      driver_phone,
+      driver_cpf,
       vehicle_category,
       location,
       description,
+      occurred_at,
+      third_party_involved,
+      third_party_plate,
+      priority,
       external_reference,
       files,
+      audio_url,
+      audio_transcription,
+      custom_data,
     } = body;
 
     // Validate required fields
-    if (!event_type || !plate || !associate_name || !associate_phone) {
+    if (!event_type || (!plate && !associate_phone)) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields: event_type, plate, associate_name, associate_phone" }),
+        JSON.stringify({ error: "Missing required fields: event_type and (plate or associate_phone)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -41,7 +53,33 @@ Deno.serve(async (req) => {
 
     const crmUrl = "https://zplcfkesjwbklqariocx.supabase.co/functions/v1/external-intake";
 
-    console.log(`CRM Eventos: sending event for protocol=${external_reference}, plate=${plate}`);
+    console.log(`CRM Eventos: sending event for protocol=${external_reference}, plate=${plate}, type=${event_type}`);
+
+    const payload: Record<string, unknown> = {
+      action: action || "create-event",
+      event_type,
+      plate,
+      associate_name,
+      associate_phone,
+      vehicle_category,
+      location,
+      description,
+      external_reference,
+      files: files || [],
+    };
+
+    // Add optional fields only if provided
+    if (associate_cpf) payload.associate_cpf = associate_cpf;
+    if (driver_name) payload.driver_name = driver_name;
+    if (driver_phone) payload.driver_phone = driver_phone;
+    if (driver_cpf) payload.driver_cpf = driver_cpf;
+    if (occurred_at) payload.occurred_at = occurred_at;
+    if (third_party_involved !== undefined) payload.third_party_involved = third_party_involved;
+    if (third_party_plate) payload.third_party_plate = third_party_plate;
+    if (priority) payload.priority = priority;
+    if (audio_url) payload.audio_url = audio_url;
+    if (audio_transcription) payload.audio_transcription = audio_transcription;
+    if (custom_data) payload.custom_data = custom_data;
 
     const crmResponse = await fetch(crmUrl, {
       method: "POST",
@@ -49,17 +87,7 @@ Deno.serve(async (req) => {
         "Authorization": `Bearer ${crmToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        event_type,
-        plate,
-        associate_name,
-        associate_phone,
-        vehicle_category,
-        location,
-        description,
-        external_reference,
-        files: files || [],
-      }),
+      body: JSON.stringify(payload),
     });
 
     const responseText = await crmResponse.text();
