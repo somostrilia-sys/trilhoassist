@@ -11,15 +11,27 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const {
+      action,
       event_type,
       plate,
       associate_name,
       associate_phone,
+      associate_cpf,
+      driver_name,
+      driver_phone,
+      driver_cpf,
       vehicle_category,
       location,
       description,
+      occurred_at,
+      third_party_involved,
+      third_party_plate,
+      priority,
       external_reference,
       files,
+      audio_url,
+      audio_transcription,
+      custom_data,
     } = body;
 
     // Validate required fields
