@@ -53,3 +53,6 @@ verify_jwt = false
 
 [functions.trilho-financeiro]
 verify_jwt = false
+
+[functions.crm-eventos]
+verify_jwt = false
