@@ -286,26 +286,6 @@ export default function Dashboard() {
           <p>Visão geral das operações em tempo real</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => {
-                    const url = "https://trilhoassist.com.br/solicitar";
-                    navigator.clipboard.writeText(url);
-                    sonnerToast.success("Link copiado!", { description: url });
-                  }}
-                >
-                  <Copy className="h-4 w-4" />
-                  Link de Solicitação
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Copiar link público de solicitação</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
           <Select value={clientFilter} onValueChange={setClientFilter}>
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="Todos os clientes" />
