@@ -6,7 +6,7 @@ const ServiceHeatmap = lazy(() => import("@/components/ServiceHeatmap"));
 const NpsPanel = lazy(() => import("@/components/NpsPanel"));
 import {
   Headphones, Send, DollarSign, Clock, TrendingUp, AlertCircle,
-  Timer, Route, Banknote, Zap, Copy,
+  Timer, Route, Banknote, Zap,
 } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
 import {
@@ -15,7 +15,6 @@ import {
 } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 const statusMap: Record<string, { label: string; color: string }> = {
   open: { label: "Aberto", color: "hsl(var(--primary))" },
