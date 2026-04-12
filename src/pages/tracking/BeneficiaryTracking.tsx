@@ -201,6 +201,7 @@ export default function BeneficiaryTracking() {
       const prov = (d as any).providers;
       setProviderName(prov?.name || "Prestador");
       setProviderPhone(prov?.phone || "");
+      if (d.provider_arrived_at) setProviderArrived(true);
 
       const { data: track } = await supabase
         .from("provider_tracking")
