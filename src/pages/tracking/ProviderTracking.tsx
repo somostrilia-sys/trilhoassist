@@ -443,6 +443,18 @@ export default function ProviderTracking() {
       </div>
 
       <div className="max-w-lg mx-auto p-4 space-y-4">
+        {/* Gate: show prominent message when pending (not yet accepted) */}
+        {isPending && (
+          <div className="rounded-xl border-2 border-amber-500 bg-amber-50 dark:bg-amber-950 p-6 text-center space-y-3">
+            <Shield className="h-12 w-12 text-amber-600 mx-auto" />
+            <h2 className="text-xl font-bold text-amber-900 dark:text-amber-100 leading-tight">
+              Para ter acesso às informações do atendimento, você precisa primeiro ativar sua localização e aceitar o atendimento.
+            </h2>
+            <p className="text-sm text-amber-700 dark:text-amber-300">
+              Complete os dois passos abaixo para visualizar todos os dados do serviço.
+            </p>
+          </div>
+        )}
         {/* Service info */}
         <Card>
           <CardContent className="pt-4 space-y-3">
