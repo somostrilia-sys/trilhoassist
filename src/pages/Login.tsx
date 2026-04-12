@@ -115,13 +115,19 @@ export default function Login() {
   const activePortal = portals.find((p) => p.id === selectedPortal);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden" style={{ background: 'linear-gradient(135deg, hsl(218,58%,18%) 0%, hsl(218,58%,14%) 50%, hsl(218,45%,10%) 100%)' }}>
-      {/* Decorative background elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-[hsl(48,92%,52%)]/5 blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-[hsl(354,82%,42%)]/5 blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full bg-primary/[0.02] blur-3xl" />
-      </div>
+    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden bg-[hsl(218,58%,14%)]">
+      {/* Background video */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute inset-0 w-full h-full object-cover"
+      >
+        <source src="/bg-login.mp4" type="video/mp4" />
+      </video>
+      {/* Dark overlay for readability */}
+      <div className="absolute inset-0 bg-black/40" />
 
       <div className="relative z-10 w-full max-w-md px-4 space-y-8">
         {/* Logo & Title */}
