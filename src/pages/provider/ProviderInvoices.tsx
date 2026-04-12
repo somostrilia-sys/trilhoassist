@@ -24,6 +24,28 @@ const NF_STATUS: Record<string, { label: string; variant: "default" | "secondary
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
+function extractStoragePath(fileUrl: string): string | null {
+  const patterns = [
+    /\/object\/(?:public|sign)\/provider-invoices\/(.+?)(?:\?|$)/,
+    /\/provider-invoices\/(.+?)(?:\?|$)/,
+  ];
+  for (const p of patterns) {
+    const match = fileUrl.match(p);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+  }
+  return null;
+}
+
+async function getSignedUrl(fileUrl: string): Promise<string> {
+  const path = extractStoragePath(fileUrl);
+  if (!path) return fileUrl;
+  const { data, error } = await supabase.storage
+    .from("provider-invoices")
+    .createSignedUrl(path, 3600);
+  if (error || !data?.signedUrl) return fileUrl;
+  return data.signedUrl;
+}
+
 export default function ProviderInvoices() {
   const { provider, dispatches, isLoading } = useProviderData();
   const queryClient = useQueryClient();
