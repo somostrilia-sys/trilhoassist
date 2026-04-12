@@ -105,6 +105,7 @@ export default function BeneficiaryTracking() {
   const [request, setRequest] = useState<any>(null);
   const [dispatch, setDispatch] = useState<any>(null);
   const [providerName, setProviderName] = useState<string>("");
+  const [providerPhone, setProviderPhone] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [providerPos, setProviderPos] = useState<{ lat: number; lng: number } | null>(null);
