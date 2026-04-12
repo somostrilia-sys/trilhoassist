@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Loader2, AlertCircle, Clock, Bell, CheckCircle2, Navigation, ShieldCheck, Truck, Search, Calendar as CalendarIcon } from "lucide-react";
+import { MapPin, Loader2, AlertCircle, Clock, Bell, CheckCircle2, Navigation, ShieldCheck, Truck, Search, Calendar as CalendarIcon, Phone, MessageCircle } from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
