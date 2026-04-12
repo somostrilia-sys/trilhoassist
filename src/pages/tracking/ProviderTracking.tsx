@@ -455,92 +455,96 @@ export default function ProviderTracking() {
             </p>
           </div>
         )}
-        {/* Service info */}
-        <Card>
-          <CardContent className="pt-4 space-y-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant="secondary">{serviceTypeMap[request?.service_type] || request?.service_type}</Badge>
-              {request?.vehicle_plate && <Badge variant="outline">{request.vehicle_plate}</Badge>}
-            </div>
-            {request?.scheduled_date && (
-              <div className="flex items-center gap-2 text-sm bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-md p-2">
-                <Calendar className="h-4 w-4 text-amber-600" />
-                <span className="font-medium text-amber-800 dark:text-amber-200">
-                  Agendado: {new Date(request.scheduled_date + "T00:00:00").toLocaleDateString("pt-BR")}
-                  {request.scheduled_time && ` às ${request.scheduled_time.slice(0, 5)}`}
-                </span>
-              </div>
-            )}
-            {dispatch?.scheduled_arrival_date && (
-              <div className="flex items-center gap-2 text-sm bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md p-2">
-                <Calendar className="h-4 w-4 text-blue-600" />
-                <span className="font-medium text-blue-800 dark:text-blue-200">
-                  Previsão de chegada: {new Date(dispatch.scheduled_arrival_date + "T00:00:00").toLocaleDateString("pt-BR")}
-                  {dispatch.scheduled_arrival_time && ` às ${dispatch.scheduled_arrival_time.slice(0, 5)}`}
-                </span>
-              </div>
-            )}
-            {request?.vehicle_model && (
-              <div className="flex items-center gap-2 text-sm">
-                <Car className="h-4 w-4 text-muted-foreground" />
-                <span>{request.vehicle_model} {request.vehicle_year || ""}</span>
-              </div>
-            )}
-            {request?.requester_phone && (
-              <div className="flex items-center gap-2 text-sm">
-                <Phone className="h-4 w-4 text-muted-foreground" />
-                <a href={`tel:${request.requester_phone}`} className="text-primary underline">
-                  {request.requester_phone}
-                </a>
-              </div>
-            )}
-            {request?.origin_address && (
-              <div className="flex items-center gap-2 text-sm">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
-                <span>{request.origin_address}</span>
-              </div>
-            )}
-            {request?.notes && (
-              <p className="text-sm text-muted-foreground border-l-2 border-muted pl-3">{request.notes}</p>
-            )}
-            {dispatch?.quoted_amount && (
-              <p className="text-sm font-medium">
-                Valor: R$ {Number(dispatch.quoted_amount).toFixed(2)}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        {/* Service info - hidden until accepted */}
+        {!isPending && (
+          <>
+            <Card>
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="secondary">{serviceTypeMap[request?.service_type] || request?.service_type}</Badge>
+                  {request?.vehicle_plate && <Badge variant="outline">{request.vehicle_plate}</Badge>}
+                </div>
+                {request?.scheduled_date && (
+                  <div className="flex items-center gap-2 text-sm bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-md p-2">
+                    <Calendar className="h-4 w-4 text-amber-600" />
+                    <span className="font-medium text-amber-800 dark:text-amber-200">
+                      Agendado: {new Date(request.scheduled_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                      {request.scheduled_time && ` às ${request.scheduled_time.slice(0, 5)}`}
+                    </span>
+                  </div>
+                )}
+                {dispatch?.scheduled_arrival_date && (
+                  <div className="flex items-center gap-2 text-sm bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md p-2">
+                    <Calendar className="h-4 w-4 text-blue-600" />
+                    <span className="font-medium text-blue-800 dark:text-blue-200">
+                      Previsão de chegada: {new Date(dispatch.scheduled_arrival_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                      {dispatch.scheduled_arrival_time && ` às ${dispatch.scheduled_arrival_time.slice(0, 5)}`}
+                    </span>
+                  </div>
+                )}
+                {request?.vehicle_model && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Car className="h-4 w-4 text-muted-foreground" />
+                    <span>{request.vehicle_model} {request.vehicle_year || ""}</span>
+                  </div>
+                )}
+                {request?.requester_phone && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <a href={`tel:${request.requester_phone}`} className="text-primary underline">
+                      {request.requester_phone}
+                    </a>
+                  </div>
+                )}
+                {request?.origin_address && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <span>{request.origin_address}</span>
+                  </div>
+                )}
+                {request?.notes && (
+                  <p className="text-sm text-muted-foreground border-l-2 border-muted pl-3">{request.notes}</p>
+                )}
+                {dispatch?.quoted_amount && (
+                  <p className="text-sm font-medium">
+                    Valor: R$ {Number(dispatch.quoted_amount).toFixed(2)}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
-        {/* Vehicle conditions from operator questionnaire */}
-        {request?.verification_answers && Object.keys(request.verification_answers).length > 0 && (
-          <Card className="border-orange-200 bg-orange-50">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold text-orange-800 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4" />
-                Condições do Veículo para Remoção
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {Object.entries(request.verification_answers)
-                .filter(([key]) => key !== "category")
-                .map(([key, value]) => {
-                  const label = VERIFICATION_LABELS[key] || key;
-                  const isYes = value === "yes" || value === true;
-                  const isNo = value === "no" || value === false;
-                  const isNumber = typeof value === "number";
-                  const isCritical = ["wheel_locked", "armored", "risk_area", "vehicle_lowered"].includes(key);
-                  return (
-                    <div key={key} className={`flex items-center justify-between py-1 border-b border-orange-100 last:border-0 ${isCritical && isYes ? "text-red-700 font-semibold" : ""}`}>
-                      <span className="text-sm">{label}</span>
-                      <span className={`text-sm font-medium ${isYes ? (isCritical ? "text-red-600" : "text-green-600") : isNo ? "text-gray-500" : "text-foreground"}`}>
-                        {isNumber ? value : isYes ? "✅ Sim" : isNo ? "Não" : String(value)}
-                      </span>
-                    </div>
-                  );
-                })
-              }
-            </CardContent>
-          </Card>
+            {/* Vehicle conditions from operator questionnaire */}
+            {request?.verification_answers && Object.keys(request.verification_answers).length > 0 && (
+              <Card className="border-orange-200 bg-orange-50">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold text-orange-800 flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" />
+                    Condições do Veículo para Remoção
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {Object.entries(request.verification_answers)
+                    .filter(([key]) => key !== "category")
+                    .map(([key, value]) => {
+                      const label = VERIFICATION_LABELS[key] || key;
+                      const isYes = value === "yes" || value === true;
+                      const isNo = value === "no" || value === false;
+                      const isNumber = typeof value === "number";
+                      const isCritical = ["wheel_locked", "armored", "risk_area", "vehicle_lowered"].includes(key);
+                      return (
+                        <div key={key} className={`flex items-center justify-between py-1 border-b border-orange-100 last:border-0 ${isCritical && isYes ? "text-red-700 font-semibold" : ""}`}>
+                          <span className="text-sm">{label}</span>
+                          <span className={`text-sm font-medium ${isYes ? (isCritical ? "text-red-600" : "text-green-600") : isNo ? "text-gray-500" : "text-foreground"}`}>
+                            {isNumber ? value : isYes ? "✅ Sim" : isNo ? "Não" : String(value)}
+                          </span>
+                        </div>
+                      );
+                    })
+                  }
+                </CardContent>
+              </Card>
+            )}
+          </>
         )}
 
         {/* Step 1: GPS - Required before acceptance */}
