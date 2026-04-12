@@ -822,6 +822,7 @@ export default function BeneficiaryTracking() {
                 </Button>
               </div>
             )}
+            {etaText && !providerArrived && (
               <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
                 <div className="bg-blue-500 rounded-full p-2 shrink-0">
                   {dispatch?.scheduled_arrival_date ? (
