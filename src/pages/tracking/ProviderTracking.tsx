@@ -458,6 +458,12 @@ export default function ProviderTracking() {
         {/* Service info - hidden until accepted */}
         {!isPending && (
           <>
+            <div className="rounded-xl border-2 border-blue-400 bg-blue-50 p-4 flex items-start gap-3">
+              <Info className="h-6 w-6 text-blue-600 mt-0.5 flex-shrink-0" />
+              <p className="text-sm font-semibold text-blue-900">
+                Os valores e condições de recebimento deste atendimento só podem ser tratados diretamente com os solicitantes do atendimento.
+              </p>
+            </div>
             <Card>
               <CardContent className="pt-4 space-y-3">
                 <div className="flex items-center gap-2 flex-wrap">
