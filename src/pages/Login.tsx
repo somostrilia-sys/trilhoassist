@@ -129,20 +129,7 @@ export default function Login() {
       {/* Dark overlay for readability */}
       <div className="absolute inset-0 bg-black/40" />
 
-      <div className="relative z-10 w-full max-w-md px-4 space-y-8">
-        {/* Logo & Title */}
-        <div className="text-center space-y-3">
-          <img src={logoTrilho} alt="ASSIST AI" className="mx-auto h-20 w-20 rounded-2xl bg-white/10 p-2 shadow-lg shadow-primary/20 object-contain" />
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-white">
-              ASSIST AI
-            </h1>
-            <p className="text-sm text-white/40 mt-1">
-              Sistema de Gestão de Assistência Veicular
-            </p>
-          </div>
-        </div>
-
+      <div className="relative z-10 w-full max-w-md px-4 space-y-6">
         {!selectedPortal ? (
           /* Portal Selection */
           <div className="space-y-3">
@@ -173,6 +160,12 @@ export default function Login() {
                 </Card>
               </button>
             ))}
+
+            {/* Logo & Name below portals */}
+            <div className="text-center pt-4 space-y-2">
+              <img src={logoTrilho} alt="ASSIST AI" className="mx-auto h-12 w-12 rounded-xl bg-white/10 p-1.5 shadow-md object-contain" />
+              <p className="text-sm font-semibold text-white/60 tracking-wide">ASSIST AI</p>
+            </div>
           </div>
         ) : (
           /* Login Form */
