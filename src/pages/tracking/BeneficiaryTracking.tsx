@@ -805,7 +805,23 @@ export default function BeneficiaryTracking() {
                 </div>
               </div>
             )}
-            {etaText && !providerArrived && (
+            {/* Provider contact - only after acceptance */}
+            {dispatch && dispatch.accepted_at && providerPhone && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button size="sm" variant="outline" className="gap-2 flex-1" asChild>
+                  <a href={`tel:${providerPhone}`}>
+                    <Phone className="h-4 w-4" />
+                    Ligar para prestador
+                  </a>
+                </Button>
+                <Button size="sm" variant="outline" className="gap-2 flex-1" asChild>
+                  <a href={`https://wa.me/${providerPhone.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer">
+                    <MessageCircle className="h-4 w-4" />
+                    WhatsApp
+                  </a>
+                </Button>
+              </div>
+            )}
               <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
                 <div className="bg-blue-500 rounded-full p-2 shrink-0">
                   {dispatch?.scheduled_arrival_date ? (
