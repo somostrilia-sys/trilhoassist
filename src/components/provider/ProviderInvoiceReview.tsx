@@ -24,6 +24,30 @@ const NF_STATUS: Record<string, { label: string; variant: "default" | "secondary
 const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
 const MAX_SIZE = 10 * 1024 * 1024;
 
+function extractStoragePath(fileUrl: string): string | null {
+  // Handles both public and signed URLs from Supabase storage
+  // Pattern: .../object/public/provider-invoices/PATH or .../object/sign/provider-invoices/PATH?token=...
+  const patterns = [
+    /\/object\/(?:public|sign)\/provider-invoices\/(.+?)(?:\?|$)/,
+    /\/provider-invoices\/(.+?)(?:\?|$)/,
+  ];
+  for (const p of patterns) {
+    const match = fileUrl.match(p);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+  }
+  return null;
+}
+
+async function getSignedUrl(fileUrl: string): Promise<string> {
+  const path = extractStoragePath(fileUrl);
+  if (!path) return fileUrl; // fallback to original
+  const { data, error } = await supabase.storage
+    .from("provider-invoices")
+    .createSignedUrl(path, 3600); // 1 hour
+  if (error || !data?.signedUrl) return fileUrl;
+  return data.signedUrl;
+}
+
 export function ProviderInvoiceReview({ dispatchId }: { dispatchId: string }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -244,19 +268,23 @@ export function ProviderInvoiceReview({ dispatchId }: { dispatchId: string }) {
                 variant="outline"
                 size="sm"
                 className="gap-1"
-                onClick={() => {
+                onClick={async () => {
                   setPreviewName(invoice.file_name);
-                  setPreviewUrl(invoice.file_url);
+                  const url = await getSignedUrl(invoice.file_url);
+                  setPreviewUrl(url);
                 }}
               >
                 <Eye className="h-4 w-4" />
                 Visualizar
               </Button>
-              <Button variant="outline" size="sm" className="gap-1" asChild>
-                <a href={invoice.file_url} target="_blank" rel="noopener noreferrer" download>
-                  <Download className="h-4 w-4" />
-                  Baixar
-                </a>
+              <Button variant="outline" size="sm" className="gap-1"
+                onClick={async () => {
+                  const url = await getSignedUrl(invoice.file_url);
+                  window.open(url, "_blank");
+                }}
+              >
+                <Download className="h-4 w-4" />
+                Baixar
               </Button>
             </div>
           </div>
