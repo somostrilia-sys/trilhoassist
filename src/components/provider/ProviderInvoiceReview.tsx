@@ -283,9 +283,8 @@ export function ProviderInvoiceReview({ dispatchId }: { dispatchId: string }) {
                   window.open(url, "_blank");
                 }}
               >
-                  <Download className="h-4 w-4" />
-                  Baixar
-                </a>
+                <Download className="h-4 w-4" />
+                Baixar
               </Button>
             </div>
           </div>
