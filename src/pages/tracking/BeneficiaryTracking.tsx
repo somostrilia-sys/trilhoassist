@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Loader2, AlertCircle, Clock, Bell, CheckCircle2, Navigation, ShieldCheck, Truck, Search, Calendar as CalendarIcon } from "lucide-react";
+import { MapPin, Loader2, AlertCircle, Clock, Bell, CheckCircle2, Navigation, ShieldCheck, Truck, Search, Calendar as CalendarIcon, Phone, MessageCircle } from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -105,6 +105,7 @@ export default function BeneficiaryTracking() {
   const [request, setRequest] = useState<any>(null);
   const [dispatch, setDispatch] = useState<any>(null);
   const [providerName, setProviderName] = useState<string>("");
+  const [providerPhone, setProviderPhone] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [providerPos, setProviderPos] = useState<{ lat: number; lng: number } | null>(null);
@@ -199,6 +200,7 @@ export default function BeneficiaryTracking() {
       setDispatch(d);
       const prov = (d as any).providers;
       setProviderName(prov?.name || "Prestador");
+      setProviderPhone(prov?.phone || "");
       if (d.provider_arrived_at) setProviderArrived(true);
 
       const { data: track } = await supabase
@@ -219,6 +221,7 @@ export default function BeneficiaryTracking() {
       currentDispatchIdRef.current = null;
       setDispatch(null);
       setProviderName("");
+      setProviderPhone("");
       setProviderPos(null);
     }
     setLoading(false);
@@ -801,6 +804,23 @@ export default function BeneficiaryTracking() {
                   <p className="text-sm font-semibold">{providerName}</p>
                   <p className="text-xs text-muted-foreground">Prestador a caminho</p>
                 </div>
+              </div>
+            )}
+            {/* Provider contact - only after acceptance */}
+            {dispatch && dispatch.accepted_at && providerPhone && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button size="sm" variant="outline" className="gap-2 flex-1" asChild>
+                  <a href={`tel:${providerPhone}`}>
+                    <Phone className="h-4 w-4" />
+                    Ligar para prestador
+                  </a>
+                </Button>
+                <Button size="sm" variant="outline" className="gap-2 flex-1" asChild>
+                  <a href={`https://wa.me/${providerPhone.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer">
+                    <MessageCircle className="h-4 w-4" />
+                    WhatsApp
+                  </a>
+                </Button>
               </div>
             )}
             {etaText && !providerArrived && (
