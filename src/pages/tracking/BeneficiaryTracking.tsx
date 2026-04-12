@@ -221,6 +221,7 @@ export default function BeneficiaryTracking() {
       currentDispatchIdRef.current = null;
       setDispatch(null);
       setProviderName("");
+      setProviderPhone("");
       setProviderPos(null);
     }
     setLoading(false);
