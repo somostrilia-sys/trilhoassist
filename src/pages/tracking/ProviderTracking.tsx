@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   MapPin, Navigation, Car, Phone, ExternalLink, Loader2,
-  CheckCircle2, AlertCircle, Shield, Play, Calendar,
+  CheckCircle2, AlertCircle, Shield, Play, Calendar, Info,
 } from "lucide-react";
 import logoTrilho from "@/assets/logo-trilho.png";
 import { toast } from "sonner";
