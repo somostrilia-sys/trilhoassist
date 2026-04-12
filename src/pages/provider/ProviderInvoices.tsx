@@ -147,7 +147,8 @@ export default function ProviderInvoices() {
 
   const openPreview = async (inv: any) => {
     setPreviewName(inv.file_name);
-    setPreviewUrl(inv.file_url);
+    const url = await getSignedUrl(inv.file_url);
+    setPreviewUrl(url);
   };
 
   if (isLoading || invoicesLoading) {
