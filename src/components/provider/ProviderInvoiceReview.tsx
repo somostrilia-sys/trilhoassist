@@ -268,16 +268,21 @@ export function ProviderInvoiceReview({ dispatchId }: { dispatchId: string }) {
                 variant="outline"
                 size="sm"
                 className="gap-1"
-                onClick={() => {
+                onClick={async () => {
                   setPreviewName(invoice.file_name);
-                  setPreviewUrl(invoice.file_url);
+                  const url = await getSignedUrl(invoice.file_url);
+                  setPreviewUrl(url);
                 }}
               >
                 <Eye className="h-4 w-4" />
                 Visualizar
               </Button>
-              <Button variant="outline" size="sm" className="gap-1" asChild>
-                <a href={invoice.file_url} target="_blank" rel="noopener noreferrer" download>
+              <Button variant="outline" size="sm" className="gap-1"
+                onClick={async () => {
+                  const url = await getSignedUrl(invoice.file_url);
+                  window.open(url, "_blank");
+                }}
+              >
                   <Download className="h-4 w-4" />
                   Baixar
                 </a>
