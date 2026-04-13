@@ -549,6 +549,20 @@ export default function PublicServiceRequest() {
           name: f.file_name,
         }));
 
+        const updatePayload: Record<string, unknown> = {
+          action: "update-event",
+          event_type: "colisao",
+          plate: form.vehicle_plate,
+          associate_phone: form.requester_phone.replace(/\D/g, ""),
+          external_reference: submitted.protocol,
+          files: mediaPayload,
+        };
+
+        // Include CRM event_id if we have it (from create response or duplicate detection)
+        if (crmEventId) {
+          updatePayload.event_id = crmEventId;
+        }
+
         const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
         const res = await fetch(
           `https://${projectId}.supabase.co/functions/v1/crm-eventos`,
@@ -558,14 +572,7 @@ export default function PublicServiceRequest() {
               "Content-Type": "application/json",
               "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             },
-            body: JSON.stringify({
-              action: "update-event",
-              event_type: "colisao",
-              plate: form.vehicle_plate,
-              associate_phone: form.requester_phone.replace(/\D/g, ""),
-              external_reference: submitted.protocol,
-              files: mediaPayload,
-            }),
+            body: JSON.stringify(updatePayload),
           }
         );
         const result = await res.json();
