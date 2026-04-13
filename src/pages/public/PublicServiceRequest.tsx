@@ -432,6 +432,16 @@ export default function PublicServiceRequest() {
           protocol: result.protocol,
           trackingUrl: `${window.location.origin}/tracking/${result.beneficiary_token}`,
         });
+
+        // Send to CRM immediately after creation (don't wait for media upload)
+        if (attendanceType === "collision") {
+          try {
+            await sendToCrmEventos(result.protocol);
+          } catch (err) {
+            console.error("CRM error on creation (non-blocking):", err);
+          }
+        }
+
         setLoading(false);
         toast({ title: attendanceType === "periferico" ? "Solicitação criada! Agora envie foto e áudio." : "Solicitação criada! Agora envie as mídias da colisão." });
         return;
