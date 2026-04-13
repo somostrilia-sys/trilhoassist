@@ -28,6 +28,7 @@ Deno.serve(async (req) => {
       action,
       event_type,
       event_id,
+      event_number,
       plate,
       associate_name,
       associate_phone,
