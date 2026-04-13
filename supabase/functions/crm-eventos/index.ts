@@ -88,8 +88,9 @@ Deno.serve(async (req) => {
       files: files || [],
     };
 
-    // For update-event, include event_id
+    // For update-event, include event_id/event_number
     if (event_id) payload.event_id = event_id;
+    if (event_number) payload.event_number = event_number;
 
     // Add optional fields only if provided
     if (associate_cpf) payload.associate_cpf = associate_cpf;
