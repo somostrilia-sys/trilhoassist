@@ -526,7 +526,47 @@ export default function PublicServiceRequest() {
   };
 
   const handleFinalizeConcluir = async () => {
-    // CRM already called on creation; just navigate to tracking
+    // Send media files to CRM after upload is complete
+    if (attendanceType === "collision" && collisionMediaFiles.length > 0 && submitted) {
+      try {
+        setFinalizingCrm(true);
+        const mediaPayload = collisionMediaFiles.map((f: any) => ({
+          url: f.file_url,
+          type: f.file_type,
+          name: f.file_name,
+        }));
+
+        const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+        const res = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/crm-eventos`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            },
+            body: JSON.stringify({
+              action: "update-event",
+              event_type: "colisao",
+              plate: form.vehicle_plate,
+              associate_phone: form.requester_phone.replace(/\D/g, ""),
+              external_reference: submitted.protocol,
+              files: mediaPayload,
+            }),
+          }
+        );
+        const result = await res.json();
+        if (result.success) {
+          console.log("CRM Eventos: mídias atualizadas com sucesso", result.crm);
+        } else {
+          console.warn("CRM Eventos: falha ao atualizar mídias", result);
+        }
+      } catch (err) {
+        console.error("Erro ao enviar mídias ao CRM:", err);
+      } finally {
+        setFinalizingCrm(false);
+      }
+    }
     setCreatedRequestId(null);
   };
 
