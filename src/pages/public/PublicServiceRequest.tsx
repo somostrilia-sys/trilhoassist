@@ -81,6 +81,7 @@ export default function PublicServiceRequest() {
   const [createdRequestId, setCreatedRequestId] = useState<string | null>(null);
   const [collisionMediaFiles, setCollisionMediaFiles] = useState<any[]>([]);
   const [finalizingCrm, setFinalizingCrm] = useState(false);
+  const [crmEventId, setCrmEventId] = useState<string | null>(null);
   const [savedProtocol, setSavedProtocol] = useState<string | null>(null);
 
   const [form, setForm] = useState({
@@ -507,6 +508,15 @@ export default function PublicServiceRequest() {
 
       const result = await res.json();
       if (!result.success) {
+        // Check if it's a duplicate — extract existing event_id
+        try {
+          const details = typeof result.details === "string" ? JSON.parse(result.details) : result.details;
+          if (details?.existing_event_id) {
+            setCrmEventId(details.existing_event_id);
+            console.log("CRM Eventos: evento duplicado, usando event_id existente:", details.existing_event_id);
+            return;
+          }
+        } catch {}
         console.warn("CRM Eventos warning:", result.error, result.details);
         toast({
           title: "⚠️ Aviso CRM",
@@ -514,6 +524,9 @@ export default function PublicServiceRequest() {
           variant: "destructive",
         });
       } else {
+        // Extract event_id from successful creation
+        const crmId = result.crm?.event_id || result.crm?.id;
+        if (crmId) setCrmEventId(crmId);
         console.log("CRM Eventos enviado com sucesso:", result.crm);
       }
     } catch (err) {
@@ -526,7 +539,54 @@ export default function PublicServiceRequest() {
   };
 
   const handleFinalizeConcluir = async () => {
-    // CRM already called on creation; just navigate to tracking
+    // Send media files to CRM after upload is complete
+    if (attendanceType === "collision" && collisionMediaFiles.length > 0 && submitted) {
+      try {
+        setFinalizingCrm(true);
+        const mediaPayload = collisionMediaFiles.map((f: any) => ({
+          url: f.file_url,
+          type: f.file_type,
+          name: f.file_name,
+        }));
+
+        const updatePayload: Record<string, unknown> = {
+          action: "update-event",
+          event_type: "colisao",
+          plate: form.vehicle_plate,
+          associate_phone: form.requester_phone.replace(/\D/g, ""),
+          external_reference: submitted.protocol,
+          files: mediaPayload,
+        };
+
+        // Include CRM event_id if we have it (from create response or duplicate detection)
+        if (crmEventId) {
+          updatePayload.event_id = crmEventId;
+        }
+
+        const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+        const res = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/crm-eventos`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            },
+            body: JSON.stringify(updatePayload),
+          }
+        );
+        const result = await res.json();
+        if (result.success) {
+          console.log("CRM Eventos: mídias atualizadas com sucesso", result.crm);
+        } else {
+          console.warn("CRM Eventos: falha ao atualizar mídias", result);
+        }
+      } catch (err) {
+        console.error("Erro ao enviar mídias ao CRM:", err);
+      } finally {
+        setFinalizingCrm(false);
+      }
+    }
     setCreatedRequestId(null);
   };
 

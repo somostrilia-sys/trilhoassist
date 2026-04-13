@@ -3,6 +3,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Map internal event types to CRM-accepted sinistro types
+const eventTypeMap: Record<string, string> = {
+  accident: "colisao",
+  collision: "colisao",
+  colisao: "colisao",
+  furto_roubo: "furto_roubo",
+  incendio: "incendio",
+  alagamento: "alagamento",
+  fenomeno_natural: "fenomeno_natural",
+  vidros: "vidros",
+  periferico: "vidros",
+  pt: "pt",
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -13,6 +27,8 @@ Deno.serve(async (req) => {
     const {
       action,
       event_type,
+      event_id,
+      event_number,
       plate,
       associate_name,
       associate_phone,
@@ -53,11 +69,15 @@ Deno.serve(async (req) => {
 
     const crmUrl = "https://zplcfkesjwbklqariocx.supabase.co/functions/v1/external-intake";
 
-    console.log(`CRM Eventos: sending event for protocol=${external_reference}, plate=${plate}, type=${event_type}`);
+    // Map event_type to CRM-accepted value
+    const mappedEventType = eventTypeMap[event_type] || event_type;
+
+    const effectiveAction = action || "create-event";
+    console.log(`CRM Eventos: action=${effectiveAction}, protocol=${external_reference}, plate=${plate}, type=${event_type} → ${mappedEventType}`);
 
     const payload: Record<string, unknown> = {
-      action: action || "create-event",
-      event_type,
+      action: effectiveAction,
+      event_type: mappedEventType,
       plate,
       associate_name,
       associate_phone,
@@ -67,6 +87,10 @@ Deno.serve(async (req) => {
       external_reference,
       files: files || [],
     };
+
+    // For update-event, include event_id/event_number
+    if (event_id) payload.event_id = event_id;
+    if (event_number) payload.event_number = event_number;
 
     // Add optional fields only if provided
     if (associate_cpf) payload.associate_cpf = associate_cpf;
@@ -104,7 +128,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`CRM Eventos success: protocol=${external_reference}, response=${responseText.substring(0, 200)}`);
+    console.log(`CRM Eventos success: action=${effectiveAction}, protocol=${external_reference}, response=${responseText.substring(0, 200)}`);
 
     // Parse and forward the CRM response
     let crmData;
