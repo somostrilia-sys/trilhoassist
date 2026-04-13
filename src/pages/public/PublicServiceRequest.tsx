@@ -526,16 +526,7 @@ export default function PublicServiceRequest() {
   };
 
   const handleFinalizeConcluir = async () => {
-    if (attendanceType === "collision" && submitted) {
-      setFinalizingCrm(true);
-      try {
-        await sendToCrmEventos(submitted.protocol);
-      } catch (err) {
-        console.error("CRM error (non-blocking):", err);
-      } finally {
-        setFinalizingCrm(false);
-      }
-    }
+    // CRM already called on creation; just navigate to tracking
     setCreatedRequestId(null);
   };
 
