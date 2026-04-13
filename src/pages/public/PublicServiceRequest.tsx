@@ -508,6 +508,15 @@ export default function PublicServiceRequest() {
 
       const result = await res.json();
       if (!result.success) {
+        // Check if it's a duplicate — extract existing event_id
+        try {
+          const details = typeof result.details === "string" ? JSON.parse(result.details) : result.details;
+          if (details?.existing_event_id) {
+            setCrmEventId(details.existing_event_id);
+            console.log("CRM Eventos: evento duplicado, usando event_id existente:", details.existing_event_id);
+            return;
+          }
+        } catch {}
         console.warn("CRM Eventos warning:", result.error, result.details);
         toast({
           title: "⚠️ Aviso CRM",
@@ -515,6 +524,9 @@ export default function PublicServiceRequest() {
           variant: "destructive",
         });
       } else {
+        // Extract event_id from successful creation
+        const crmId = result.crm?.event_id || result.crm?.id;
+        if (crmId) setCrmEventId(crmId);
         console.log("CRM Eventos enviado com sucesso:", result.crm);
       }
     } catch (err) {
