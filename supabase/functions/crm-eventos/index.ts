@@ -1,3 +1,5 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -56,6 +58,30 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Missing required fields: event_type and (plate or associate_phone)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // ── Filter: only send events for "Objetivo Auto" client ──
+    if (external_reference) {
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      const { data: sr } = await supabaseAdmin
+        .from("service_requests")
+        .select("client_id, clients(name)")
+        .eq("protocol", external_reference)
+        .maybeSingle();
+
+      const clientName = (sr as any)?.clients?.name || "";
+      const isObjetivo = /objetivo/i.test(clientName);
+
+      if (!isObjetivo) {
+        console.log(`CRM Eventos: skipped — client "${clientName}" is not Objetivo Auto (protocol=${external_reference})`);
+        return new Response(
+          JSON.stringify({ success: false, skipped: true, reason: "client_not_eligible", client: clientName }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     const crmToken = Deno.env.get("CRM_EVENTOS_TOKEN");
