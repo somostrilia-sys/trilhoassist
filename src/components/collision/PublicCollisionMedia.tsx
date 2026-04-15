@@ -73,7 +73,7 @@ function isIOSSafari(): boolean {
   return isIOS || isSafari;
 }
 
-export default function PublicCollisionMedia({ serviceRequestId, onMediaChange }: Props) {
+export default function PublicCollisionMedia({ serviceRequestId, onMediaChange, attendanceType = "collision" }: Props) {
   const { toast } = useToast();
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState<string | null>(null);
