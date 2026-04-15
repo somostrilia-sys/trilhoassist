@@ -17,6 +17,7 @@ interface UploadedFile {
 interface Props {
   serviceRequestId: string;
   onMediaChange?: (media: UploadedFile[]) => void;
+  attendanceType?: "collision" | "periferico";
 }
 
 // Compress image to max ~1MB
