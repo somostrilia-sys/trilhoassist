@@ -612,6 +612,7 @@ export default function PublicServiceRequest() {
           <PublicCollisionMedia
             serviceRequestId={createdRequestId}
             onMediaChange={setCollisionMediaFiles}
+            attendanceType={attendanceType as "collision" | "periferico"}
           />
 
           {attendanceType === "periferico" && (
