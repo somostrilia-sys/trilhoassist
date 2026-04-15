@@ -17,6 +17,7 @@ interface UploadedFile {
 interface Props {
   serviceRequestId: string;
   onMediaChange?: (media: UploadedFile[]) => void;
+  attendanceType?: "collision" | "periferico";
 }
 
 // Compress image to max ~1MB
@@ -72,7 +73,7 @@ function isIOSSafari(): boolean {
   return isIOS || isSafari;
 }
 
-export default function PublicCollisionMedia({ serviceRequestId, onMediaChange }: Props) {
+export default function PublicCollisionMedia({ serviceRequestId, onMediaChange, attendanceType = "collision" }: Props) {
   const { toast } = useToast();
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -403,12 +404,14 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange }
   const formatTime = (s: number) =>
     `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
+  const isPeriferico = attendanceType === "periferico";
+
   return (
     <Card className="shadow-sm">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
           <Upload className="h-4 w-4" />
-          Mídias da Colisão
+          {isPeriferico ? "Mídias do Periférico" : "Mídias da Colisão"}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -419,9 +422,11 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange }
           <Badge variant={audios.length > 0 ? "default" : "destructive"}>
             {audios.length > 0 ? "✓" : "!"} Áudio {audios.length > 0 ? `(${audios.length})` : "(obrigatório)"}
           </Badge>
-          <Badge variant={docs.length > 0 ? "default" : "destructive"}>
-            {docs.length > 0 ? "✓" : "!"} Documentos {docs.length > 0 ? `(${docs.length})` : "(obrigatório)"}
-          </Badge>
+          {!isPeriferico && (
+            <Badge variant={docs.length > 0 ? "default" : "destructive"}>
+              {docs.length > 0 ? "✓" : "!"} Documentos {docs.length > 0 ? `(${docs.length})` : "(obrigatório)"}
+            </Badge>
+          )}
           <Badge variant="outline">Vídeos ({videos.length})</Badge>
         </div>
 
@@ -429,10 +434,19 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange }
           <p className="font-semibold">Orientações:</p>
           <ul className="list-disc list-inside space-y-0.5 text-xs text-muted-foreground">
             <li>É <strong>obrigatório</strong> o envio de áudio relatando o ocorrido</li>
-            <li>É <strong>obrigatório</strong> o envio de fotos do acidente</li>
-            <li>O vídeo é <strong>recomendado</strong> para melhor análise</li>
-            <li>Se houver terceiro envolvido, os documentos do terceiro são <strong>obrigatórios</strong></li>
-            <li>Caso não haja terceiro, anexar apenas a <strong>CNH do condutor</strong></li>
+            {isPeriferico ? (
+              <>
+                <li>Tire uma foto <strong>próxima do vidro quebrado</strong></li>
+                <li>Tire uma foto <strong>distante mostrando a placa</strong> do veículo</li>
+              </>
+            ) : (
+              <>
+                <li>É <strong>obrigatório</strong> o envio de fotos do acidente</li>
+                <li>O vídeo é <strong>recomendado</strong> para melhor análise</li>
+                <li>Se houver terceiro envolvido, os documentos do terceiro são <strong>obrigatórios</strong></li>
+                <li>Caso não haja terceiro, anexar apenas a <strong>CNH do condutor</strong></li>
+              </>
+            )}
           </ul>
         </div>
 
@@ -490,7 +504,7 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange }
 
         {/* Photo capture */}
         <div className="space-y-2">
-          <p className="text-sm font-medium">Fotos do acidente</p>
+          <p className="text-sm font-medium">{isPeriferico ? "Fotos do vidro e placa" : "Fotos do acidente"}</p>
           <div className="flex gap-2 flex-wrap">
             <Button type="button" variant="outline" size="sm" onClick={() => cameraRef.current?.click()} disabled={uploading === "photo"} className="gap-2">
               {uploading === "photo" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
@@ -504,15 +518,17 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange }
           <input ref={photoRef} type="file" accept="image/jpeg,image/png,image/heic,image/heif,image/webp,image/*" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) { handleFileUpload(e.target.files, "photo"); e.target.value = ""; } }} />
         </div>
 
-        {/* Documents */}
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Documentos (CNH, docs do terceiro)</p>
-          <Button type="button" variant="outline" size="sm" onClick={() => docRef.current?.click()} disabled={uploading === "document"} className="gap-2">
-            {uploading === "document" ? <Loader2 className="h-4 w-4 animate-spin" /> : <File className="h-4 w-4" />}
-            Enviar Documento
-          </Button>
-          <input ref={docRef} type="file" accept="image/*,.pdf,.doc,.docx" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) { handleFileUpload(e.target.files, "document"); e.target.value = ""; } }} />
-        </div>
+        {/* Documents - only for collision */}
+        {!isPeriferico && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Documentos (CNH, docs do terceiro)</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => docRef.current?.click()} disabled={uploading === "document"} className="gap-2">
+              {uploading === "document" ? <Loader2 className="h-4 w-4 animate-spin" /> : <File className="h-4 w-4" />}
+              Enviar Documento
+            </Button>
+            <input ref={docRef} type="file" accept="image/*,.pdf,.doc,.docx" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) { handleFileUpload(e.target.files, "document"); e.target.value = ""; } }} />
+          </div>
+        )}
 
         {/* Video */}
         <div className="space-y-2">
