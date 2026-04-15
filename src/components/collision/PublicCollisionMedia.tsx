@@ -504,7 +504,7 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange, 
 
         {/* Photo capture */}
         <div className="space-y-2">
-          <p className="text-sm font-medium">Fotos do acidente</p>
+          <p className="text-sm font-medium">{isPeriferico ? "Fotos do vidro e placa" : "Fotos do acidente"}</p>
           <div className="flex gap-2 flex-wrap">
             <Button type="button" variant="outline" size="sm" onClick={() => cameraRef.current?.click()} disabled={uploading === "photo"} className="gap-2">
               {uploading === "photo" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
@@ -518,15 +518,17 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange, 
           <input ref={photoRef} type="file" accept="image/jpeg,image/png,image/heic,image/heif,image/webp,image/*" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) { handleFileUpload(e.target.files, "photo"); e.target.value = ""; } }} />
         </div>
 
-        {/* Documents */}
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Documentos (CNH, docs do terceiro)</p>
-          <Button type="button" variant="outline" size="sm" onClick={() => docRef.current?.click()} disabled={uploading === "document"} className="gap-2">
-            {uploading === "document" ? <Loader2 className="h-4 w-4 animate-spin" /> : <File className="h-4 w-4" />}
-            Enviar Documento
-          </Button>
-          <input ref={docRef} type="file" accept="image/*,.pdf,.doc,.docx" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) { handleFileUpload(e.target.files, "document"); e.target.value = ""; } }} />
-        </div>
+        {/* Documents - only for collision */}
+        {!isPeriferico && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Documentos (CNH, docs do terceiro)</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => docRef.current?.click()} disabled={uploading === "document"} className="gap-2">
+              {uploading === "document" ? <Loader2 className="h-4 w-4 animate-spin" /> : <File className="h-4 w-4" />}
+              Enviar Documento
+            </Button>
+            <input ref={docRef} type="file" accept="image/*,.pdf,.doc,.docx" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) { handleFileUpload(e.target.files, "document"); e.target.value = ""; } }} />
+          </div>
+        )}
 
         {/* Video */}
         <div className="space-y-2">
