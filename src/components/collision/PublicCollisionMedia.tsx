@@ -404,12 +404,14 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange, 
   const formatTime = (s: number) =>
     `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
+  const isPeriferico = attendanceType === "periferico";
+
   return (
     <Card className="shadow-sm">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
           <Upload className="h-4 w-4" />
-          Mídias da Colisão
+          {isPeriferico ? "Mídias do Periférico" : "Mídias da Colisão"}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -420,9 +422,11 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange, 
           <Badge variant={audios.length > 0 ? "default" : "destructive"}>
             {audios.length > 0 ? "✓" : "!"} Áudio {audios.length > 0 ? `(${audios.length})` : "(obrigatório)"}
           </Badge>
-          <Badge variant={docs.length > 0 ? "default" : "destructive"}>
-            {docs.length > 0 ? "✓" : "!"} Documentos {docs.length > 0 ? `(${docs.length})` : "(obrigatório)"}
-          </Badge>
+          {!isPeriferico && (
+            <Badge variant={docs.length > 0 ? "default" : "destructive"}>
+              {docs.length > 0 ? "✓" : "!"} Documentos {docs.length > 0 ? `(${docs.length})` : "(obrigatório)"}
+            </Badge>
+          )}
           <Badge variant="outline">Vídeos ({videos.length})</Badge>
         </div>
 
@@ -430,10 +434,19 @@ export default function PublicCollisionMedia({ serviceRequestId, onMediaChange, 
           <p className="font-semibold">Orientações:</p>
           <ul className="list-disc list-inside space-y-0.5 text-xs text-muted-foreground">
             <li>É <strong>obrigatório</strong> o envio de áudio relatando o ocorrido</li>
-            <li>É <strong>obrigatório</strong> o envio de fotos do acidente</li>
-            <li>O vídeo é <strong>recomendado</strong> para melhor análise</li>
-            <li>Se houver terceiro envolvido, os documentos do terceiro são <strong>obrigatórios</strong></li>
-            <li>Caso não haja terceiro, anexar apenas a <strong>CNH do condutor</strong></li>
+            {isPeriferico ? (
+              <>
+                <li>Tire uma foto <strong>próxima do vidro quebrado</strong></li>
+                <li>Tire uma foto <strong>distante mostrando a placa</strong> do veículo</li>
+              </>
+            ) : (
+              <>
+                <li>É <strong>obrigatório</strong> o envio de fotos do acidente</li>
+                <li>O vídeo é <strong>recomendado</strong> para melhor análise</li>
+                <li>Se houver terceiro envolvido, os documentos do terceiro são <strong>obrigatórios</strong></li>
+                <li>Caso não haja terceiro, anexar apenas a <strong>CNH do condutor</strong></li>
+              </>
+            )}
           </ul>
         </div>
 
