@@ -435,7 +435,8 @@ export default function PublicServiceRequest() {
         });
 
         // Send to CRM immediately after creation (don't wait for media upload)
-        if (attendanceType === "collision") {
+        // Fires for both collision and periferico (server filters by Objetivo Auto)
+        if (attendanceType === "collision" || attendanceType === "periferico") {
           try {
             await sendToCrmEventos(result.protocol);
           } catch (err) {
