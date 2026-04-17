@@ -461,7 +461,7 @@ export default function PublicServiceRequest() {
     }
   };
 
-  // ═══ CRM Eventos integration for collision ═══
+  // ═══ CRM Eventos integration for collision and periferico ═══
   const sendToCrmEventos = async (protocol: string) => {
     try {
       const vehicleCategoryMap: Record<string, string> = {
@@ -484,6 +484,8 @@ export default function PublicServiceRequest() {
         form.origin_uf,
       ].filter(Boolean).join(", ");
 
+      const crmEventType = attendanceType === "periferico" ? "vidros" : "colisao";
+
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/crm-eventos`,
@@ -494,7 +496,7 @@ export default function PublicServiceRequest() {
             "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           },
           body: JSON.stringify({
-            event_type: "colisao",
+            event_type: crmEventType,
             plate: form.vehicle_plate,
             associate_name: form.requester_name,
             associate_phone: form.requester_phone.replace(/\D/g, ""),
