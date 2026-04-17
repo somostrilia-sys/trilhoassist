@@ -5,6 +5,7 @@ import { maskPhone, maskCEP, unmask } from "@/lib/masks";
 import { useAuth } from "@/contexts/AuthContext";
 import { sendServiceLabel } from "@/lib/serviceLabel";
 import { sendAutoNotify } from "@/lib/autoNotify";
+import { sendCrmEvento } from "@/lib/sendCrmEvento";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -579,6 +580,11 @@ export default function NewServiceRequest() {
       sendServiceLabel(inserted.id, "creation");
       const beneficiaryTrackingUrl = `${window.location.origin}/tracking/${beneficiaryToken}`;
       sendAutoNotify(inserted.id, "beneficiary_creation", { beneficiary_tracking_url: beneficiaryTrackingUrl });
+
+      // Send to CRM Eventos for collision/periferico (Objetivo Auto only — server-filtered)
+      if (attendanceType === "collision" || attendanceType === "periferico") {
+        sendCrmEvento({ serviceRequestId: inserted.id, attendanceType });
+      }
 
       if (conversationId) {
         await supabase

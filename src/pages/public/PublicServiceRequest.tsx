@@ -435,7 +435,8 @@ export default function PublicServiceRequest() {
         });
 
         // Send to CRM immediately after creation (don't wait for media upload)
-        if (attendanceType === "collision") {
+        // Fires for both collision and periferico (server filters by Objetivo Auto)
+        if (attendanceType === "collision" || attendanceType === "periferico") {
           try {
             await sendToCrmEventos(result.protocol);
           } catch (err) {
@@ -460,7 +461,7 @@ export default function PublicServiceRequest() {
     }
   };
 
-  // ═══ CRM Eventos integration for collision ═══
+  // ═══ CRM Eventos integration for collision and periferico ═══
   const sendToCrmEventos = async (protocol: string) => {
     try {
       const vehicleCategoryMap: Record<string, string> = {
@@ -483,6 +484,8 @@ export default function PublicServiceRequest() {
         form.origin_uf,
       ].filter(Boolean).join(", ");
 
+      const crmEventType = attendanceType === "periferico" ? "vidros" : "colisao";
+
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/crm-eventos`,
@@ -493,7 +496,7 @@ export default function PublicServiceRequest() {
             "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           },
           body: JSON.stringify({
-            event_type: "colisao",
+            event_type: crmEventType,
             plate: form.vehicle_plate,
             associate_name: form.requester_name,
             associate_phone: form.requester_phone.replace(/\D/g, ""),
@@ -539,8 +542,8 @@ export default function PublicServiceRequest() {
   };
 
   const handleFinalizeConcluir = async () => {
-    // Send media files to CRM after upload is complete
-    if (attendanceType === "collision" && collisionMediaFiles.length > 0 && submitted) {
+    // Send media files to CRM after upload is complete (collision OR periferico)
+    if ((attendanceType === "collision" || attendanceType === "periferico") && collisionMediaFiles.length > 0 && submitted) {
       try {
         setFinalizingCrm(true);
         const mediaPayload = collisionMediaFiles.map((f: any) => ({
@@ -551,7 +554,7 @@ export default function PublicServiceRequest() {
 
         const updatePayload: Record<string, unknown> = {
           action: "update-event",
-          event_type: "colisao",
+          event_type: attendanceType === "periferico" ? "vidros" : "colisao",
           plate: form.vehicle_plate,
           associate_phone: form.requester_phone.replace(/\D/g, ""),
           external_reference: submitted.protocol,
