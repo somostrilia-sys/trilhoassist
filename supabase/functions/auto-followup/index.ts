@@ -18,7 +18,8 @@ async function sendMessage(
   if (cleanPhone.length <= 11) cleanPhone = `55${cleanPhone}`;
 
   try {
-    const response = await fetch(`${serverUrl}/instance/${instanceName}/send-text`, {
+    // UazapiGO endpoint: POST /send/text with header `token` (instance-scoped)
+    const response = await fetch(`${serverUrl}/send/text`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

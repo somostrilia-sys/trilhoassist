@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Wifi, WifiOff, QrCode, Plus, Trash2, RefreshCw, LogOut, CheckCircle2, AlertCircle, Loader2,
+  Wifi, WifiOff, QrCode, Plus, Trash2, RefreshCw, LogOut, CheckCircle2, AlertCircle, Loader2, Webhook,
 } from "lucide-react";
 
 interface Props {
@@ -26,6 +26,7 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
   const [loadingQr, setLoadingQr] = useState<string | null>(null);
   const [waitingQr, setWaitingQr] = useState<string | null>(null);
   const [checkingStatus, setCheckingStatus] = useState<string | null>(null);
+  const [resettingWebhook, setResettingWebhook] = useState<string | null>(null);
   const pollingRef = useRef<Record<string, number>>({});
 
   // Cleanup polling on unmount
@@ -298,6 +299,29 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
     }
   };
 
+  const handleResetWebhook = async (instanceId: string) => {
+    setResettingWebhook(instanceId);
+    try {
+      const { data, error } = await supabase.functions.invoke("evolution-api", {
+        body: {
+          action: "set_webhook",
+          tenant_id: tenantId,
+          instance_db_id: instanceId,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({
+        title: "✅ Webhook reaplicado",
+        description: "A instância voltará a receber mensagens. Faça um teste enviando uma mensagem.",
+      });
+    } catch (err: any) {
+      toast({ title: "Erro ao reaplicar webhook", description: err.message, variant: "destructive" });
+    } finally {
+      setResettingWebhook(null);
+    }
+  };
+
   const handleLogout = async (instanceId: string) => {
     if (!confirm("Desconectar o WhatsApp desta instância?")) return;
     try {
@@ -415,6 +439,19 @@ export function EvolutionApiIntegration({ tenantId }: Props) {
                             <Loader2 className="h-3 w-3 animate-spin" />
                           ) : (
                             <RefreshCw className="h-3 w-3" />
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleResetWebhook(inst.id)}
+                          disabled={resettingWebhook === inst.id}
+                          title="Reaplicar webhook (corrige recebimento de mensagens)"
+                        >
+                          {resettingWebhook === inst.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Webhook className="h-3 w-3" />
                           )}
                         </Button>
                         {isConnected && (

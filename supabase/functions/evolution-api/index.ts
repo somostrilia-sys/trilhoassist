@@ -535,6 +535,50 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ====== SET WEBHOOK (re-apply webhook URL on UazapiGO instance) ======
+    if (action === "set_webhook") {
+      if (!instance_db_id) {
+        return new Response(JSON.stringify({ error: "instance_db_id required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: inst } = await adminSupabase
+        .from("zapi_instances")
+        .select("*")
+        .eq("id", instance_db_id)
+        .single();
+
+      if (!inst) {
+        return new Response(JSON.stringify({ error: "Instance not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const instToken = (inst as any).instance_token || "";
+      const instTenantId = (inst as any).tenant_id;
+
+      if (!instToken) {
+        return new Response(JSON.stringify({ error: "Instância sem token. Recrie a instância." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const webhookResult = await configureWebhook(instToken, instTenantId);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          webhook_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/whatsapp-webhook?tenant=${instTenantId}&source=uazapi`,
+          uazapi_response: webhookResult,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     return new Response(JSON.stringify({ error: "Unknown action" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
