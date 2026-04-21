@@ -246,6 +246,76 @@ export type Database = {
           },
         ]
       }
+      cooperativa_closings: {
+        Row: {
+          client_id: string | null
+          cooperativa: string
+          created_at: string
+          detalhes: Json
+          enviado_externo_em: string | null
+          gerado_automaticamente: boolean
+          id: string
+          mes_referencia: string
+          tenant_id: string
+          total_atendimentos: number
+          updated_at: string
+          valor_bruto: number
+          valor_liquido: number
+        }
+        Insert: {
+          client_id?: string | null
+          cooperativa: string
+          created_at?: string
+          detalhes?: Json
+          enviado_externo_em?: string | null
+          gerado_automaticamente?: boolean
+          id?: string
+          mes_referencia: string
+          tenant_id: string
+          total_atendimentos?: number
+          updated_at?: string
+          valor_bruto?: number
+          valor_liquido?: number
+        }
+        Update: {
+          client_id?: string | null
+          cooperativa?: string
+          created_at?: string
+          detalhes?: Json
+          enviado_externo_em?: string | null
+          gerado_automaticamente?: boolean
+          id?: string
+          mes_referencia?: string
+          tenant_id?: string
+          total_atendimentos?: number
+          updated_at?: string
+          valor_bruto?: number
+          valor_liquido?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cooperativa_closings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cooperativa_closings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cooperativa_closings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dispatch_pauses: {
         Row: {
           created_at: string
