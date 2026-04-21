@@ -185,13 +185,21 @@ export function OperatorWhatsApp({ tenantId }: Props) {
   const handleLogout = async () => {
     if (!instance || !confirm("Desconectar seu WhatsApp?")) return;
     try {
-      const { error } = await supabase.functions.invoke("evolution-api", {
+      const { data, error } = await supabase.functions.invoke("evolution-api", {
         body: { action: "logout", tenant_id: tenantId, instance_db_id: instance.id },
       });
       if (error) throw error;
       setQrCodeData(null);
       queryClient.invalidateQueries({ queryKey: ["my-whatsapp-instance"] });
-      toast({ title: "WhatsApp desconectado" });
+      if (data?.still_connected) {
+        toast({
+          title: "⚠️ Sessão ainda ativa",
+          description: `Estado: ${data?.state || "desconhecido"}. Tente novamente em alguns segundos.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "✅ WhatsApp desconectado" });
+      }
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     }
