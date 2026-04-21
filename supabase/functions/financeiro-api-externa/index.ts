@@ -2,6 +2,90 @@
 // API REST para integração com sistema financeiro externo
 // Auth: Bearer Token (FINANCEIRO_API_TOKEN)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
+
+function brl(n: number) {
+  return `R$ ${Number(n ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+async function gerarPdfFechamentoGeral(resumo: any, atendimentos: any[]): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const navy = rgb(0.05, 0.16, 0.36);
+  const gold = rgb(0.78, 0.6, 0.16);
+  const gray = rgb(0.4, 0.4, 0.4);
+
+  let page = pdf.addPage([595.28, 841.89]); // A4
+  let { width, height } = page;
+  let y = height - 50;
+
+  // Header
+  page.drawRectangle({ x: 0, y: height - 80, width, height: 80, color: navy });
+  page.drawText("Fechamento Geral - Trilho Assist", { x: 40, y: height - 45, size: 18, font: bold, color: rgb(1, 1, 1) });
+  page.drawText(`Mes de referencia: ${resumo.mes_referencia}`, { x: 40, y: height - 65, size: 10, font, color: rgb(0.85, 0.85, 0.85) });
+
+  y = height - 110;
+  // Resumo
+  page.drawText("Resumo Consolidado", { x: 40, y, size: 13, font: bold, color: navy });
+  y -= 20;
+  const linhasResumo = [
+    [`Total de atendimentos:`, String(resumo.total_atendimentos)],
+    [`Total de cooperativas:`, String(resumo.total_cooperativas)],
+    [`Valor bruto:`, brl(resumo.valor_bruto)],
+    [`Custo prestadores:`, brl(resumo.valor_custo)],
+    [`Valor liquido:`, brl(resumo.valor_liquido)],
+    [`Margem:`, `${resumo.margem_percentual}%`],
+  ];
+  for (const [k, v] of linhasResumo) {
+    page.drawText(k, { x: 40, y, size: 10, font, color: gray });
+    page.drawText(v, { x: 200, y, size: 10, font: bold, color: navy });
+    y -= 16;
+  }
+
+  y -= 10;
+  page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, color: gold, thickness: 1 });
+  y -= 20;
+  page.drawText("Atendimentos do periodo", { x: 40, y, size: 13, font: bold, color: navy });
+  y -= 18;
+
+  // Tabela
+  const headers = ["Protocolo", "Data", "Cooperativa", "Beneficiario", "Placa", "Servico", "Cobrado", "Custo"];
+  const cols = [40, 110, 165, 235, 335, 380, 460, 520];
+  page.drawText(headers[0], { x: cols[0], y, size: 8, font: bold, color: navy });
+  for (let i = 1; i < headers.length; i++) {
+    page.drawText(headers[i], { x: cols[i], y, size: 8, font: bold, color: navy });
+  }
+  y -= 12;
+  page.drawLine({ start: { x: 40, y: y + 4 }, end: { x: width - 40, y: y + 4 }, color: gray, thickness: 0.3 });
+
+  const truncate = (s: string, n: number) => (s ?? "").length > n ? s.substring(0, n - 1) + "…" : (s ?? "");
+
+  for (const a of atendimentos) {
+    if (y < 60) {
+      page = pdf.addPage([595.28, 841.89]);
+      ({ width, height } = page);
+      y = height - 50;
+    }
+    const dataStr = a.data ? new Date(a.data).toLocaleDateString("pt-BR") : "-";
+    const row = [
+      truncate(a.protocolo, 12),
+      dataStr,
+      truncate(a.cooperativa, 12),
+      truncate(a.beneficiario, 18),
+      truncate(a.placa, 8),
+      truncate(a.tipo_servico, 14),
+      brl(a.valor_cobrado),
+      brl(a.custo_prestador),
+    ];
+    for (let i = 0; i < row.length; i++) {
+      page.drawText(String(row[i]), { x: cols[i], y, size: 7, font, color: rgb(0.15, 0.15, 0.15) });
+    }
+    y -= 11;
+  }
+
+  return await pdf.save();
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
