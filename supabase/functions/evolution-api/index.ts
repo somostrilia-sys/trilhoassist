@@ -511,26 +511,85 @@ Deno.serve(async (req) => {
         .eq("id", instance_db_id)
         .single();
 
-      if (inst) {
-        const instName = (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
-
-        try {
-          await fetch(`${serverUrl}/instance/${instName}/logout`, {
-            method: "DELETE",
-            headers: adminHeaders,
-          });
-        } catch (e) {
-          console.error("UazapiGO logout error:", e);
-        }
-
-        await adminSupabase
-          .from("zapi_instances")
-          .update({ connection_status: "disconnected" })
-          .eq("id", instance_db_id);
+      if (!inst) {
+        return new Response(JSON.stringify({ error: "Instance not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
+      const instName = (inst as any).instance_name || (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
+      const instToken = (inst as any).instance_token || "";
+
+      const attempts: Array<{ url: string; method: string; headers: Record<string, string>; body?: string }> = [];
+      // UazapiGO V2: POST /instance/disconnect with instance token
+      if (instToken) {
+        attempts.push({
+          url: `${serverUrl}/instance/disconnect`,
+          method: "POST",
+          headers: { "Content-Type": "application/json", token: instToken },
+          body: "{}",
+        });
+      }
+      // Fallback (Evolution-style)
+      attempts.push({
+        url: `${serverUrl}/instance/${instName}/logout`,
+        method: "DELETE",
+        headers: adminHeaders,
+      });
+      attempts.push({
+        url: `${serverUrl}/instance/logout/${instName}`,
+        method: "DELETE",
+        headers: adminHeaders,
+      });
+
+      let logoutOk = false;
+      let lastResp: any = null;
+      for (const att of attempts) {
+        try {
+          console.log(`logout attempt: ${att.method} ${att.url}`);
+          const r = await fetch(att.url, { method: att.method, headers: att.headers, body: att.body });
+          const txt = await r.text();
+          let parsed: any = txt;
+          try { parsed = JSON.parse(txt); } catch { /* keep text */ }
+          console.log(`logout response (${r.status}):`, typeof parsed === "string" ? parsed.slice(0, 300) : JSON.stringify(parsed).slice(0, 500));
+          lastResp = { status: r.status, body: parsed };
+          if (r.ok) { logoutOk = true; break; }
+        } catch (e) {
+          console.error("logout attempt error:", e);
+        }
+      }
+
+      // Validate REAL state after disconnect (don't trust cego)
+      let realConnected = false;
+      let realState = "unknown";
+      try {
+        const stResp = await fetch(`${serverUrl}/instance/connectionState/${instName}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json", token: instToken },
+        });
+        const stData = await stResp.json().catch(() => ({}));
+        console.log("post-logout connectionState:", JSON.stringify(stData));
+        realState = stData.state || stData.instance?.state || stData.connectionState || stData.status || "unknown";
+        realConnected = stData.connected === true || stData.loggedIn === true || ["connected", "open", "CONNECTED"].includes(realState);
+      } catch (e) {
+        console.error("post-logout state check failed:", e);
+      }
+
+      await adminSupabase
+        .from("zapi_instances")
+        .update({ connection_status: realConnected ? "connected" : "disconnected" })
+        .eq("id", instance_db_id);
+
       return new Response(
-        JSON.stringify({ success: true }),
+        JSON.stringify({
+          success: logoutOk && !realConnected,
+          logout_attempted: true,
+          logout_ok: logoutOk,
+          still_connected: realConnected,
+          state: realState,
+          last_response: lastResp,
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
