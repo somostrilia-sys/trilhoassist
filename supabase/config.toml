@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.crm-eventos]
 verify_jwt = false
+
+[functions.financeiro-api-externa]
+verify_jwt = false
