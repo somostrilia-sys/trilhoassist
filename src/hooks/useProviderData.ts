@@ -95,6 +95,7 @@ export function useProviderData() {
   return {
     provider,
     providerLoading,
+    notLinked,
     dispatches,
     dispatchesLoading,
     financialByClient: Object.values(financialByClient),
