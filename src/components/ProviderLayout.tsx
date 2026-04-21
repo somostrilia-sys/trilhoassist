@@ -2,13 +2,17 @@ import { Outlet, Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ProviderSidebar } from "@/components/ProviderSidebar";
+import { ProviderNotLinked } from "@/components/provider/ProviderNotLinked";
+import { useProviderData } from "@/hooks/useProviderData";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function ProviderLayout() {
   const { user, loading, hasRole } = useAuth();
+  const isProvider = !!user && hasRole("provider");
+  const { notLinked, providerLoading } = useProviderData();
 
-  if (loading) {
+  if (loading || (isProvider && providerLoading)) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-3">
@@ -23,8 +27,12 @@ export function ProviderLayout() {
     return <Navigate to="/login" replace />;
   }
 
-  if (!hasRole("provider")) {
+  if (!isProvider) {
     return <Navigate to="/dashboard" replace />;
+  }
+
+  if (notLinked) {
+    return <ProviderNotLinked />;
   }
 
   const initials = user.email?.substring(0, 2).toUpperCase() || "P";
