@@ -188,8 +188,10 @@ Deno.serve(async (req) => {
         .from("service_requests")
         .select(`
           id, protocol, charged_amount, provider_cost, service_type, completed_at,
-          beneficiaries(cooperativa),
-          dispatches(final_amount, quoted_amount)
+          requester_name, vehicle_plate,
+          beneficiaries(name, cpf, cooperativa),
+          clients(name),
+          dispatches(final_amount, quoted_amount, providers(name))
         `)
         .eq("status", "completed")
         .gte("completed_at", start)
@@ -202,6 +204,7 @@ Deno.serve(async (req) => {
       let valorCusto = 0;
       const porTipo: Record<string, number> = {};
       const cooperativas = new Set<string>();
+      const atendimentosDetalhados: any[] = [];
 
       (data ?? []).forEach((r: any) => {
         const disp = (r.dispatches ?? [])[0] ?? {};
@@ -212,9 +215,22 @@ Deno.serve(async (req) => {
         valorCusto += custo;
         porTipo[r.service_type] = (porTipo[r.service_type] ?? 0) + 1;
         if (r.beneficiaries?.cooperativa) cooperativas.add(r.beneficiaries.cooperativa);
+        atendimentosDetalhados.push({
+          protocolo: r.protocol,
+          data: r.completed_at,
+          cliente: r.clients?.name ?? "-",
+          cooperativa: r.beneficiaries?.cooperativa ?? "-",
+          beneficiario: r.beneficiaries?.name ?? r.requester_name,
+          cpf: r.beneficiaries?.cpf ?? "-",
+          placa: r.vehicle_plate ?? "-",
+          tipo_servico: r.service_type,
+          prestador: disp.providers?.name ?? "-",
+          valor_cobrado: cobrado,
+          custo_prestador: custo,
+        });
       });
 
-      return json({
+      const resumo = {
         mes_referencia: mes,
         total_atendimentos: totalAtendimentos,
         total_cooperativas: cooperativas.size,
@@ -224,7 +240,21 @@ Deno.serve(async (req) => {
         margem_percentual: valorBruto > 0 ? Number(((valorBruto - valorCusto) / valorBruto * 100).toFixed(2)) : 0,
         atendimentos_por_tipo: porTipo,
         cooperativas: Array.from(cooperativas),
-      });
+      };
+
+      if (formato === "pdf") {
+        const pdfBytes = gerarPdfFechamentoGeral(resumo, atendimentosDetalhados);
+        return new Response(pdfBytes, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename="fechamento_geral_${mes}.pdf"`,
+          },
+        });
+      }
+
+      return json({ ...resumo, atendimentos: atendimentosDetalhados });
     }
 
     // ───────────────────────────────────────────────
