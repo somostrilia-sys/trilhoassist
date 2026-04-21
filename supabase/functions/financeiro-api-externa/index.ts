@@ -174,10 +174,11 @@ Deno.serve(async (req) => {
     }
 
     // ───────────────────────────────────────────────
-    // GET /fechamento/geral?mes=YYYY-MM
-    // Fechamento consolidado geral
+    // GET /fechamento/geral?mes=YYYY-MM&formato=json|pdf
+    // Fechamento consolidado geral (com opção de PDF detalhado)
     // ───────────────────────────────────────────────
     if (req.method === "GET" && path.startsWith("/fechamento/geral")) {
+      const formato = (params.get("formato") ?? "json").toLowerCase();
       const mes = params.get("mes") ?? new Date().toISOString().slice(0, 7);
       const [year, month] = mes.split("-");
       const start = `${year}-${month}-01`;
