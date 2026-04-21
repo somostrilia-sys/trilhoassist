@@ -449,7 +449,7 @@ Deno.serve(async (req) => {
       endpoints_disponiveis: [
         "GET /atendimentos?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&cooperativa=...",
         "GET /fechamento/cooperativa?mes=YYYY-MM",
-        "GET /fechamento/geral?mes=YYYY-MM",
+        "GET /fechamento/geral?mes=YYYY-MM&formato=json|pdf",
         "GET /fechamento/mensal/{YYYY-MM}",
         "POST /fechamento/gerar  body: { mes: 'YYYY-MM' }",
       ],
