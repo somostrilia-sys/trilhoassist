@@ -196,6 +196,7 @@ Deno.serve(async (req) => {
           dispatches(final_amount, quoted_amount)
         `)
         .eq("status", "completed")
+        .eq("client_id", OBJETIVO_CLIENT_ID)
         .gte("completed_at", start)
         .lt("completed_at", end);
 
@@ -283,6 +284,7 @@ Deno.serve(async (req) => {
           dispatches(final_amount, quoted_amount)
         `)
         .eq("status", "completed")
+        .eq("client_id", OBJETIVO_CLIENT_ID)
         .gte("completed_at", start)
         .lt("completed_at", end);
 
