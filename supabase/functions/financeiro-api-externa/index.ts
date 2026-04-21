@@ -104,6 +104,9 @@ function unauthorized() {
   return json({ error: "Unauthorized", message: "Bearer token inválido ou ausente" }, 401);
 }
 
+// Cliente Objetivo Auto Beneficios — token vinculado exclusivamente a este client_id
+const OBJETIVO_CLIENT_ID = "cb50f118-97dd-4762-bdf6-8f9d0d98145c";
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -149,6 +152,7 @@ Deno.serve(async (req) => {
             providers(id, name, cnpj))
         `)
         .eq("status", "completed")
+        .eq("client_id", OBJETIVO_CLIENT_ID)
         .gte("completed_at", dateFrom)
         .lte("completed_at", dateTo + "T23:59:59")
         .order("completed_at", { ascending: false })
@@ -213,6 +217,7 @@ Deno.serve(async (req) => {
           dispatches(final_amount, quoted_amount)
         `)
         .eq("status", "completed")
+        .eq("client_id", OBJETIVO_CLIENT_ID)
         .gte("completed_at", start)
         .lt("completed_at", end);
 
@@ -278,6 +283,7 @@ Deno.serve(async (req) => {
           dispatches(final_amount, quoted_amount, providers(name))
         `)
         .eq("status", "completed")
+        .eq("client_id", OBJETIVO_CLIENT_ID)
         .gte("completed_at", start)
         .lt("completed_at", end);
 
@@ -393,6 +399,7 @@ Deno.serve(async (req) => {
           dispatches(final_amount, quoted_amount)
         `)
         .eq("status", "completed")
+        .eq("client_id", OBJETIVO_CLIENT_ID)
         .gte("completed_at", start)
         .lt("completed_at", end);
 
