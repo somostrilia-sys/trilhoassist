@@ -6,19 +6,22 @@ export function useProviderData() {
   const { user } = useAuth();
 
   // Get the provider record for the current user
-  const { data: provider, isLoading: providerLoading } = useQuery({
+  const { data: provider, isLoading: providerLoading, error: providerError } = useQuery({
     queryKey: ["provider-profile", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("providers")
         .select("*")
         .eq("user_id", user!.id)
-        .single();
+        .maybeSingle();
       if (error) throw error;
       return data;
     },
     enabled: !!user?.id,
+    retry: false,
   });
+
+  const notLinked = !providerLoading && !provider && !!user?.id;
 
   // Get dispatches for this provider
   const { data: dispatches = [], isLoading: dispatchesLoading } = useQuery({
