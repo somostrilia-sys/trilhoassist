@@ -204,9 +204,13 @@ export default function ProviderServices() {
   const totalQuoted = filtered
     .filter((d) => d.status === "completed")
     .reduce((s, d) => s + Number(d.quoted_amount || 0), 0);
+  // Valor recebido pelo prestador (provider_cost), nunca o que cobramos da empresa (charged_amount)
   const totalFinal = filtered
     .filter((d) => d.status === "completed")
-    .reduce((s, d) => s + Number(d.final_amount || d.quoted_amount || 0), 0);
+    .reduce((s, d) => {
+      const sr = d.service_requests as any;
+      return s + Number(d.final_amount ?? sr?.provider_cost ?? d.quoted_amount ?? 0);
+    }, 0);
 
   if (isLoading) {
     return <div className="space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-64" /></div>;
@@ -372,7 +376,10 @@ export default function ProviderServices() {
                             {fmt(Number(dispatch.quoted_amount || 0))}
                           </td>
                           <td className="p-3 font-medium">
-                            {dispatch.final_amount ? fmt(Number(dispatch.final_amount)) : "-"}
+                            {(() => {
+                              const cost = dispatch.final_amount ?? sr?.provider_cost;
+                              return cost != null && Number(cost) > 0 ? fmt(Number(cost)) : "-";
+                            })()}
                           </td>
                           <td className="p-3">
                             {hasVerification && (
