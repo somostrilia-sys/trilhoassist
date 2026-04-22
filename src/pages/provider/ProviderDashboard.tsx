@@ -178,7 +178,7 @@ export default function ProviderDashboard() {
                     <div className="text-right">
                       <p className="font-medium">
                         {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
-                          Number(dispatch.final_amount || dispatch.quoted_amount || 0)
+                          Number(dispatch.final_amount ?? sr?.provider_cost ?? dispatch.quoted_amount ?? 0)
                         )}
                       </p>
                       <p className="text-xs text-muted-foreground">

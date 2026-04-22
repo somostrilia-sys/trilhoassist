@@ -24,6 +24,8 @@ export function useProviderData() {
   const notLinked = !providerLoading && !provider && !!user?.id;
 
   // Get dispatches for this provider
+  // Regra: ocultar cancelados, recusados, expirados e atendimentos sem custo (provider_cost / final_amount = 0).
+  // Sempre exibir valores na ótica do prestador (provider_cost), não o que cobramos da empresa (charged_amount).
   const { data: dispatches = [], isLoading: dispatchesLoading } = useQuery({
     queryKey: ["provider-dispatches", provider?.id],
     queryFn: async () => {
@@ -35,15 +37,22 @@ export function useProviderData() {
             id, protocol, requester_name, requester_phone, 
             vehicle_model, vehicle_plate, origin_address, destination_address,
             service_type, event_type, status, created_at, completed_at,
-            vehicle_category, verification_answers, estimated_km,
+            vehicle_category, verification_answers, estimated_km, provider_cost,
             client_id, clients (id, name),
             beneficiary_id, beneficiaries (id, name)
           )
         `)
         .eq("provider_id", provider!.id)
+        .not("status", "in", "(cancelled,rejected,expired)")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+
+      // Filtra atendimentos sem custo do prestador (zerados ou nulos em ambas as colunas)
+      return (data || []).filter((d: any) => {
+        const sr = d.service_requests as any;
+        const providerCost = Number(d.final_amount ?? sr?.provider_cost ?? 0);
+        return providerCost > 0;
+      });
     },
     enabled: !!provider?.id,
   });
@@ -74,12 +83,15 @@ export function useProviderData() {
     }
 
     acc[clientId].total_services += 1;
-    const amount = Number(dispatch.final_amount || dispatch.quoted_amount || 0);
-    
+    // Valor SEMPRE na ótica do prestador (o que ele recebe), nunca o que cobramos da empresa
+    const amount = Number(
+      dispatch.final_amount ?? sr?.provider_cost ?? dispatch.quoted_amount ?? 0
+    );
+
     if (dispatch.status === "completed") {
       acc[clientId].completed_services += 1;
       acc[clientId].total_amount += amount;
-    } else if (dispatch.status !== "cancelled" && dispatch.status !== "rejected") {
+    } else {
       acc[clientId].pending_amount += amount;
     }
 
