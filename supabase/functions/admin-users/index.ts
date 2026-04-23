@@ -40,16 +40,13 @@ Deno.serve(async (req) => {
         return jsonRes({ error: "Não autorizado" }, 401);
       }
 
-      const callerClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-        global: { headers: { Authorization: authHeader } },
-      });
-
-      const { data: { user: callerUser }, error: userError } = await callerClient.auth.getUser();
-      if (userError || !callerUser) {
-        return jsonRes({ error: "Não autorizado" }, 401);
+      const token = authHeader.replace(/^Bearer\s+/i, "");
+      const { data: claimsData, error: claimsError } = await adminClient.auth.getClaims(token);
+      if (claimsError || !claimsData?.claims?.sub) {
+        return jsonRes({ error: "Não autorizado", detail: claimsError?.message }, 401);
       }
 
-      const userId = callerUser.id;
+      const userId = claimsData.claims.sub as string;
       caller = { id: userId };
 
       const { data: callerRoles } = await adminClient
