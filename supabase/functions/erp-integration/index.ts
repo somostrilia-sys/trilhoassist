@@ -215,6 +215,20 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
       );
 
+      // Rate-limit: ignore if a run started in the last 6h (unless body.force === true)
+      if (!body.force) {
+        const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+        const { data: recent } = await serviceSupabase
+          .from("erp_sync_logs")
+          .select("id, started_at")
+          .eq("sync_type", "automatic")
+          .gte("started_at", sixHoursAgo)
+          .limit(1);
+        if (recent && recent.length > 0) {
+          return jsonResponse({ skipped: true, reason: "recent_run", last: recent[0].started_at });
+        }
+      }
+
       const { data: clients } = await serviceSupabase
         .from("clients")
         .select("id, name, api_endpoint, api_key, api_auth_header, api_type, tenant_id, auto_sync_enabled")
