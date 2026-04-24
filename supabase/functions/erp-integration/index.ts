@@ -440,21 +440,33 @@ Deno.serve(async (req) => {
         // Sincronismo test: GET page count
         try {
           const headers = buildSincronismoHeaders(client.api_key);
-          const countUrl = buildSincronismoPageCountUrl(client.api_endpoint);
-          const response = await fetch(countUrl, { method: "GET", headers });
-          if (!response.ok) {
-            const text = await response.text();
+          let data: any = null;
+          let responseStatus = 0;
+          let lastErrorText = "";
+
+          for (const countUrl of buildSincronismoPageCountUrls(client.api_endpoint)) {
+            const response = await fetch(countUrl, { method: "GET", headers });
+            responseStatus = response.status;
+            if (!response.ok) {
+              lastErrorText = await response.text();
+              continue;
+            }
+            data = await response.json();
+            break;
+          }
+
+          if (!data) {
             return jsonResponse({
               success: false,
-              status: response.status,
-              message: `ERP retornou erro ${response.status}: ${text.substring(0, 200)}`,
+              status: responseStatus,
+              message: `ERP retornou erro ${responseStatus}: ${lastErrorText.substring(0, 200)}`,
               mode: "sincronismo",
             });
           }
-          const data = await response.json();
+
           return jsonResponse({
             success: true,
-            status: response.status,
+            status: responseStatus,
             message: "Conexão bem-sucedida (Sincronismo Fornecedor)",
             mode: "sincronismo",
             total_pages: data.quantidade_paginas || data.total_paginas || 0,
