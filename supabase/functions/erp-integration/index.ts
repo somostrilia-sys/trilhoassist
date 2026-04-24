@@ -244,7 +244,8 @@ Deno.serve(async (req) => {
       const results = [];
       for (const client of clients) {
         const intervalMinutes = Math.max(Number(client.sync_interval_minutes ?? 60), 15);
-        const cutoff = new Date(Date.now() - intervalMinutes * 60 * 1000).toISOString();
+        const lastRunCutoff = new Date(Date.now() - intervalMinutes * 60 * 1000).toISOString();
+        const runningCutoff = new Date(Date.now() - Math.max(intervalMinutes, 120) * 60 * 1000).toISOString();
         const { data: latestLog } = await serviceSupabase
           .from("erp_sync_logs")
           .select("id, status, started_at, completed_at")
@@ -254,7 +255,7 @@ Deno.serve(async (req) => {
           .limit(1)
           .maybeSingle();
 
-        if (latestLog?.status === "running" && latestLog.started_at && latestLog.started_at >= cutoff) {
+        if (latestLog?.status === "running" && latestLog.started_at && latestLog.started_at >= runningCutoff) {
           results.push({
             client: client.name,
             skipped: true,
@@ -265,7 +266,7 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        if (latestLog?.started_at && latestLog.started_at >= cutoff) {
+        if (latestLog?.started_at && latestLog.started_at >= lastRunCutoff) {
           results.push({
             client: client.name,
             skipped: true,
