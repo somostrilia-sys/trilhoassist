@@ -234,7 +234,7 @@ Deno.serve(async (req) => {
 
       const { data: clients } = await serviceSupabase
         .from("clients")
-        .select("id, name, api_endpoint, api_key, api_auth_header, api_type, tenant_id, auto_sync_enabled")
+        .select("id, name, api_endpoint, api_key, api_auth_header, api_type, tenant_id, auto_sync_enabled, sync_interval_minutes")
         .eq("auto_sync_enabled", true);
 
       if (!clients || clients.length === 0) {
@@ -243,6 +243,39 @@ Deno.serve(async (req) => {
 
       const results = [];
       for (const client of clients) {
+        const intervalMinutes = Math.max(Number(client.sync_interval_minutes ?? 60), 15);
+        const cutoff = new Date(Date.now() - intervalMinutes * 60 * 1000).toISOString();
+        const { data: latestLog } = await serviceSupabase
+          .from("erp_sync_logs")
+          .select("id, status, started_at, completed_at")
+          .eq("client_id", client.id)
+          .eq("sync_type", "automatic")
+          .order("started_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (latestLog?.status === "running" && latestLog.started_at && latestLog.started_at >= cutoff) {
+          results.push({
+            client: client.name,
+            skipped: true,
+            reason: "sync_in_progress",
+            interval_minutes: intervalMinutes,
+            last_started_at: latestLog.started_at,
+          });
+          continue;
+        }
+
+        if (latestLog?.started_at && latestLog.started_at >= cutoff) {
+          results.push({
+            client: client.name,
+            skipped: true,
+            reason: "interval_not_reached",
+            interval_minutes: intervalMinutes,
+            last_started_at: latestLog.started_at,
+          });
+          continue;
+        }
+
         if (client.api_type === 'gia') {
           // GIA sync: credentials are in server secrets, no api_endpoint/api_key needed
           try {
