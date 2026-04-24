@@ -334,7 +334,7 @@ Deno.serve(async (req) => {
 
       if (formato === "pdf") {
         const pdfBytes = await gerarPdfFechamentoGeral(resumo, atendimentosDetalhados);
-        return new Response(pdfBytes, {
+        return new Response(pdfBytes.buffer, {
           status: 200,
           headers: {
             ...corsHeaders,
