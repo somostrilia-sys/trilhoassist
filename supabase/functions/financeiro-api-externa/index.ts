@@ -17,7 +17,7 @@ async function gerarPdfFechamentoGeral(resumo: any, atendimentos: any[]): Promis
   const gray = rgb(0.4, 0.4, 0.4);
 
   let page = pdf.addPage([595.28, 841.89]); // A4
-  let { width, height } = page;
+  let { width, height } = page.getSize();
   let y = height - 50;
 
   // Header
@@ -64,7 +64,7 @@ async function gerarPdfFechamentoGeral(resumo: any, atendimentos: any[]): Promis
   for (const a of atendimentos) {
     if (y < 60) {
       page = pdf.addPage([595.28, 841.89]);
-      ({ width, height } = page);
+      ({ width, height } = page.getSize());
       y = height - 50;
     }
     const dataStr = a.data ? new Date(a.data).toLocaleDateString("pt-BR") : "-";
@@ -333,7 +333,7 @@ Deno.serve(async (req) => {
       };
 
       if (formato === "pdf") {
-        const pdfBytes = gerarPdfFechamentoGeral(resumo, atendimentosDetalhados);
+        const pdfBytes = await gerarPdfFechamentoGeral(resumo, atendimentosDetalhados);
         return new Response(pdfBytes, {
           status: 200,
           headers: {
