@@ -56,6 +56,14 @@ function buildSincronismoPageUrls(baseUrl: string, page: number): string[] {
   ];
 }
 
+function buildSincronismoListUrls(baseUrl: string): string[] {
+  const base = baseUrl.replace(/\/+$/, "");
+  return [
+    `${base}/sincronismo-produto-fornecedor/listar`,
+    `${base}/sincronismo-produto/listar`,
+  ];
+}
+
 // ─── Sincronismo: get page count + total ───
 async function fetchSincronismoPageCount(baseUrl: string, apiKey: string): Promise<{ totalPages: number; totalRecords: number }> {
   const headers = buildSincronismoHeaders(apiKey);
@@ -98,19 +106,49 @@ async function fetchSincronismoSinglePage(baseUrl: string, apiKey: string, page:
   throw new Error(lastError || `Sincronismo page ${page} failed`);
 }
 
+async function fetchSincronismoListRecords(baseUrl: string, apiKey: string): Promise<any[]> {
+  const headers = buildSincronismoHeaders(apiKey);
+  let lastError = "";
+
+  for (const listUrl of buildSincronismoListUrls(baseUrl)) {
+    console.log("Sincronismo: fetching full list from", listUrl);
+    const listRes = await fetch(listUrl, { method: "GET", headers });
+    if (!listRes.ok) {
+      const text = await listRes.text();
+      lastError = `Sincronismo list failed (${listRes.status}): ${text.substring(0, 200)}`;
+      continue;
+    }
+
+    const listData = await listRes.json();
+    const records = Array.isArray(listData) ? listData : extractRecords(listData);
+    if (records.length > 0) return records;
+  }
+
+  if (lastError) {
+    console.log(lastError);
+  }
+  return [];
+}
+
 // ─── Sincronismo: fetch all pages via GET ───
 async function fetchSincronismoRecords(baseUrl: string, apiKey: string): Promise<any[]> {
-  const { totalPages } = await fetchSincronismoPageCount(baseUrl, apiKey);
-  console.log(`Sincronismo: ${totalPages} pages total`);
-  if (totalPages === 0) return [];
-
-  const allRecords: any[] = [];
-  for (let page = 1; page <= totalPages; page++) {
-    const records = await fetchSincronismoSinglePage(baseUrl, apiKey, page);
-    console.log(`Sincronismo page ${page}/${totalPages}: ${records.length} records`);
-    allRecords.push(...records);
+  try {
+    const { totalPages } = await fetchSincronismoPageCount(baseUrl, apiKey);
+    console.log(`Sincronismo: ${totalPages} pages total`);
+    if (totalPages > 0) {
+      const allRecords: any[] = [];
+      for (let page = 1; page <= totalPages; page++) {
+        const records = await fetchSincronismoSinglePage(baseUrl, apiKey, page);
+        console.log(`Sincronismo page ${page}/${totalPages}: ${records.length} records`);
+        allRecords.push(...records);
+      }
+      if (allRecords.length > 0) return allRecords;
+    }
+  } catch (err: any) {
+    console.log("Sincronismo paginated fetch fallback:", err.message);
   }
-  return allRecords;
+
+  return await fetchSincronismoListRecords(baseUrl, apiKey);
 }
 
 // ─── Sincronismo: fetch products map ───
