@@ -40,11 +40,20 @@ function buildSincronismoHeaders(apiKey: string): Record<string, string> {
   };
 }
 
+function buildSincronismoPageCountUrl(baseUrl: string): string {
+  const base = baseUrl.replace(/\/+$/, "");
+  return `${base}/sincronismo-produto-fornecedor/listar/pagina/quantidade-paginas`;
+}
+
+function buildSincronismoPageUrl(baseUrl: string, page: number): string {
+  const base = baseUrl.replace(/\/+$/, "");
+  return `${base}/sincronismo-produto-fornecedor/listar/pagina/${page}`;
+}
+
 // ─── Sincronismo: get page count + total ───
 async function fetchSincronismoPageCount(baseUrl: string, apiKey: string): Promise<{ totalPages: number; totalRecords: number }> {
   const headers = buildSincronismoHeaders(apiKey);
-  const base = baseUrl.replace(/\/+$/, "");
-  const countUrl = `${base}/sincronismo-produto/listar/pagina/quantidade-paginas`;
+  const countUrl = buildSincronismoPageCountUrl(baseUrl);
   console.log("Sincronismo: fetching page count from", countUrl);
   const countRes = await fetch(countUrl, { method: "GET", headers });
   if (!countRes.ok) {
@@ -60,8 +69,7 @@ async function fetchSincronismoPageCount(baseUrl: string, apiKey: string): Promi
 // ─── Sincronismo: fetch a single page via GET ───
 async function fetchSincronismoSinglePage(baseUrl: string, apiKey: string, page: number): Promise<any[]> {
   const headers = buildSincronismoHeaders(apiKey);
-  const base = baseUrl.replace(/\/+$/, "");
-  const pageUrl = `${base}/sincronismo-produto/listar/pagina/${page}`;
+  const pageUrl = buildSincronismoPageUrl(baseUrl, page);
   console.log(`Sincronismo: fetching page ${page}`);
   const pageRes = await fetch(pageUrl, { method: "GET", headers });
   if (!pageRes.ok) {
@@ -414,8 +422,7 @@ Deno.serve(async (req) => {
         // Sincronismo test: GET page count
         try {
           const headers = buildSincronismoHeaders(client.api_key);
-          const base = client.api_endpoint.replace(/\/+$/, "");
-          const countUrl = `${base}/sincronismo-produto/listar/pagina/quantidade-paginas`;
+          const countUrl = buildSincronismoPageCountUrl(client.api_endpoint);
           const response = await fetch(countUrl, { method: "GET", headers });
           if (!response.ok) {
             const text = await response.text();
