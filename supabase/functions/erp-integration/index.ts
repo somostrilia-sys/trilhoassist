@@ -40,51 +40,115 @@ function buildSincronismoHeaders(apiKey: string): Record<string, string> {
   };
 }
 
+function buildSincronismoPageCountUrls(baseUrl: string): string[] {
+  const base = baseUrl.replace(/\/+$/, "");
+  return [
+    `${base}/sincronismo-produto-fornecedor-paginado/listar/pagina/quantidade-paginas`,
+    `${base}/sincronismo-produto-fornecedor/listar/pagina/quantidade-paginas`,
+  ];
+}
+
+function buildSincronismoPageUrls(baseUrl: string, page: number): string[] {
+  const base = baseUrl.replace(/\/+$/, "");
+  return [
+    `${base}/sincronismo-produto-fornecedor-paginado/listar/pagina/${page}`,
+    `${base}/sincronismo-produto-fornecedor/listar/pagina/${page}`,
+  ];
+}
+
+function buildSincronismoListUrls(baseUrl: string): string[] {
+  const base = baseUrl.replace(/\/+$/, "");
+  return [
+    `${base}/sincronismo-produto-fornecedor/listar`,
+    `${base}/sincronismo-produto/listar`,
+  ];
+}
+
 // ─── Sincronismo: get page count + total ───
 async function fetchSincronismoPageCount(baseUrl: string, apiKey: string): Promise<{ totalPages: number; totalRecords: number }> {
   const headers = buildSincronismoHeaders(apiKey);
-  const base = baseUrl.replace(/\/+$/, "");
-  const countUrl = `${base}/sincronismo-produto/listar/pagina/quantidade-paginas`;
-  console.log("Sincronismo: fetching page count from", countUrl);
-  const countRes = await fetch(countUrl, { method: "GET", headers });
-  if (!countRes.ok) {
-    const text = await countRes.text();
-    throw new Error(`Sincronismo page count failed (${countRes.status}): ${text.substring(0, 200)}`);
+  let lastError = "";
+  for (const countUrl of buildSincronismoPageCountUrls(baseUrl)) {
+    console.log("Sincronismo: fetching page count from", countUrl);
+    const countRes = await fetch(countUrl, { method: "GET", headers });
+    if (!countRes.ok) {
+      const text = await countRes.text();
+      lastError = `Sincronismo page count failed (${countRes.status}): ${text.substring(0, 200)}`;
+      continue;
+    }
+
+    const countData = await countRes.json();
+    const totalPages = parseInt(countData.quantidade_paginas || countData.total_paginas || "0");
+    const totalRecords = parseInt(countData.total_registros || countData.quantidade_registros || "0");
+    return { totalPages, totalRecords };
   }
-  const countData = await countRes.json();
-  const totalPages = parseInt(countData.quantidade_paginas || countData.total_paginas || "0");
-  const totalRecords = parseInt(countData.total_registros || "0");
-  return { totalPages, totalRecords };
+
+  throw new Error(lastError || "Sincronismo page count failed");
 }
 
 // ─── Sincronismo: fetch a single page via GET ───
 async function fetchSincronismoSinglePage(baseUrl: string, apiKey: string, page: number): Promise<any[]> {
   const headers = buildSincronismoHeaders(apiKey);
-  const base = baseUrl.replace(/\/+$/, "");
-  const pageUrl = `${base}/sincronismo-produto/listar/pagina/${page}`;
-  console.log(`Sincronismo: fetching page ${page}`);
-  const pageRes = await fetch(pageUrl, { method: "GET", headers });
-  if (!pageRes.ok) {
-    const text = await pageRes.text();
-    throw new Error(`Sincronismo page ${page} failed (${pageRes.status}): ${text.substring(0, 200)}`);
+  let lastError = "";
+  for (const pageUrl of buildSincronismoPageUrls(baseUrl, page)) {
+    console.log(`Sincronismo: fetching page ${page} from ${pageUrl}`);
+    const pageRes = await fetch(pageUrl, { method: "GET", headers });
+    if (!pageRes.ok) {
+      const text = await pageRes.text();
+      lastError = `Sincronismo page ${page} failed (${pageRes.status}): ${text.substring(0, 200)}`;
+      continue;
+    }
+
+    const pageData = await pageRes.json();
+    return Array.isArray(pageData) ? pageData : extractRecords(pageData);
   }
-  const pageData = await pageRes.json();
-  return Array.isArray(pageData) ? pageData : extractRecords(pageData);
+
+  throw new Error(lastError || `Sincronismo page ${page} failed`);
+}
+
+async function fetchSincronismoListRecords(baseUrl: string, apiKey: string): Promise<any[]> {
+  const headers = buildSincronismoHeaders(apiKey);
+  let lastError = "";
+
+  for (const listUrl of buildSincronismoListUrls(baseUrl)) {
+    console.log("Sincronismo: fetching full list from", listUrl);
+    const listRes = await fetch(listUrl, { method: "GET", headers });
+    if (!listRes.ok) {
+      const text = await listRes.text();
+      lastError = `Sincronismo list failed (${listRes.status}): ${text.substring(0, 200)}`;
+      continue;
+    }
+
+    const listData = await listRes.json();
+    const records = Array.isArray(listData) ? listData : extractRecords(listData);
+    if (records.length > 0) return records;
+  }
+
+  if (lastError) {
+    console.log(lastError);
+  }
+  return [];
 }
 
 // ─── Sincronismo: fetch all pages via GET ───
 async function fetchSincronismoRecords(baseUrl: string, apiKey: string): Promise<any[]> {
-  const { totalPages } = await fetchSincronismoPageCount(baseUrl, apiKey);
-  console.log(`Sincronismo: ${totalPages} pages total`);
-  if (totalPages === 0) return [];
-
-  const allRecords: any[] = [];
-  for (let page = 1; page <= totalPages; page++) {
-    const records = await fetchSincronismoSinglePage(baseUrl, apiKey, page);
-    console.log(`Sincronismo page ${page}/${totalPages}: ${records.length} records`);
-    allRecords.push(...records);
+  try {
+    const { totalPages } = await fetchSincronismoPageCount(baseUrl, apiKey);
+    console.log(`Sincronismo: ${totalPages} pages total`);
+    if (totalPages > 0) {
+      const allRecords: any[] = [];
+      for (let page = 1; page <= totalPages; page++) {
+        const records = await fetchSincronismoSinglePage(baseUrl, apiKey, page);
+        console.log(`Sincronismo page ${page}/${totalPages}: ${records.length} records`);
+        allRecords.push(...records);
+      }
+      if (allRecords.length > 0) return allRecords;
+    }
+  } catch (err: any) {
+    console.log("Sincronismo paginated fetch fallback:", err.message);
   }
-  return allRecords;
+
+  return await fetchSincronismoListRecords(baseUrl, apiKey);
 }
 
 // ─── Sincronismo: fetch products map ───
@@ -414,22 +478,33 @@ Deno.serve(async (req) => {
         // Sincronismo test: GET page count
         try {
           const headers = buildSincronismoHeaders(client.api_key);
-          const base = client.api_endpoint.replace(/\/+$/, "");
-          const countUrl = `${base}/sincronismo-produto/listar/pagina/quantidade-paginas`;
-          const response = await fetch(countUrl, { method: "GET", headers });
-          if (!response.ok) {
-            const text = await response.text();
+          let data: any = null;
+          let responseStatus = 0;
+          let lastErrorText = "";
+
+          for (const countUrl of buildSincronismoPageCountUrls(client.api_endpoint)) {
+            const response = await fetch(countUrl, { method: "GET", headers });
+            responseStatus = response.status;
+            if (!response.ok) {
+              lastErrorText = await response.text();
+              continue;
+            }
+            data = await response.json();
+            break;
+          }
+
+          if (!data) {
             return jsonResponse({
               success: false,
-              status: response.status,
-              message: `ERP retornou erro ${response.status}: ${text.substring(0, 200)}`,
+              status: responseStatus,
+              message: `ERP retornou erro ${responseStatus}: ${lastErrorText.substring(0, 200)}`,
               mode: "sincronismo",
             });
           }
-          const data = await response.json();
+
           return jsonResponse({
             success: true,
-            status: response.status,
+            status: responseStatus,
             message: "Conexão bem-sucedida (Sincronismo Fornecedor)",
             mode: "sincronismo",
             total_pages: data.quantidade_paginas || data.total_paginas || 0,
