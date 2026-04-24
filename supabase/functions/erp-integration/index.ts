@@ -215,17 +215,20 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
       );
 
-      // Rate-limit: ignore if a run started in the last 6h (unless body.force === true)
+      // Only avoid overlapping automatic runs that are still executing.
+      // Previous logic blocked every new cron/manual automatic call for 6h,
+      // which prevented hourly/daily syncs from updating as expected.
       if (!body.force) {
-        const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
-        const { data: recent } = await serviceSupabase
+        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+        const { data: running } = await serviceSupabase
           .from("erp_sync_logs")
-          .select("id, started_at")
+          .select("id, started_at, client_id")
           .eq("sync_type", "automatic")
-          .gte("started_at", sixHoursAgo)
-          .limit(1);
-        if (recent && recent.length > 0) {
-          return jsonResponse({ skipped: true, reason: "recent_run", last: recent[0].started_at });
+          .eq("status", "running")
+          .gte("started_at", twoHoursAgo)
+          .limit(20);
+        if (running && running.length > 0) {
+          return jsonResponse({ skipped: true, reason: "automatic_run_in_progress", running });
         }
       }
 
