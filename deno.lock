@@ -15,7 +15,9 @@
     "https://deno.land/std@0.168.0/async/retry.ts": "e8e5173623915bbc0ddc537698fa418cf875456c347eda1ed453528645b42e67",
     "https://deno.land/std@0.168.0/async/tee.ts": "3a47cc4e9a940904fd4341f0224907e199121c80b831faa5ec2b054c6d2eff5e",
     "https://deno.land/std@0.168.0/http/server.ts": "e99c1bee8a3f6571ee4cdeb2966efad465b8f6fe62bec1bdb59c1f007cc4d155",
-    "https://esm.sh/@supabase/supabase-js@2.99.0": "031b04cf2d1feffda7d07c6810776b1e24157e733e8e227b2f2bdaf7c6641868"
+    "https://esm.sh/@supabase/supabase-js@2.49.1": "947c71e163ca8bb5b538eccb5ee86fbc8da6bcb916a861586db5fad1af4701bb",
+    "https://esm.sh/@supabase/supabase-js@2.99.0": "031b04cf2d1feffda7d07c6810776b1e24157e733e8e227b2f2bdaf7c6641868",
+    "https://esm.sh/pdf-lib@1.17.1": "cf7c5527829cb9bbb3aa20d339c530067441c10eb98880360aea9e77c3c87ff8"
   },
   "workspace": {
     "packageJson": {
@@ -71,6 +73,8 @@
         "npm:globals@^15.15.0",
         "npm:input-otp@^1.4.2",
         "npm:jsdom@^20.0.3",
+        "npm:jspdf-autotable@^5.0.7",
+        "npm:jspdf@^4.2.1",
         "npm:leaflet@^1.9.4",
         "npm:lovable-tagger@^1.1.13",
         "npm:lucide-react@0.462",

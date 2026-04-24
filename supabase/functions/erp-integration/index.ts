@@ -215,23 +215,26 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
       );
 
-      // Rate-limit: ignore if a run started in the last 6h (unless body.force === true)
+      // Only avoid overlapping automatic runs that are still executing.
+      // Previous logic blocked every new cron/manual automatic call for 6h,
+      // which prevented hourly/daily syncs from updating as expected.
       if (!body.force) {
-        const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
-        const { data: recent } = await serviceSupabase
+        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+        const { data: running } = await serviceSupabase
           .from("erp_sync_logs")
-          .select("id, started_at")
+          .select("id, started_at, client_id")
           .eq("sync_type", "automatic")
-          .gte("started_at", sixHoursAgo)
-          .limit(1);
-        if (recent && recent.length > 0) {
-          return jsonResponse({ skipped: true, reason: "recent_run", last: recent[0].started_at });
+          .eq("status", "running")
+          .gte("started_at", twoHoursAgo)
+          .limit(20);
+        if (running && running.length > 0) {
+          return jsonResponse({ skipped: true, reason: "automatic_run_in_progress", running });
         }
       }
 
       const { data: clients } = await serviceSupabase
         .from("clients")
-        .select("id, name, api_endpoint, api_key, api_auth_header, api_type, tenant_id, auto_sync_enabled")
+        .select("id, name, api_endpoint, api_key, api_auth_header, api_type, tenant_id, auto_sync_enabled, sync_interval_minutes")
         .eq("auto_sync_enabled", true);
 
       if (!clients || clients.length === 0) {
@@ -240,6 +243,40 @@ Deno.serve(async (req) => {
 
       const results = [];
       for (const client of clients) {
+        const intervalMinutes = Math.max(Number(client.sync_interval_minutes ?? 60), 15);
+        const lastRunCutoff = new Date(Date.now() - intervalMinutes * 60 * 1000).toISOString();
+        const runningCutoff = new Date(Date.now() - Math.max(intervalMinutes, 120) * 60 * 1000).toISOString();
+        const { data: latestLog } = await serviceSupabase
+          .from("erp_sync_logs")
+          .select("id, status, started_at, completed_at")
+          .eq("client_id", client.id)
+          .eq("sync_type", "automatic")
+          .order("started_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (latestLog?.status === "running" && latestLog.started_at && latestLog.started_at >= runningCutoff) {
+          results.push({
+            client: client.name,
+            skipped: true,
+            reason: "sync_in_progress",
+            interval_minutes: intervalMinutes,
+            last_started_at: latestLog.started_at,
+          });
+          continue;
+        }
+
+        if (latestLog?.started_at && latestLog.started_at >= lastRunCutoff) {
+          results.push({
+            client: client.name,
+            skipped: true,
+            reason: "interval_not_reached",
+            interval_minutes: intervalMinutes,
+            last_started_at: latestLog.started_at,
+          });
+          continue;
+        }
+
         if (client.api_type === 'gia') {
           // GIA sync: credentials are in server secrets, no api_endpoint/api_key needed
           try {

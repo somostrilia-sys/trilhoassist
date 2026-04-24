@@ -377,7 +377,9 @@ Deno.serve(async (req) => {
       const instName = (inst as any).instance_name || (inst as any).evolution_instance_name || (inst as any).zapi_instance_id;
       const instToken = (inst as any).instance_token || "";
 
-      // Try multiple endpoints to check status
+      // Try only read-only endpoints here.
+      // IMPORTANT: never call /instance/connect from status polling,
+      // otherwise the UI can reconnect a session right after logout.
       let state = "unknown";
       let isConnected = false;
 
@@ -409,40 +411,10 @@ Deno.serve(async (req) => {
         }
       }
 
-      // 3) Fallback: try POST /instance/connect with instance token
-      if (state === "unknown") {
-        try {
-          const connectResult = await fetchConnect(instName, instToken);
-          console.log("check_status connect fallback response:", JSON.stringify(connectResult.data));
-          const extracted = extractQr(connectResult.data);
-          if (extracted.status === "connected") {
-            state = "connected";
-          }
-        } catch (e3) {
-          console.error("connect fallback also failed:", e3);
-        }
-      }
-
-      isConnected = ["connected", "open", "CONNECTED"].includes(state);
-
-      // Auto-reconnect if disconnected
-      if (!isConnected) {
-        console.log("check_status: disconnected, attempting auto-reconnect for:", instName);
-        try {
-          const reconnectResult = await fetchConnect(instName, instToken);
-          const reconnectState = reconnectResult.data?.state || reconnectResult.data?.instance?.state || "";
-          const reconnected = reconnectResult.data?.connected === true 
-            || reconnectResult.data?.loggedIn === true
-            || ["connected", "open", "CONNECTED"].includes(reconnectState)
-            || reconnectResult.data?.response === "Already connected";
-          if (reconnected) {
-            console.log("Auto-reconnect successful!");
-            isConnected = true;
-            state = "connected";
-          }
-        } catch (e) {
-          console.error("Auto-reconnect failed:", e);
-        }
+      if (["close", "closed", "disconnected", "disconnecting", "not_connected"].includes(String(state).toLowerCase())) {
+        isConnected = false;
+      } else {
+        isConnected = ["connected", "open", "CONNECTED"].includes(state);
       }
 
       await adminSupabase
