@@ -843,6 +843,8 @@ export default function NewServiceRequest() {
                   <Input
                     value={form.vehicle_plate}
                     onChange={(e) => handlePlateChange(e.target.value)}
+                    onFocus={() => form.vehicle_plate && queueSuggestionSearch(form.vehicle_plate, "plate")}
+                    onBlur={() => setTimeout(() => setSuggestionsOpen(null), 150)}
                     maxLength={7}
                     placeholder="ABC1D23"
                     className={`pr-9 uppercase ${errors.vehicle_plate ? "border-destructive" : ""}`}
@@ -852,6 +854,18 @@ export default function NewServiceRequest() {
                     {!plateSearching && !fipeSearching && beneficiaryFound && <CheckCircle2 className="h-4 w-4 text-green-600" />}
                     {!plateSearching && !fipeSearching && !beneficiaryFound && form.vehicle_plate.length >= 7 && <XCircle className="h-4 w-4 text-amber-500" />}
                   </div>
+                  {suggestionsOpen === "plate" && (
+                    <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-72 overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-lg">
+                      {suggestionsLoading ? (
+                        <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Buscando associado…</div>
+                      ) : beneficiarySuggestions.map((b) => (
+                        <button key={b.id} type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground" onMouseDown={(e) => { e.preventDefault(); applyBeneficiarySelection(b); }}>
+                          <div className="font-medium">{b.vehicle_plate || "Sem placa"} — {b.name}</div>
+                          <div className="text-xs text-muted-foreground">{(b as any).clients?.name || "Empresa não identificada"}{b.vehicle_model ? ` • ${b.vehicle_model}` : ""}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {errors.vehicle_plate && <p className="text-xs text-destructive">{errors.vehicle_plate}</p>}
 
@@ -1018,7 +1032,27 @@ export default function NewServiceRequest() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Nome do Solicitante *</Label>
-                <Input value={form.requester_name} onChange={(e) => { update("requester_name", e.target.value); setErrors(prev => ({ ...prev, requester_name: "" })); }} className={errors.requester_name ? "border-destructive" : ""} />
+                <div className="relative">
+                  <Input
+                    value={form.requester_name}
+                    onChange={(e) => handleRequesterNameChange(e.target.value)}
+                    onFocus={() => form.requester_name && queueSuggestionSearch(form.requester_name, "name")}
+                    onBlur={() => setTimeout(() => setSuggestionsOpen(null), 150)}
+                    className={errors.requester_name ? "border-destructive" : ""}
+                  />
+                  {suggestionsOpen === "name" && (
+                    <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-72 overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-lg">
+                      {suggestionsLoading ? (
+                        <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Buscando associado…</div>
+                      ) : beneficiarySuggestions.map((b) => (
+                        <button key={b.id} type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground" onMouseDown={(e) => { e.preventDefault(); applyBeneficiarySelection(b); }}>
+                          <div className="font-medium">{b.name}</div>
+                          <div className="text-xs text-muted-foreground">{b.vehicle_plate || "Sem placa"} • {(b as any).clients?.name || "Empresa não identificada"}{b.vehicle_model ? ` • ${b.vehicle_model}` : ""}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 {errors.requester_name && <p className="text-xs text-destructive">{errors.requester_name}</p>}
               </div>
               <div className="space-y-2">
