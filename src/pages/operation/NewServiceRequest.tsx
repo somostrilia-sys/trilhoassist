@@ -327,11 +327,81 @@ export default function NewServiceRequest() {
     }
   };
 
+  const applyBeneficiarySelection = (beneficiary: BeneficiaryLookup) => {
+    const clientName = (beneficiary as any).clients?.name;
+    const planName = (beneficiary as any).plans?.name;
+    setBeneficiaryFound({
+      id: beneficiary.id,
+      name: beneficiary.name,
+      phone: beneficiary.phone,
+      cpf: beneficiary.cpf,
+      vehicle_model: beneficiary.vehicle_model,
+      vehicle_year: beneficiary.vehicle_year,
+      client_id: beneficiary.client_id,
+      client_name: clientName,
+      plan_name: planName,
+    });
+    setSelectedClientId(beneficiary.client_id);
+    setForm((f) => ({
+      ...f,
+      requester_name: beneficiary.name || f.requester_name,
+      requester_phone: beneficiary.phone ? maskPhone(beneficiary.phone) : f.requester_phone,
+      vehicle_plate: beneficiary.vehicle_plate || f.vehicle_plate,
+      vehicle_model: beneficiary.vehicle_model || f.vehicle_model,
+      vehicle_year: beneficiary.vehicle_year ? String(beneficiary.vehicle_year) : f.vehicle_year,
+    }));
+    if (beneficiary.vehicle_model) {
+      setVehicleCategory(classifyVehicle(beneficiary.vehicle_model, vehicleCategory) as VehicleCategory);
+    }
+    setBeneficiarySuggestions([]);
+    setSuggestionsOpen(null);
+    setAvulsoAuthorized(false);
+    setAvulsoAuthorizer("");
+    setAvulsoJustification("");
+    searchGia(beneficiary.vehicle_plate || undefined, beneficiary.cpf || undefined);
+  };
+
+  const searchBeneficiarySuggestions = useCallback(async (rawTerm: string, field: "plate" | "name") => {
+    const term = rawTerm.trim().replace(/[%*,]/g, "");
+    const digits = rawTerm.replace(/\D/g, "");
+    if (!term && !digits) { setBeneficiarySuggestions([]); setSuggestionsOpen(null); return; }
+    setSuggestionsLoading(true);
+    let query = supabase
+      .from("beneficiaries")
+      .select("id, name, phone, cpf, vehicle_plate, vehicle_model, vehicle_year, client_id, plan_id, clients!inner(name, tenant_id), plans(name)")
+      .eq("active", true)
+      .limit(8);
+    if (tenantId) query = query.eq("clients.tenant_id", tenantId);
+    if (field === "plate") {
+      query = query.ilike("vehicle_plate", `${term.toUpperCase()}%`);
+    } else {
+      const filters = [`name.ilike.%${term}%`];
+      if (digits.length >= 2) filters.push(`phone.ilike.%${digits}%`);
+      query = query.or(filters.join(","));
+    }
+    const { data } = await query.order("name");
+    setBeneficiarySuggestions(((data || []) as any[]) as BeneficiaryLookup[]);
+    setSuggestionsOpen(data && data.length > 0 ? field : null);
+    setSuggestionsLoading(false);
+  }, [tenantId]);
+
+  const queueSuggestionSearch = (value: string, field: "plate" | "name") => {
+    if (suggestionDebounceRef.current) clearTimeout(suggestionDebounceRef.current);
+    suggestionDebounceRef.current = setTimeout(() => searchBeneficiarySuggestions(value, field), 250);
+  };
+
   const handlePlateChange = (value: string) => {
     const upper = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
     update("vehicle_plate", upper);
+    queueSuggestionSearch(upper, "plate");
     if (plateDebounceRef.current) clearTimeout(plateDebounceRef.current);
     plateDebounceRef.current = setTimeout(() => searchBeneficiaryByPlate(upper), 500);
+  };
+
+  const handleRequesterNameChange = (value: string) => {
+    update("requester_name", value);
+    setErrors(prev => ({ ...prev, requester_name: "" }));
+    queueSuggestionSearch(value, "name");
   };
 
   useEffect(() => {
