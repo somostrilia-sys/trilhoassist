@@ -35,6 +35,19 @@ import { classifyVehicle, getCompatiblePlanCategories, PLAN_VEHICLE_CATEGORY_LAB
 
 type VehicleCategory = "car" | "motorcycle" | "truck";
 type AttendanceType = "pane" | "collision" | "periferico";
+type BeneficiaryLookup = {
+  id: string;
+  name: string;
+  phone: string | null;
+  cpf: string | null;
+  vehicle_plate: string | null;
+  vehicle_model: string | null;
+  vehicle_year: number | null;
+  client_id: string;
+  plan_id: string | null;
+  clients?: { name?: string | null; tenant_id?: string | null } | null;
+  plans?: { name?: string | null } | null;
+};
 
 export default function NewServiceRequest() {
   const { user } = useAuth();
@@ -170,6 +183,9 @@ export default function NewServiceRequest() {
     plano?: string; mensalidade?: number; eventos?: { data: string; tipo: string }[];
   } | null>(null);
   const [giaSearching, setGiaSearching] = useState(false);
+  const [beneficiarySuggestions, setBeneficiarySuggestions] = useState<BeneficiaryLookup[]>([]);
+  const [suggestionsOpen, setSuggestionsOpen] = useState<"plate" | "name" | null>(null);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
 
   // Geo coords from AddressAutocomplete
   const [geoCoords, setGeoCoords] = useState<{ origin: { lat: number; lng: number } | null; destination: { lat: number; lng: number } | null }>({
@@ -178,6 +194,7 @@ export default function NewServiceRequest() {
   });
 
   const plateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suggestionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Collision state
   const [createdRequestId, setCreatedRequestId] = useState<string | null>(null);
